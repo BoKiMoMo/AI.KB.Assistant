@@ -1,0 +1,30 @@
+{
+	"App": {
+		"RootDir": "D:/KnowledgeBase",
+		"InboxDir": "D:/KnowledgeBase/_inbox",
+		"DbPath": "D:/KnowledgeBase/_meta/db.sqlite",
+		"DryRun": true,
+		"MoveMode": "move", // move | copy
+		"Overwrite": "rename" // skip | rename | overwrite
+	},
+	"Classification": {
+		"Engine": "llm", // dummy | llm | hybrid
+		"Style": "topic",
+		"ConfidenceThreshold": 0.72,
+		"FallbackCategory": "unsorted",
+		"CustomTaxonomy": [ "需求分析", "風險管理", "會議紀錄", "流程文件", "學習筆記" ]
+	},
+	"TimePolicy": {
+		"Source": "auto", // created | modified | parsed | auto
+		"FilenameDatePatterns": [ "yyyyMMdd", "yyyy-MM-dd", "yyyyMM" ],
+		"ContentDateHint": true
+	},
+	"Routing": {
+		"PathTemplate": "{root}/{category}/{yyyy}/{mm}/",
+		"SafeCategories": true
+	},
+	"OpenAI": {
+		"ApiKey": "在這裡放你的 OpenAI API Key",
+		"Model": "gpt-4o-mini"
+	}
+}
