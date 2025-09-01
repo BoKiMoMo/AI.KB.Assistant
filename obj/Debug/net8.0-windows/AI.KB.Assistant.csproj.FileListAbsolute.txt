@@ -55,3 +55,17 @@ C:\Users\aacd8\OneDrive\桌面\Git-Demo\AI.KB.Assistant\obj\Debug\net8.0-windows
 C:\Users\aacd8\OneDrive\桌面\Git-Demo\AI.KB.Assistant\bin\Debug\net8.0-windows\config.json
 C:\Users\aacd8\OneDrive\桌面\Git-Demo\AI.KB.Assistant\obj\Debug\net8.0-windows\AI.KB.Assistant_Content.g.cs
 C:\Users\aacd8\OneDrive\桌面\Git-Demo\AI.KB.Assistant\obj\Debug\net8.0-windows\AI.KB.Assistant.sourcelink.json
+F:\C++ × 技術英文養成計畫\AI.KB.Assistant\obj\Debug\net8.0-windows\AI.KB.Assistant.csproj.AssemblyReference.cache
+F:\C++ × 技術英文養成計畫\AI.KB.Assistant\obj\Debug\net8.0-windows\MainWindow.baml
+F:\C++ × 技術英文養成計畫\AI.KB.Assistant\obj\Debug\net8.0-windows\SettingsWindow.baml
+F:\C++ × 技術英文養成計畫\AI.KB.Assistant\obj\Debug\net8.0-windows\MainWindow.g.cs
+F:\C++ × 技術英文養成計畫\AI.KB.Assistant\obj\Debug\net8.0-windows\SettingsWindow.g.cs
+F:\C++ × 技術英文養成計畫\AI.KB.Assistant\obj\Debug\net8.0-windows\App.g.cs
+F:\C++ × 技術英文養成計畫\AI.KB.Assistant\obj\Debug\net8.0-windows\AI.KB.Assistant_Content.g.cs
+F:\C++ × 技術英文養成計畫\AI.KB.Assistant\obj\Debug\net8.0-windows\AI.KB.Assistant_MarkupCompile.cache
+F:\C++ × 技術英文養成計畫\AI.KB.Assistant\obj\Debug\net8.0-windows\AI.KB.Assistant.g.resources
+F:\C++ × 技術英文養成計畫\AI.KB.Assistant\obj\Debug\net8.0-windows\AI.KB.Assistant.GeneratedMSBuildEditorConfig.editorconfig
+F:\C++ × 技術英文養成計畫\AI.KB.Assistant\obj\Debug\net8.0-windows\AI.KB.Assistant.AssemblyInfoInputs.cache
+F:\C++ × 技術英文養成計畫\AI.KB.Assistant\obj\Debug\net8.0-windows\AI.KB.Assistant.AssemblyInfo.cs
+F:\C++ × 技術英文養成計畫\AI.KB.Assistant\obj\Debug\net8.0-windows\AI.KB.Assistant.csproj.CoreCompileInputs.cache
+F:\C++ × 技術英文養成計畫\AI.KB.Assistant\obj\Debug\net8.0-windows\AI.KB.Assistant.sourcelink.json

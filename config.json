@@ -12,7 +12,7 @@
 		"Style": "topic",
 		"ConfidenceThreshold": 0.72,
 		"FallbackCategory": "unsorted",
-		"CustomTaxonomy": [ "»Ý¨D¤ÀªR", "­·ÀIºÞ²z", "·|Ä³¬ö¿ý", "¬yµ{¤å¥ó", "¾Ç²ßµ§°O" ]
+		"CustomTaxonomy": [ "ï¿½Ý¨Dï¿½ï¿½ï¿½R", "ï¿½ï¿½ï¿½Iï¿½Þ²z", "ï¿½|Ä³ï¿½ï¿½ï¿½ï¿½", "ï¿½yï¿½{ï¿½ï¿½ï¿½", "ï¿½Ç²ßµï¿½ï¿½O" ]
 	},
 	"TimePolicy": {
 		"Source": "auto", // created | modified | parsed | auto
@@ -24,7 +24,7 @@
 		"SafeCategories": true
 	},
 	"OpenAI": {
-		"ApiKey": "¦b³o¸Ì©ñ§Aªº OpenAI API Key",
+		"ApiKey": "ï¿½bï¿½oï¿½Ì©ï¿½Aï¿½ï¿½ OpenAI API Key",
 		"Model": "gpt-4o-mini"
 	}
 }

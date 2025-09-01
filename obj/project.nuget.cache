@@ -1,8 +1,8 @@
 {
   "version": 2,
-  "dgSpecHash": "p9l2n/Gvqfk=",
+  "dgSpecHash": "5051TbJw+Ms=",
   "success": true,
-  "projectFilePath": "C:\\Users\\aacd8\\OneDrive\\桌面\\Git-Demo\\AI.KB.Assistant\\AI.KB.Assistant.csproj",
+  "projectFilePath": "F:\\C++ × 技術英文養成計畫\\AI.KB.Assistant\\AI.KB.Assistant.csproj",
   "expectedPackageFiles": [
     "C:\\Users\\aacd8\\.nuget\\packages\\communitytoolkit.mvvm\\8.4.0\\communitytoolkit.mvvm.8.4.0.nupkg.sha512",
     "C:\\Users\\aacd8\\.nuget\\packages\\dapper\\2.1.66\\dapper.2.1.66.nupkg.sha512",
