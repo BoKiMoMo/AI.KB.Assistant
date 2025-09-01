@@ -52,3 +52,6 @@ C:\Users\aacd8\OneDrive\桌面\Git-Demo\AI.KB.Assistant\obj\Debug\net8.0-windows
 C:\Users\aacd8\OneDrive\桌面\Git-Demo\AI.KB.Assistant\obj\Debug\net8.0-windows\AI.KB.Assistant.pdb
 C:\Users\aacd8\OneDrive\桌面\Git-Demo\AI.KB.Assistant\obj\Debug\net8.0-windows\AI.KB.Assistant.genruntimeconfig.cache
 C:\Users\aacd8\OneDrive\桌面\Git-Demo\AI.KB.Assistant\obj\Debug\net8.0-windows\ref\AI.KB.Assistant.dll
+C:\Users\aacd8\OneDrive\桌面\Git-Demo\AI.KB.Assistant\bin\Debug\net8.0-windows\config.json
+C:\Users\aacd8\OneDrive\桌面\Git-Demo\AI.KB.Assistant\obj\Debug\net8.0-windows\AI.KB.Assistant_Content.g.cs
+C:\Users\aacd8\OneDrive\桌面\Git-Demo\AI.KB.Assistant\obj\Debug\net8.0-windows\AI.KB.Assistant.sourcelink.json
