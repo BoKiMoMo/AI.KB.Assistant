@@ -14,7 +14,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("AI.KB.Assistant")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+71da6c00f99c2bf9a0e0e3536e68d4c73e4438ae")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+775266adf6ae6407e4e0c7ef65ef37672a4d2877")]
 [assembly: System.Reflection.AssemblyProductAttribute("AI.KB.Assistant")]
 [assembly: System.Reflection.AssemblyTitleAttribute("AI.KB.Assistant")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
