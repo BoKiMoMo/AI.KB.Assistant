@@ -35,8 +35,9 @@
 			<Button x:Name="BtnPending"  Content="📝 待確認"   Margin="8" Click="BtnPending_Click"/>
 			<Button x:Name="BtnProgress" Content="🚀 執行中"   Margin="8" Click="BtnProgress_Click"/>
 			<Button x:Name="BtnTodo"     Content="✅ 代辦"     Margin="8" Click="BtnTodo_Click"/>
-			<Button x:Name="BtnSettings" Content="⚙️ 設定"     Margin="8" Click="BtnSettings_Click"/>
-		</StackPanel>
+            <Button x:Name="BtnSettings" Content="⚙️ 設定"     Margin="8" Click="BtnSettings_Click"/>
+
+        </StackPanel>
 
 		<!-- 主區域 -->
 		<DockPanel>

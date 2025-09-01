@@ -378,5 +378,6 @@ namespace AI.KB.Assistant
 			}
 			TxtStatus.Text = text;
 		}
+
 	}
 }
