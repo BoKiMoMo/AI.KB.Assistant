@@ -1,14 +1,14 @@
 namespace AI.KB.Assistant.Models;
 
-public class Item
+public sealed class Item
 {
-	public long Id { get; set; }
 	public string Path { get; set; } = "";
 	public string Filename { get; set; } = "";
-	public string? Category { get; set; }
-	public string Status { get; set; } = "To-Do";
+	public string Category { get; set; } = "";
 	public double Confidence { get; set; }
-	public long CreatedTs { get; set; }   // epoch seconds
-	public string? Summary { get; set; }
-	public string? Reasoning { get; set; }
+	public long CreatedTs { get; set; }
+	public string Summary { get; set; } = "";
+	public string Reasoning { get; set; } = "";
+	public string Status { get; set; } = "normal"; // normal / in-progress / todo / pending / favorite
+	public string Tags { get; set; } = "";         // ³r¸¹¤À¹j
 }

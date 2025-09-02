@@ -731,11 +731,11 @@
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "F:\\C++ × 技術英文養成計畫\\AI.KB.Assistant\\AI.KB.Assistant.csproj",
+      "projectUniqueName": "C:\\Users\\aacd8\\OneDrive\\桌面\\Git-Demo\\AI.KB.Assistant\\AI.KB.Assistant.csproj",
       "projectName": "AI.KB.Assistant",
-      "projectPath": "F:\\C++ × 技術英文養成計畫\\AI.KB.Assistant\\AI.KB.Assistant.csproj",
+      "projectPath": "C:\\Users\\aacd8\\OneDrive\\桌面\\Git-Demo\\AI.KB.Assistant\\AI.KB.Assistant.csproj",
       "packagesPath": "C:\\Users\\aacd8\\.nuget\\packages\\",
-      "outputPath": "F:\\C++ × 技術英文養成計畫\\AI.KB.Assistant\\obj\\",
+      "outputPath": "C:\\Users\\aacd8\\OneDrive\\桌面\\Git-Demo\\AI.KB.Assistant\\obj\\",
       "projectStyle": "PackageReference",
       "fallbackFolders": [
         "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
@@ -750,6 +750,7 @@
       ],
       "sources": {
         "C:\\Program Files (x86)\\Microsoft SDKs\\NuGetPackages\\": {},
+        "C:\\Program Files\\dotnet\\library-packs": {},
         "https://api.nuget.org/v3/index.json": {}
       },
       "frameworks": {
@@ -810,7 +811,7 @@
           "Microsoft.NETCore.App": {
             "privateAssets": "all"
           },
-          "Microsoft.WindowsDesktop.App": {
+          "Microsoft.WindowsDesktop.App.WPF": {
             "privateAssets": "none"
           }
         },

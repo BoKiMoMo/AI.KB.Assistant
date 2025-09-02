@@ -1,73 +1,107 @@
-﻿using AI.KB.Assistant.Models;
+﻿using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 using Dapper;
 using Microsoft.Data.Sqlite;
-using System.IO;
+using AI.KB.Assistant.Models;
 
 namespace AI.KB.Assistant.Services;
 
-public class DbService : IDisposable
+public sealed class DbService : IDisposable
 {
-	private readonly SqliteConnection _conn;
+	private readonly string _dbPath;
 
 	public DbService(string dbPath)
 	{
-		Directory.CreateDirectory(Path.GetDirectoryName(dbPath)!);
-		_conn = new SqliteConnection($"Data Source={dbPath}");
-		_conn.Open();
+		_dbPath = dbPath;
+		Directory.CreateDirectory(Path.GetDirectoryName(_dbPath)!);
+		EnsureSchema();
+	}
 
-		_conn.Execute("""
-            CREATE TABLE IF NOT EXISTS items (
-              id          INTEGER PRIMARY KEY AUTOINCREMENT,
-              path        TEXT NOT NULL,
-              filename    TEXT NOT NULL,
-              category    TEXT,
-              status      TEXT DEFAULT 'To-Do',
-              confidence  REAL DEFAULT 0,    -- 0~100
-              created_ts  INTEGER,
-              summary     TEXT,
-              reasoning   TEXT
+	private SqliteConnection Open()
+	{
+		var conn = new SqliteConnection($"Data Source={_dbPath}");
+		conn.Open();
+		return conn;
+	}
+
+	private void EnsureSchema()
+	{
+		using var conn = Open();
+		conn.Execute(
+			"""
+            CREATE TABLE IF NOT EXISTS items(
+              Path TEXT PRIMARY KEY,
+              Filename TEXT,
+              Category TEXT,
+              Confidence REAL,
+              CreatedTs INTEGER,
+              Summary TEXT,
+              Reasoning TEXT,
+              Status TEXT,
+              Tags TEXT
             );
-            CREATE INDEX IF NOT EXISTS idx_items_created  ON items(created_ts);
-            CREATE INDEX IF NOT EXISTS idx_items_category ON items(category);
-            CREATE INDEX IF NOT EXISTS idx_items_status   ON items(status);
-        """);
+            """);
+		conn.Execute("CREATE INDEX IF NOT EXISTS idx_items_created ON items(CreatedTs DESC);");
+		conn.Execute("CREATE INDEX IF NOT EXISTS idx_items_cat ON items(Category);");
 	}
 
 	public void Upsert(Item it)
 	{
-		_conn.Execute("""
-            INSERT INTO items(path, filename, category, status, confidence, created_ts, summary, reasoning)
-            VALUES (@Path, @Filename, @Category, @Status, @Confidence, @CreatedTs, @Summary, @Reasoning)
-        """, it);
+		using var conn = Open();
+		conn.Execute(
+			"""
+            INSERT INTO items(Path,Filename,Category,Confidence,CreatedTs,Summary,Reasoning,Status,Tags)
+            VALUES(@Path,@Filename,@Category,@Confidence,@CreatedTs,@Summary,@Reasoning,@Status,@Tags)
+            ON CONFLICT(Path) DO UPDATE SET
+              Filename=excluded.Filename,
+              Category=excluded.Category,
+              Confidence=excluded.Confidence,
+              CreatedTs=excluded.CreatedTs,
+              Summary=excluded.Summary,
+              Reasoning=excluded.Reasoning,
+              Status=excluded.Status,
+              Tags=excluded.Tags;
+            """, it);
 	}
 
-	public IEnumerable<Item> Recent(int days = 7) =>
-		_conn.Query<Item>("SELECT * FROM items WHERE created_ts >= strftime('%s','now','-" + days + " day') ORDER BY created_ts DESC");
+	// 方便相容舊呼叫
+	public System.Threading.Tasks.Task AddAsync(Item it) { Upsert(it); return System.Threading.Tasks.Task.CompletedTask; }
+	public System.Threading.Tasks.Task Update(Item it) { Upsert(it); return System.Threading.Tasks.Task.CompletedTask; }
 
-	public IEnumerable<Item> ByStatus(string status) =>
-		_conn.Query<Item>("SELECT * FROM items WHERE status = @s ORDER BY created_ts DESC", new { s = status });
-
-	public IEnumerable<Item> Search(string keyword)
+	public IEnumerable<Item> Recent(int days)
 	{
-		var kw = $"%{keyword}%";
-		return _conn.Query<Item>(
-			@"SELECT * FROM items
-              WHERE filename LIKE @kw OR category LIKE @kw OR summary LIKE @kw
-              ORDER BY created_ts DESC", new { kw });
+		using var conn = Open();
+		var since = DateTimeOffset.Now.AddDays(-days).ToUnixTimeSeconds();
+		return conn.Query<Item>("SELECT * FROM items WHERE CreatedTs>=@since ORDER BY CreatedTs DESC", new { since });
 	}
 
-	// 低信心（待確認）清單
-	public IEnumerable<Item> PendingLowConfidence(double threshold100) =>
-		_conn.Query<Item>(
-			@"SELECT * FROM items
-              WHERE confidence < @th
-              ORDER BY created_ts DESC", new { th = threshold100 });
+	public IEnumerable<Item> ByStatus(string status)
+	{
+		if (string.IsNullOrWhiteSpace(status)) return Enumerable.Empty<Item>();
+		using var conn = Open();
+		return conn.Query<Item>("SELECT * FROM items WHERE Status=@status ORDER BY CreatedTs DESC", new { status });
+	}
 
-	// ✅ 一鍵確認後的資料更新：寫入新路徑與狀態
-	public void UpdateAfterMove(long id, string newPath, string newStatus = "To-Do") =>
-		_conn.Execute(
-			"UPDATE items SET path=@p, filename=@f, status=@s WHERE id=@id",
-			new { id, p = newPath, f = Path.GetFileName(newPath), s = newStatus });
+	public IEnumerable<Item> Search(string kw)
+	{
+		using var conn = Open();
+		var like = $"%{kw}%";
+		return conn.Query<Item>(
+			"""
+            SELECT * FROM items
+            WHERE Filename LIKE @like OR Category LIKE @like OR Summary LIKE @like
+            ORDER BY CreatedTs DESC
+            """, new { like });
+	}
 
-	public void Dispose() => _conn.Dispose();
+	public IEnumerable<string> GetCategories()
+	{
+		using var conn = Open();
+		var rows = conn.Query<string>("SELECT DISTINCT Category FROM items WHERE IFNULL(Category,'')<>'' ORDER BY Category ASC");
+		return rows ?? Enumerable.Empty<string>();
+	}
+
+	public void Dispose() { }
 }
