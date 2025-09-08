@@ -1,6 +1,7 @@
 ﻿using System;
 using System.IO;
 using System.Text.RegularExpressions;
+using AI.KB.Assistant.Models;
 
 namespace AI.KB.Assistant.Helpers
 {

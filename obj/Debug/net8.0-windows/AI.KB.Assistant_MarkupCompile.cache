@@ -4,17 +4,17 @@
 winexe
 C#
 .cs
-C:\Users\aacd8\OneDrive\桌面\Git-Demo\AI.KB.Assistant\obj\Debug\net8.0-windows\
+D:\GIT-DEMO\AI.KB.Assistant\obj\Debug\net8.0-windows\
 AI.KB.Assistant
 none
 false
 TRACE;DEBUG;NET;NET8_0;NETCOREAPP;WINDOWS;WINDOWS7_0;NET5_0_OR_GREATER;NET6_0_OR_GREATER;NET7_0_OR_GREATER;NET8_0_OR_GREATER;NETCOREAPP3_0_OR_GREATER;NETCOREAPP3_1_OR_GREATER;WINDOWS7_0_OR_GREATER
-C:\Users\aacd8\OneDrive\桌面\Git-Demo\AI.KB.Assistant\App.xaml
-2-2121854466
+D:\GIT-DEMO\AI.KB.Assistant\App.xaml
+3-1969706603
 1-502528605
-13955500067
-2101025300832
-MainWindow.xaml;SettingsWindow.xaml;
+151303666132
+210434118689
+Views\HelpWindow.xaml;Views\MainWindow.xaml;Views\SettingsWindow.xaml;
 
 False
 

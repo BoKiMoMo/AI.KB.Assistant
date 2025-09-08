@@ -1,0 +1,39 @@
+﻿<Window x:Class="AI.KB.Assistant.Views.HelpWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="使用說明" Height="640" Width="880"
+        WindowStartupLocation="CenterOwner"
+        Background="#0b1220" Foreground="#f4f4f4"
+        FontFamily="Segoe UI, Microsoft JhengHei">
+
+    <DockPanel>
+        <!-- 左側章節目錄 -->
+        <Border DockPanel.Dock="Left" Background="#111a2b" Width="200" Padding="8">
+            <StackPanel>
+                <TextBlock Text="章節目錄" FontSize="16" FontWeight="Bold" Margin="0,0,0,8"/>
+                <Button Content="簡介" Click="GoSection_Click" Tag="Intro" Margin="0,2"/>
+                <Button Content="初始設定" Click="GoSection_Click" Tag="Setup" Margin="0,2"/>
+                <Button Content="基本操作" Click="GoSection_Click" Tag="Basic" Margin="0,2"/>
+                <Button Content="標籤與狀態" Click="GoSection_Click" Tag="Tags" Margin="0,2"/>
+                <Button Content="搜尋" Click="GoSection_Click" Tag="Search" Margin="0,2"/>
+                <Button Content="進階功能" Click="GoSection_Click" Tag="Advanced" Margin="0,2"/>
+                <Button Content="疑難排解" Click="GoSection_Click" Tag="Troubleshoot" Margin="0,2"/>
+                <Button Content="範例" Click="GoSection_Click" Tag="Examples" Margin="0,2"/>
+            </StackPanel>
+        </Border>
+
+        <!-- 右側內容 -->
+        <ScrollViewer x:Name="ContentScroll" VerticalScrollBarVisibility="Auto" Padding="16">
+            <StackPanel x:Name="ContentPanel" Width="600">
+                <TextBlock x:Name="Intro" Text="📖 簡介：這是一個 AI 輔助的本地知識庫工具，可自動分類檔案、建立資料夾，並提供搜尋與標籤功能。" TextWrapping="Wrap" Margin="0,0,0,16"/>
+                <TextBlock x:Name="Setup" Text="⚙️ 初始設定：請先到「設定」指定 RootDir、InboxDir、DbPath，並可選擇分類風格（類別/日期/專案/檔案類型/時間軸/混合）。" TextWrapping="Wrap" Margin="0,0,0,16"/>
+                <TextBlock x:Name="Basic" Text="🖱 基本操作：將檔案拖曳至收件匣區域，即可自動分類並搬移；或在乾跑模式下預覽結果。" TextWrapping="Wrap" Margin="0,0,0,16"/>
+                <TextBlock x:Name="Tags" Text="🏷 標籤與狀態：每個檔案可手動設定狀態（待處理/執行中/代辦/我的最愛），方便專案管理。" TextWrapping="Wrap" Margin="0,0,0,16"/>
+                <TextBlock x:Name="Search" Text="🔍 搜尋：可輸入關鍵字搜尋檔名、分類、摘要或標籤。" TextWrapping="Wrap" Margin="0,0,0,16"/>
+                <TextBlock x:Name="Advanced" Text="🚀 進階功能：支援 DryRun 批次模擬搬檔；可切換多種分類風格；未來可啟用 OpenAI 自動分類。" TextWrapping="Wrap" Margin="0,0,0,16"/>
+                <TextBlock x:Name="Troubleshoot" Text="🛠 疑難排解：若無法搬檔，請檢查路徑權限；若分類失敗，會歸類到「其他」。" TextWrapping="Wrap" Margin="0,0,0,16"/>
+                <TextBlock x:Name="Examples" Text="📂 範例：拖入「會議紀錄.docx」→ 自動歸類至【會議】資料夾；拖入「發票.pdf」→ 自動歸類至【財務】資料夾。" TextWrapping="Wrap" Margin="0,0,0,16"/>
+            </StackPanel>
+        </ScrollViewer>
+    </DockPanel>
+</Window>

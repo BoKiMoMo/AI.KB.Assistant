@@ -1,14 +1,16 @@
-namespace AI.KB.Assistant.Models;
-
-public sealed class Item
+namespace AI.KB.Assistant.Models
 {
-	public string Path { get; set; } = "";
-	public string Filename { get; set; } = "";
-	public string Category { get; set; } = "";
-	public double Confidence { get; set; }
-	public long CreatedTs { get; set; }
-	public string Summary { get; set; } = "";
-	public string Reasoning { get; set; } = "";
-	public string Status { get; set; } = "normal"; // normal / in-progress / todo / pending / favorite
-	public string Tags { get; set; } = "";         // 逗號分隔
+    public sealed class Item
+    {
+        public string Path { get; set; } = "";
+        public string Filename { get; set; } = "";
+        public string Category { get; set; } = "";
+        public double Confidence { get; set; }
+        public long CreatedTs { get; set; }
+        public string Summary { get; set; } = "";
+        public string Reasoning { get; set; } = "";
+        public string Status { get; set; } = "normal"; // normal / pending / in-progress / todo / favorite
+        public string Tags { get; set; } = "";         // 逗號分隔
+        public string Project { get; set; } = "DefaultProject";
+    }
 }
