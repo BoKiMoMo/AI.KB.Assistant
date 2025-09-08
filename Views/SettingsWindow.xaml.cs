@@ -1,7 +1,9 @@
 ﻿using System;
+using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Windows;
-using System.Collections.Generic;
+using System.Windows.Controls;
 using AI.KB.Assistant.Models;
 using AI.KB.Assistant.Services;
 
@@ -12,141 +14,139 @@ namespace AI.KB.Assistant.Views
         private readonly string _configPath;
         private AppConfig _cfg;
 
-        public SettingsWindow(string configPath)
+        // 給設計工具／無參數呼叫用
+        public SettingsWindow() : this("config.json") { }
+
+        public SettingsWindow(string configPath, AppConfig? cfg = null)
         {
             InitializeComponent();
-            _configPath = configPath;
-            _cfg = ConfigService.TryLoad(configPath);
-            BindToUi();
 
-            SldThreshold.ValueChanged += (_, __) =>
-                LblThreshold.Text = $"{SldThreshold.Value:0.00}";
+            _configPath = string.IsNullOrWhiteSpace(configPath) ? "config.json" : configPath;
+            _cfg = cfg ?? SafeLoad(_configPath);
+
+            BindToUi(_cfg);
         }
 
-        private void BindToUi()
+        private static AppConfig SafeLoad(string path)
         {
-            // App
-            TxtRootDir.Text = _cfg.App.RootDir;
-            TxtInboxDir.Text = _cfg.App.InboxDir;
-            TxtDbPath.Text = _cfg.App.DbPath;
-            ChkDryRun.IsChecked = _cfg.App.DryRun;
-
-            CmbMoveMode.SelectedIndex = _cfg.App.MoveMode.Equals("copy", StringComparison.OrdinalIgnoreCase) ? 1 : 0;
-            CmbOverwrite.SelectedIndex = _cfg.App.Overwrite.ToLower() switch
-            {
-                "skip" => 1,
-                "rename" => 2,
-                _ => 0
-            };
-
-            // 分類風格（用 Tag 存實際值）
-            CmbClassificationMode.SelectedItem = CmbClassificationMode.Items
-                .Cast<System.Windows.Controls.ComboBoxItem>()
-                .FirstOrDefault(i => string.Equals((string)i.Tag, _cfg.App.ClassificationMode, StringComparison.OrdinalIgnoreCase));
-
-            // TimePeriod 粒度
-            CmbTimeGranularity.SelectedItem = CmbTimeGranularity.Items
-                .Cast<System.Windows.Controls.ComboBoxItem>()
-                .FirstOrDefault(i => string.Equals((string)i.Tag, _cfg.App.TimeGranularity, StringComparison.OrdinalIgnoreCase));
-
-            // 專案
-            TxtProjects.Text = string.Join(", ", _cfg.App.Projects ?? new List<string> { "Default" });
-            var src = (_cfg.App.Projects ?? new List<string> { "Default" }).ToList();
-            if (!src.Contains(_cfg.App.ProjectName)) src.Insert(0, _cfg.App.ProjectName);
-            CmbDefaultProject.ItemsSource = src;
-            CmbDefaultProject.Text = _cfg.App.ProjectName ?? "Default";
-
-            // AI 分類
-            CmbEngine.SelectedIndex = _cfg.Classification.Engine.ToLower() switch
-            {
-                "llm" => 1,
-                "hybrid" => 2,
-                _ => 0
-            };
-            TxtStyle.Text = _cfg.Classification.Style;
-            SldThreshold.Value = _cfg.Classification.ConfidenceThreshold;
-            TxtFallback.Text = _cfg.Classification.FallbackCategory;
-            LstTaxonomy.ItemsSource = (_cfg.Classification.CustomTaxonomy ?? new()).ToList();
-
-            // OpenAI
-            PwdApiKey.Password = _cfg.OpenAI.ApiKey ?? "";
-            TxtModel.Text = _cfg.OpenAI.Model ?? "gpt-4o-mini";
+            try { return ConfigService.TryLoad(path); }
+            catch { return new AppConfig(); }
         }
 
-        private void CollectFromUi()
+        private void BindToUi(AppConfig cfg)
         {
-            _cfg.App.RootDir = TxtRootDir.Text.Trim();
-            _cfg.App.InboxDir = TxtInboxDir.Text.Trim();
-            _cfg.App.DbPath = TxtDbPath.Text.Trim();
+            // 專案下拉（示範）
+            CmbProjects.ItemsSource = cfg.App?.Projects ?? Array.Empty<string>();
+            if (!string.IsNullOrWhiteSpace(cfg.App?.ProjectName))
+                CmbProjects.Text = cfg.App.ProjectName;
+
+            // 乾跑
+            ChkDryRun.IsChecked = cfg.App?.DryRun ?? false;
+
+            // 自訂分類清單
+            var tags = (cfg.Classification?.CustomTaxonomy ?? Array.Empty<string>()).ToList();
+            LstTaxonomy.ItemsSource = tags;
+
+            // 檔案清單（示範塞一些字串，確保 XAML 名稱存在並能編譯）
+            ListFiles.ItemsSource = new[] { "demo-1.txt", "demo-2.pdf" };
+        }
+
+        private void HarvestFromUi()
+        {
+            _cfg ??= new AppConfig();
+
+            // App 區
+            _cfg.App ??= new AppSection();
+            _cfg.App.ProjectName = CmbProjects.Text?.Trim() ?? "";
             _cfg.App.DryRun = ChkDryRun.IsChecked == true;
 
-            _cfg.App.MoveMode = CmbMoveMode.SelectedIndex == 1 ? "copy" : "move";
-            _cfg.App.Overwrite = CmbOverwrite.SelectedIndex switch
-            {
-                0 => "overwrite",
-                1 => "skip",
-                2 => "rename",
-                _ => "rename"
-            };
+            // 將下拉目前所有專案（包含目前輸入）存回去
+            var projList = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var p in CmbProjects.Items.OfType<string>())
+                if (!string.IsNullOrWhiteSpace(p)) projList.Add(p);
+            if (!string.IsNullOrWhiteSpace(CmbProjects.Text)) projList.Add(CmbProjects.Text);
+            _cfg.App.Projects = projList.ToList();
 
-            // 分類風格與時間粒度
-            _cfg.App.ClassificationMode =
-                (CmbClassificationMode.SelectedItem as System.Windows.Controls.ComboBoxItem)?.Tag?.ToString() ?? "Category";
-            _cfg.App.TimeGranularity =
-                (CmbTimeGranularity.SelectedItem as System.Windows.Controls.ComboBoxItem)?.Tag?.ToString() ?? "Month";
+            // 自訂分類
+            _cfg.Classification ??= new ClassificationSection();
+            _cfg.Classification.CustomTaxonomy = LstTaxonomy.Items
+                .OfType<string>()
+                .Select(s => s.Trim())
+                .Where(s => !string.IsNullOrWhiteSpace(s))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
 
-            // 專案
-            var projects = (TxtProjects.Text ?? "")
-                .Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
-                .Select(s => s.Trim()).Where(s => s.Length > 0).Distinct().ToList();
-            if (projects.Count == 0) projects.Add("Default");
-            _cfg.App.Projects = projects;
-            _cfg.App.ProjectName = string.IsNullOrWhiteSpace(CmbDefaultProject.Text) ? "Default" : CmbDefaultProject.Text.Trim();
+        /* ============  按鈕事件（XAML 綁定到這些方法）  ============ */
 
-            // AI 分類
-            _cfg.Classification.Engine = CmbEngine.SelectedIndex switch
-            {
-                1 => "llm",
-                2 => "hybrid",
-                _ => "dummy"
-            };
-            _cfg.Classification.Style = TxtStyle.Text.Trim();
-            _cfg.Classification.ConfidenceThreshold = SldThreshold.Value;
-            _cfg.Classification.FallbackCategory = TxtFallback.Text.Trim();
-            _cfg.Classification.CustomTaxonomy = LstTaxonomy.Items.Cast<string>().ToList();
-
-            // OpenAI
-            _cfg.OpenAI.ApiKey = PwdApiKey.Password;
-            _cfg.OpenAI.Model = TxtModel.Text.Trim();
+        private void Cancel_Click(object sender, RoutedEventArgs e)
+        {
+            DialogResult = false;
+            Close();
         }
 
         private void Save_Click(object sender, RoutedEventArgs e)
         {
-            CollectFromUi();
-            ConfigService.Save(_configPath, _cfg);
-            DialogResult = true;
-            Close();
-        }
+            try
+            {
+                HarvestFromUi();
 
-        private void Cancel_Click(object sender, RoutedEventArgs e) => Close();
+                // 確保路徑存在 & 儲存
+                var full = Path.GetFullPath(_configPath);
+                Directory.CreateDirectory(Path.GetDirectoryName(full)!);
+                ConfigService.Save(full, _cfg);
+
+                MessageBox.Show("設定已儲存。", "設定", MessageBoxButton.OK, MessageBoxImage.Information);
+                DialogResult = true;
+                Close();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"儲存失敗：{ex.Message}", "錯誤", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
 
         private void AddTag_Click(object sender, RoutedEventArgs e)
         {
-            var t = TxtNewTag.Text.Trim();
-            if (t.Length == 0) return;
-            var list = LstTaxonomy.Items.Cast<string>().ToList();
-            if (!list.Contains(t)) list.Add(t);
-            LstTaxonomy.ItemsSource = list;
-            TxtNewTag.Clear();
+            var tag = (TxtNewTag.Text ?? "").Trim();
+            if (string.IsNullOrWhiteSpace(tag)) return;
+
+            var list = (LstTaxonomy.ItemsSource as IList<string>)?.ToList()
+                       ?? LstTaxonomy.Items.OfType<string>().ToList();
+
+            if (!list.Contains(tag, StringComparer.OrdinalIgnoreCase))
+            {
+                list.Add(tag);
+                LstTaxonomy.ItemsSource = list.ToList(); // 重新指定以刷新畫面
+            }
+
+            TxtNewTag.Text = "";
+            TxtNewTag.Focus();
         }
 
         private void RemoveTag_Click(object sender, RoutedEventArgs e)
         {
-            if (LstTaxonomy.SelectedItem is string s)
+            var selected = LstTaxonomy.SelectedItem as string;
+            if (string.IsNullOrWhiteSpace(selected)) return;
+
+            var list = (LstTaxonomy.ItemsSource as IList<string>)?.ToList()
+                       ?? LstTaxonomy.Items.OfType<string>().ToList();
+
+            list = list.Where(x => !string.Equals(x, selected, StringComparison.OrdinalIgnoreCase)).ToList();
+            LstTaxonomy.ItemsSource = list;
+        }
+
+        private void SearchBox_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            // 這裡純示範：把輸入關鍵字加到檔案清單的第一列（不影響設定）
+            var kw = SearchBox.Text?.Trim();
+            if (string.IsNullOrEmpty(kw))
             {
-                var list = LstTaxonomy.Items.Cast<string>().ToList();
-                list.Remove(s);
-                LstTaxonomy.ItemsSource = list;
+                ListFiles.ItemsSource = new[] { "demo-1.txt", "demo-2.pdf" };
+            }
+            else
+            {
+                ListFiles.ItemsSource = new[] { $"搜尋：{kw}", "demo-1.txt", "demo-2.pdf" };
             }
         }
     }

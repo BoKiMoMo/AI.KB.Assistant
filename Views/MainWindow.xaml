@@ -1,114 +1,26 @@
-﻿<Window x:Class="AI.KB.Assistant.Views.MainWindow"
+﻿<Window x:Class="AI.KB.Assistant.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:conv="clr-namespace:AI.KB.Assistant.Helpers"
         Title="AI 知識庫助手"
-        Height="720" Width="1220"
-        Background="#0b1220" Foreground="#f4f4f4"
-        FontFamily="Segoe UI, Microsoft JhengHei"
-        AllowDrop="True"
-        DragOver="Window_DragOver"
-        Drop="Window_Drop">
+        Height="720" Width="1200">
 
     <Window.Resources>
         <conv:UnixToDateConverter x:Key="UnixToDateConverter"/>
-        <Style TargetType="Button">
-            <Setter Property="Margin" Value="8,4"/>
-            <Setter Property="Padding" Value="10,6"/>
-            <Setter Property="Background" Value="#1c2537"/>
-            <Setter Property="Foreground" Value="#f4f4f4"/>
-            <Setter Property="BorderBrush" Value="#2e7cf6"/>
-            <Setter Property="BorderThickness" Value="1"/>
-        </Style>
-        <Style TargetType="TextBox">
-            <Setter Property="Margin" Value="8,4"/>
-            <Setter Property="Background" Value="#0f1628"/>
-            <Setter Property="Foreground" Value="#f4f4f4"/>
-            <Setter Property="BorderBrush" Value="#2e7cf6"/>
-            <Setter Property="BorderThickness" Value="1"/>
-        </Style>
-        <Style TargetType="ListViewItem">
-            <Setter Property="Background" Value="#0f1628"/>
-            <Setter Property="Foreground" Value="#f4f4f4"/>
-        </Style>
     </Window.Resources>
 
-    <DockPanel>
-        <!-- 側欄 -->
-        <StackPanel DockPanel.Dock="Left" Width="268" Background="#111a2b">
-            <TextBlock Text="AI.KB 助手" Margin="12" FontWeight="Bold" FontSize="18"/>
-
-            <TextBlock Text="搜尋" Margin="12,8,12,0" Foreground="#cfe3ff"/>
-            <StackPanel Orientation="Horizontal" Margin="8,4,8,8">
-                <TextBox x:Name="SearchBox" Width="170" KeyDown="SearchBox_KeyDown" />
-                <Button x:Name="BtnSearch" Content="🔍" Width="48" Click="BtnSearch_Click"/>
-            </StackPanel>
-
-            <Separator Margin="8"/>
-
-            <Button x:Name="BtnRecent"   Content="🆕 最近新增" Click="BtnRecent_Click"/>
-            <Button x:Name="BtnPending"  Content="📝 待處理"   Click="BtnPending_Click"/>
-            <Button x:Name="BtnProgress" Content="🚀 執行中"   Click="BtnProgress_Click"/>
-            <Button x:Name="BtnTodo"     Content="✅ 代辦"     Click="BtnTodo_Click"/>
-            <Button x:Name="BtnFavorite" Content="⭐ 我的最愛"  Click="BtnFavorite_Click"/>
-
-            <Separator Margin="8"/>
-
-            <Button x:Name="BtnSettings" Content="⚙️ 設定"     Click="BtnSettings_Click"/>
-            <Button x:Name="BtnHelp"     Content="❓ 使用說明" Click="BtnHelp_Click"/>
-        </StackPanel>
-
-        <!-- 主區域 -->
-        <DockPanel>
-            <!-- 工具列 -->
-            <StackPanel Orientation="Horizontal" Margin="8" DockPanel.Dock="Top">
-                <CheckBox x:Name="ChkDryRun" Content="乾跑（只模擬不搬檔）" Margin="0,4,12,0"/>
-                <TextBlock Text="把檔案拖到下方區域即可自動分類與搬檔" VerticalAlignment="Center" Foreground="#cfe3ff"/>
-                <Button x:Name="BtnTestRouting" Content="🧪 測試分類風格" Margin="12,0,0,0" Click="BtnTestRouting_Click"/>
-            </StackPanel>
-
-            <!-- 拖放區（雙保險：此區也允許 Drop） -->
-            <Border Margin="8" BorderBrush="#2e7cf6" BorderThickness="1" Padding="16"
-                    AllowDrop="True"
-                    DragOver="Window_DragOver"
-                    Drop="Window_Drop"
-                    Background="#0f1628" CornerRadius="8">
-                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                    <TextBlock Text="收件匣（拖曳檔案到此）" FontSize="16" HorizontalAlignment="Center" Margin="0,0,0,6"/>
-                    <TextBlock Text="系統會依【分類風格】自動建立資料夾並搬檔，並記錄到資料庫" Opacity="0.8" HorizontalAlignment="Center"/>
-                </StackPanel>
-            </Border>
-
-            <!-- 清單 + 右鍵狀態選單 -->
-            <ListView x:Name="ListFiles" Margin="8" SelectionMode="Extended">
-                <ListView.ContextMenu>
-                    <ContextMenu>
-                        <MenuItem Header="⭐ 設為我的最愛" Click="CtxSetFavorite_Click"/>
-                        <MenuItem Header="✅ 設為代辦"     Click="CtxSetTodo_Click"/>
-                        <MenuItem Header="🚀 設為執行中"   Click="CtxSetInProgress_Click"/>
-                        <MenuItem Header="📝 設為待處理"   Click="CtxSetPending_Click"/>
-                        <Separator/>
-                        <MenuItem Header="↩ 設為普通"      Click="CtxSetNormal_Click"/>
-                    </ContextMenu>
-                </ListView.ContextMenu>
-                <ListView.View>
-                    <GridView AllowsColumnReorder="True">
-                        <GridViewColumn Header="檔名"     Width="360" DisplayMemberBinding="{Binding Filename}"/>
-                        <GridViewColumn Header="分類"     Width="120" DisplayMemberBinding="{Binding Category}"/>
-                        <GridViewColumn Header="專案"     Width="120" DisplayMemberBinding="{Binding Project}"/>
-                        <GridViewColumn Header="信心度"   Width="80"  DisplayMemberBinding="{Binding Confidence}"/>
-                        <GridViewColumn Header="日期"     Width="120">
-                            <GridViewColumn.CellTemplate>
-                                <DataTemplate>
-                                    <TextBlock Text="{Binding CreatedTs, Converter={StaticResource UnixToDateConverter}}"/>
-                                </DataTemplate>
-                            </GridViewColumn.CellTemplate>
-                        </GridViewColumn>
-                        <GridViewColumn Header="狀態"     Width="120" DisplayMemberBinding="{Binding Status}"/>
-                        <GridViewColumn Header="標籤"     Width="200" DisplayMemberBinding="{Binding Tags}"/>
-                    </GridView>
-                </ListView.View>
-            </ListView>
-        </DockPanel>
-    </DockPanel>
+    <!-- 範例：CreatedTs 綁定 -->
+    <Grid>
+        <ListView ItemsSource="{Binding Items}">
+            <ListView.View>
+                <GridView>
+                    <GridViewColumn Header="檔案" DisplayMemberBinding="{Binding Filename}"/>
+                    <GridViewColumn Header="分類" DisplayMemberBinding="{Binding Category}"/>
+                    <GridViewColumn Header="信心度" DisplayMemberBinding="{Binding Confidence}"/>
+                    <GridViewColumn Header="建立時間"
+                                    DisplayMemberBinding="{Binding CreatedTs, Converter={StaticResource UnixToDateConverter}}"/>
+                </GridView>
+            </ListView.View>
+        </ListView>
+    </Grid>
 </Window>

@@ -10,11 +10,16 @@ using AI.KB.Assistant.Models;
 using AI.KB.Assistant.Services;
 using AI.KB.Assistant.Helpers;
 using AI.KB.Assistant.Views; // HelpWindow / SettingsWindow
+using System.Windows.Controls; // 確保有這行
 
 namespace AI.KB.Assistant.Views
 {
     public partial class MainWindow : Window
     {
+        private readonly CheckBox ChkDryRun = new CheckBox();
+        private readonly ListBox ListFiles = new ListBox();
+        private readonly TextBox SearchBox = new TextBox();
+
         private AppConfig _cfg;
         private DbService _db;
         private RoutingService _router;

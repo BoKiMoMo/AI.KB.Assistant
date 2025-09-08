@@ -1,10 +1,9 @@
-// ¸ô®|¡GAI.KB.Assistant/Models/AppConfig.cs
-using System.Collections.Generic;
+ï»¿using System.Collections.Generic;
 
 namespace AI.KB.Assistant.Models
 {
     /// <summary>
-    /// ¾ãÅé³]©w¡]¹ïÀ³ config.json¡^
+    /// å°æ‡‰ config.json çš„æ ¹è¨­å®šç‰©ä»¶
     /// </summary>
     public sealed class AppConfig
     {
@@ -15,88 +14,91 @@ namespace AI.KB.Assistant.Models
     }
 
     /// <summary>
-    /// ¤@¯ëÀ³¥Î³]©w
+    /// æ‡‰ç”¨ç¨‹å¼å±¤ç´šè¨­å®š
     /// </summary>
     public sealed class AppSection
     {
-        /// <summary>®Ú¥Ø¿ı¡]¹ê»Ú·hÀÉ¥Ø¼Ğªº root¡^</summary>
+        /// <summary>æ ¹ç›®éŒ„ (ä¾‹å¦‚ï¼šD:\KB)</summary>
         public string RootDir { get; set; } = "";
-        /// <summary>¦¬¥ó§X¡]©ì©ñ/¶×¤J¨Ó·½¡^</summary>
+
+        /// <summary>æ”¶ä»¶åŒ£/æŠ•å…¥åŒ£ç›®éŒ„</summary>
         public string InboxDir { get; set; } = "";
-        /// <summary>SQLite DB ÀÉ®×§¹¾ã¸ô®|</summary>
-        public string DbPath { get; set; } = "data/knowledge.db";
 
-        /// <summary>move / copy</summary>
+        /// <summary>SQLite DB æª”æ¡ˆè·¯å¾‘</summary>
+        public string DbPath { get; set; } = "";
+
+        /// <summary>ä¹¾è·‘æ¨¡å¼ï¼ˆåªæ¨¡æ“¬ä¸æ¬æª”ï¼‰</summary>
+        public bool DryRun { get; set; }
+
+        /// <summary>æ¬ç§»æ¨¡å¼ï¼šmove / copy</summary>
         public string MoveMode { get; set; } = "move";
-        /// <summary>overwrite / skip / rename</summary>
-        public string Overwrite { get; set; } = "rename";
 
-        /// <summary>°®¶]¡]¥u¼ÒÀÀ¤£·hÀÉ¡^</summary>
-        public bool DryRun { get; set; } = true;
+        /// <summary>è¦†å¯«ç­–ç•¥ï¼šoverwrite / skip / rename</summary>
+        public string Overwrite { get; set; } = "skip";
 
-        // === §A¥Ø«e¯Ê¤ÖªºÄİ©Ê ===
-        /// <summary>¤ÀÃş­·®æ¡]¤é´Á¤ÀÃş/Ãş§O¤ÀÃş/±M®×¤ÀÃş¡^</summary>
+        /// <summary>ç›®å‰ä½œç”¨ä¸­çš„å°ˆæ¡ˆåç¨±</summary>
+        public string ProjectName { get; set; } = "Default";
+
+        /// <summary>å¤šå°ˆæ¡ˆæ¸…å–®ï¼ˆå¯æ–¼ UI ä¸‹æ‹‰é¸ï¼‰</summary>
+        public List<string> Projects { get; set; } = new();
+
+        /// <summary>
+        /// åˆ†é¡é¢¨æ ¼ï¼š
+        /// categoryï¼ˆä¾é¡åˆ¥è·¯å¾‘ï¼‰ï¼Œdateï¼ˆä¾æ—¥æœŸè·¯å¾‘ï¼‰ï¼Œprojectï¼ˆä¾å°ˆæ¡ˆè·¯å¾‘ï¼‰
+        /// </summary>
         public string ClassificationMode { get; set; } = "category";
 
-        /// <summary>¥Ø«e±M®×¦WºÙ¡]¤U©Ô¦¡¦h±M®×ºŞ²z·|¥Î¨ì¡^</summary>
-        public string ProjectName { get; set; } = "DefaultProject";
-
-        /// <summary>®É¶¡²É«×¡]¤é¡B¤ë¡B¦~¡A¼vÅT¸ê®Æ§¨¼h¯Å¡^</summary>
+        /// <summary>
+        /// æ—¥æœŸç²’åº¦ï¼šday / week / monthï¼ˆé…åˆ date æ¨¡å¼ä½¿ç”¨ï¼‰
+        /// </summary>
         public string TimeGranularity { get; set; } = "month";
     }
 
-
     /// <summary>
-    /// ¸ô®|»P©R¦Wµ¦²¤
+    /// æª”æ¡ˆè·¯å¾‘èˆ‡å‘½åè¦å‰‡
     /// </summary>
     public sealed class RoutingSection
     {
         /// <summary>
-        /// ¨Ò¡G{root}/{category}/{yyyy}/{mm}/
-        /// ¥i¥ÎÄæ¦ì¡G{root},{category},{yyyy},{mm},{dd}
+        /// è·¯å¾‘æ¨£æ¿ï¼ˆæ”¯æ´å ä½ï¼š{root}ã€{project}ã€{category}ã€{yyyy}ã€{mm}ã€{dd}ï¼‰
+        /// ç¯„ä¾‹ï¼š{root}/{category}/{yyyy}/{mm}/
         /// </summary>
         public string PathTemplate { get; set; } = "{root}/{category}/{yyyy}/{mm}/";
 
-        /// <summary>¶È¤¹³\¦w¥ş²M³æ¤ÀÃş</summary>
+        /// <summary>æ˜¯å¦åªå…è¨±å®‰å…¨æ¸…å–®å…§çš„åˆ†é¡</summary>
         public bool SafeCategories { get; set; } = false;
     }
 
     /// <summary>
-    /// AI/³W«h¤ÀÃş³]©w
+    /// AI åˆ†é¡èˆ‡è‡ªè¨‚åˆ†é¡
     /// </summary>
     public sealed class ClassificationSection
     {
-        /// <summary>¤ÀÃş¤ŞÀº¡Gllm / rules / hybrid / dummy</summary>
-        public string Engine { get; set; } = "rules";
+        /// <summary>å¼•æ“ï¼šllm / dummy / hybrid</summary>
+        public string Engine { get; set; } = "llm";
 
-        /// <summary>´£¥Ü­·®æ¡]¥i¯d¥Õ¡^</summary>
+        /// <summary>æç¤ºé¢¨æ ¼ï¼ˆtopicã€keywordsâ€¦è‡ªç”±å­—ä¸²ï¼‰</summary>
         public string Style { get; set; } = "topic";
 
-        /// <summary>«H¤ßªùÂe¡]0~1¡^</summary>
-        public double ConfidenceThreshold { get; set; } = 0.6;
+        /// <summary>ä¿¡å¿ƒåº¦é–¾å€¼ï¼ˆ0~1ï¼‰</summary>
+        public double Threshold { get; set; } = 0.6;
 
-        /// <summary>¿ëÃÑ¥¢±Ñ®Éªº¹w³]Ãş§O</summary>
+        /// <summary>ç•¶ç„¡æ³•åˆ¤æ–·æ™‚çš„é è¨­é¡åˆ¥</summary>
         public string FallbackCategory { get; set; } = "unsorted";
 
-        /// <summary>¦Û­q¤ÀÃş²M³æ</summary>
-        public List<string>? CustomTaxonomy { get; set; } = new()
-        {
-            "±M®×/·|Ä³", "»İ¨D/¥ø¹º", "¶}µo/µ{¦¡", "³]­p/UIUX", "´ú¸Õ/Åç¦¬",
-            "¬ã¨s/½×¤å", "¸ê®Æ/¼Æ¾Ú", "ªk³W/±ø´Ú", "±ÄÁÊ/³ø»ù", "¦X¬ù/ªk°È",
-            "°]·|/µo²¼", "¤H¸ê/¦æ¬F", "Â²³ø/§ë¼v¤ù", "¹Ï¤ù/¯À§÷", "¼v­µ/¦h´CÅé",
-            "¤â¥U/»¡©ú", "±Ğ¾Ç/½Òµ{", "³¡¸¨®æ/¤å³¹", "¦æ¾P/¤å®×", "¨ä¥¦"
-        };
+        /// <summary>è‡ªè¨‚åˆ†é¡æ¸…å–®ï¼ˆæœƒå‡ºç¾åœ¨è¨­å®šé  ListBoxï¼‰</summary>
+        public List<string> CustomTaxonomy { get; set; } = new();
     }
 
     /// <summary>
-    /// OpenAI ³s½u³]©w
+    /// OpenAI é€£ç·šè¨­å®š
     /// </summary>
     public sealed class OpenAISection
     {
-        /// <summary>OpenAI API Key¡]¯dªÅªí¥Ü°±¥Î LLM¡^</summary>
-        public string? ApiKey { get; set; } = null;
+        /// <summary>OpenAI API Keyï¼ˆåŸ·è¡Œæ™‚æ–¼ UI è¨­å®šï¼Œä¸å»ºè­°ç¡¬å¯«å…¥æª”ï¼‰</summary>
+        public string ApiKey { get; set; } = "";
 
-        /// <summary>¼Ò«¬¦WºÙ¡G¦p gpt-4o-mini / gpt-4o / o3-mini / gpt-4.1 µ¥</summary>
+        /// <summary>æ¨¡å‹åç¨±ï¼ˆä¾‹å¦‚ï¼šgpt-4o-mini / gpt-4o / o3-miniï¼‰</summary>
         public string Model { get; set; } = "gpt-4o-mini";
     }
 }
