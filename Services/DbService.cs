@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Data;
 using System.IO;
+using System.Linq;
 using Dapper;
 using Microsoft.Data.Sqlite;
 using AI.KB.Assistant.Models;
@@ -29,7 +30,6 @@ namespace AI.KB.Assistant.Services
 
         private IDbConnection Open() => new SqliteConnection(_connStr);
 
-        /// <summary>初次建表（若不存在則建立）</summary>
         private void EnsureTables()
         {
             using var cn = Open();
@@ -49,7 +49,6 @@ namespace AI.KB.Assistant.Services
                 );
             """);
 
-            // 基本索引
             cn.Execute("""
                 CREATE INDEX IF NOT EXISTS idx_items_filename  ON items(filename);
                 CREATE INDEX IF NOT EXISTS idx_items_category  ON items(category);
@@ -58,11 +57,9 @@ namespace AI.KB.Assistant.Services
             """);
         }
 
-        /// <summary>輕量 migration：補上 project 欄位與索引</summary>
         private void RunLightMigrations()
         {
             using var cn = Open();
-            // 檢查 project 欄位是否存在
             bool hasProject = ColumnExists(cn, "items", "project");
             if (!hasProject)
             {
@@ -73,11 +70,9 @@ namespace AI.KB.Assistant.Services
 
         private static bool ColumnExists(IDbConnection cn, string table, string column)
         {
-            // PRAGMA table_info 回傳：cid|name|type|notnull|dflt_value|pk
             var rows = cn.Query("PRAGMA table_info(" + table + ");");
             foreach (var r in rows)
             {
-                // dynamic 取值
                 string name = r.name;
                 if (string.Equals(name, column, StringComparison.OrdinalIgnoreCase))
                     return true;
@@ -85,7 +80,6 @@ namespace AI.KB.Assistant.Services
             return false;
         }
 
-        /// <summary>插入一筆 Item 並回傳 rowid</summary>
         public long Add(Item it)
         {
             using var cn = Open();
@@ -96,7 +90,6 @@ SELECT last_insert_rowid();";
             return cn.ExecuteScalar<long>(sql, it);
         }
 
-        /// <summary>近 N 天新增的項目（依時間新→舊）</summary>
         public IEnumerable<Item> Recent(int days = 7)
         {
             var since = DateTimeOffset.Now.AddDays(-Math.Abs(days)).ToUnixTimeSeconds();
@@ -110,7 +103,6 @@ ORDER BY created_ts DESC;";
             return cn.Query<Item>(sql, new { since });
         }
 
-        /// <summary>依狀態過濾（normal/todo/in-progress/favorite/pending）</summary>
         public IEnumerable<Item> ByStatus(string status)
         {
             using var cn = Open();
@@ -123,7 +115,6 @@ ORDER BY created_ts DESC;";
             return cn.Query<Item>(sql, new { status });
         }
 
-        /// <summary>關鍵字搜尋：檔名 / 類別 / 摘要 / 標籤（LIKE 模糊比對）</summary>
         public IEnumerable<Item> Search(string keyword)
         {
             using var cn = Open();
@@ -138,6 +129,19 @@ WHERE filename LIKE @q
 ORDER BY created_ts DESC;";
             var q = "%" + (keyword ?? "").Trim() + "%";
             return cn.Query<Item>(sql, new { q });
+        }
+
+        /// <summary>
+        /// 批次更新 selected 項目的狀態（供右鍵選單使用）
+        /// </summary>
+        public int UpdateStatusByPath(IEnumerable<string> paths, string status)
+        {
+            var list = (paths ?? Enumerable.Empty<string>()).Where(p => !string.IsNullOrWhiteSpace(p)).Distinct().ToArray();
+            if (list.Length == 0) return 0;
+
+            using var cn = Open();
+            const string sql = @"UPDATE items SET status=@status WHERE path IN @paths;";
+            return cn.Execute(sql, new { status, paths = list });
         }
 
         public void Dispose()

@@ -11,7 +11,7 @@ using AI.KB.Assistant.Services;
 using AI.KB.Assistant.Helpers;
 using AI.KB.Assistant.Views; // HelpWindow / SettingsWindow
 
-namespace AI.KB.Assistant
+namespace AI.KB.Assistant.Views
 {
     public partial class MainWindow : Window
     {
@@ -20,21 +20,19 @@ namespace AI.KB.Assistant
         private RoutingService _router;
         private LlmService _llm;
 
+        private string _currentView = "recent"; // recent/search/status
+
         public MainWindow()
         {
             InitializeComponent();
 
-            // 讀設定（若不存在則用預設並建立）
             _cfg = ConfigService.TryLoad("config.json");
             EnsureDirs();
             _db = new DbService(_cfg.App.DbPath);
             _router = new RoutingService(_cfg);
             _llm = new LlmService(_cfg);
 
-            // UI 初始化
             ChkDryRun.IsChecked = _cfg.App.DryRun;
-
-            // 預設載入最近 7 天
             LoadRecent(7);
         }
 
@@ -49,25 +47,39 @@ namespace AI.KB.Assistant
                 Directory.CreateDirectory(dbDir!);
         }
 
-        /* ================== 拖放處理 ================== */
-        private async void DropInbox(object sender, DragEventArgs e)
+        /* ========== 拖放（A） ========== */
+        private void Window_DragOver(object sender, DragEventArgs e)
+        {
+            if (e.Data.GetDataPresent(DataFormats.FileDrop))
+                e.Effects = DragDropEffects.Copy;
+            else
+                e.Effects = DragDropEffects.None;
+            e.Handled = true;
+        }
+
+        private async void Window_Drop(object sender, DragEventArgs e)
         {
             if (!e.Data.GetDataPresent(DataFormats.FileDrop)) return;
             var files = (string[])e.Data.GetData(DataFormats.FileDrop);
 
+            int ok = 0, fail = 0;
             foreach (var f in files)
             {
                 try
                 {
                     await ProcessOneAsync(f);
+                    ok++;
                 }
                 catch (Exception ex)
                 {
-                    MessageBox.Show($"處理檔案失敗：{Path.GetFileName(f)}\n{ex.Message}");
+                    fail++;
+                    MessageBox.Show($"處理失敗：{Path.GetFileName(f)}\n{ex.Message}");
                 }
             }
 
+            // 拖放後預設回到最近 7 天
             LoadRecent(7);
+            MessageBox.Show($"📂 拖曳完成：成功 {ok}，失敗 {fail}");
         }
 
         private async Task ProcessOneAsync(string srcPath)
@@ -84,21 +96,24 @@ namespace AI.KB.Assistant
             dest = _router.ResolveCollision(dest);
 
             // 乾跑：只顯示不搬檔
-            if (ChkDryRun.IsChecked == true || _cfg.App.DryRun)
+            bool isDry = (ChkDryRun.IsChecked == true) || _cfg.App.DryRun;
+            if (isDry)
             {
-                ListFiles.Items.Insert(0, new Item
+                // 直接把預覽項目放到第一列
+                var list = (List<Item>)(ListFiles.ItemsSource as IEnumerable<Item>)?.ToList() ?? new List<Item>();
+                list.Insert(0, new Item
                 {
                     Path = dest,
-                    Filename = $"[DRY RUN] {Path.GetFileName(srcPath)}",
+                    Filename = $"[DRY RUN] {Path.GetFileName(srcPath)} → {Path.GetDirectoryName(dest)}",
                     Category = res.primary_category,
                     Confidence = res.confidence,
                     CreatedTs = when.ToUnixTimeSeconds(),
                     Summary = res.summary,
                     Reasoning = res.reasoning,
                     Status = "pending",
-                    Tags = "",
                     Project = _cfg.App.ProjectName
                 });
+                ListFiles.ItemsSource = list;
                 return;
             }
 
@@ -126,28 +141,23 @@ namespace AI.KB.Assistant
             _db.Add(item);
         }
 
-        /* ================== 快速視圖 / 搜尋 ================== */
+        /* ========== 快速視圖 / 搜尋 ========== */
         private void BtnSearch_Click(object sender, RoutedEventArgs e) => DoSearch();
-        private void SearchBox_KeyDown(object sender, KeyEventArgs e)
-        {
-            if (e.Key == Key.Enter) DoSearch();
-        }
-        private void BtnRecent_Click(object sender, RoutedEventArgs e) => LoadRecent(7);
-        private void BtnPending_Click(object sender, RoutedEventArgs e) => LoadByStatus("pending");
-        private void BtnProgress_Click(object sender, RoutedEventArgs e) => LoadByStatus("in-progress");
-        private void BtnTodo_Click(object sender, RoutedEventArgs e) => LoadByStatus("todo");
-        private void BtnFavorite_Click(object sender, RoutedEventArgs e) => LoadByStatus("favorite");
+        private void SearchBox_KeyDown(object sender, KeyEventArgs e) { if (e.Key == Key.Enter) DoSearch(); }
+        private void BtnRecent_Click(object sender, RoutedEventArgs e) { _currentView = "recent"; LoadRecent(7); }
+        private void BtnPending_Click(object sender, RoutedEventArgs e) { _currentView = "status:pending"; LoadByStatus("pending"); }
+        private void BtnProgress_Click(object sender, RoutedEventArgs e) { _currentView = "status:in-progress"; LoadByStatus("in-progress"); }
+        private void BtnTodo_Click(object sender, RoutedEventArgs e) { _currentView = "status:todo"; LoadByStatus("todo"); }
+        private void BtnFavorite_Click(object sender, RoutedEventArgs e) { _currentView = "status:favorite"; LoadByStatus("favorite"); }
 
         private void DoSearch()
         {
             var kw = (SearchBox.Text ?? string.Empty).Trim();
-            if (kw.Length == 0)
-            {
-                LoadRecent(7);
-                return;
-            }
+            if (kw.Length == 0) { _currentView = "recent"; LoadRecent(7); return; }
+
             var items = _db.Search(kw).ToList();
             RenderItems(items, $"搜尋「{kw}」共 {items.Count} 筆");
+            _currentView = "search";
         }
 
         private void LoadRecent(int days)
@@ -165,21 +175,17 @@ namespace AI.KB.Assistant
         private void RenderItems(IEnumerable<Item> items, string header)
         {
             // 顯示在 ListView：第一列顯示標題（用一條虛擬 Item）
-            var list = new List<Item>
-            {
-                new Item { Filename = $"── {header} ──", Category = "", Confidence = 0, CreatedTs = 0, Status = "", Tags = "", Project = "" }
-            };
+            var list = new List<Item> { new Item { Filename = $"── {header} ──" } };
             list.AddRange(items);
             ListFiles.ItemsSource = list;
         }
 
-        /* ================== 設定 / 說明 ================== */
+        /* ========== 設定 / 說明 ========== */
         private void BtnSettings_Click(object sender, RoutedEventArgs e)
         {
             var win = new SettingsWindow("config.json") { Owner = this };
             if (win.ShowDialog() == true)
             {
-                // 重新載入設定、更新服務
                 _cfg = ConfigService.TryLoad("config.json");
                 ChkDryRun.IsChecked = _cfg.App.DryRun;
 
@@ -196,6 +202,64 @@ namespace AI.KB.Assistant
         {
             var win = new HelpWindow { Owner = this };
             win.ShowDialog();
+        }
+
+        /* ========== 右鍵狀態（B） ========== */
+        private void CtxSetFavorite_Click(object sender, RoutedEventArgs e) => UpdateStatusForSelection("favorite");
+        private void CtxSetTodo_Click(object sender, RoutedEventArgs e) => UpdateStatusForSelection("todo");
+        private void CtxSetInProgress_Click(object sender, RoutedEventArgs e) => UpdateStatusForSelection("in-progress");
+        private void CtxSetPending_Click(object sender, RoutedEventArgs e) => UpdateStatusForSelection("pending");
+        private void CtxSetNormal_Click(object sender, RoutedEventArgs e) => UpdateStatusForSelection("normal");
+
+        private void UpdateStatusForSelection(string status)
+        {
+            var selected = ListFiles.SelectedItems.Cast<Item>()
+                .Where(x => x != null && !string.IsNullOrWhiteSpace(x.Path)) // 過濾標題列
+                .ToList();
+            if (selected.Count == 0) { MessageBox.Show("請先選取要變更狀態的項目。"); return; }
+
+            var affected = _db.UpdateStatusByPath(selected.Select(x => x.Path), status);
+
+            // 重新整理目前視圖
+            if (_currentView.StartsWith("status:", StringComparison.OrdinalIgnoreCase))
+                LoadByStatus(_currentView.Split(':')[1]);
+            else if (_currentView == "search")
+                DoSearch();
+            else
+                LoadRecent(7);
+
+            MessageBox.Show($"已更新 {affected} 筆為「{status}」。");
+        }
+
+        /* ========== 測試分類風格（C） ========== */
+        private void BtnTestRouting_Click(object sender, RoutedEventArgs e)
+        {
+            var now = DateTimeOffset.Now;
+            var samples = new[]
+            {
+                ("會議記錄-產品路線圖.docx", "會議"),
+                ("發票2025-09-10.pdf",     "財務"),
+                ("UI提案.pptx",            "簡報"),
+                ("示意圖.png",             "圖片"),
+            };
+
+            var lines = new List<string>
+            {
+                $"分類風格：{_cfg.App.ClassificationMode}，時間粒度：{_cfg.App.TimeGranularity}，專案：{_cfg.App.ProjectName}",
+                $"根目錄：{_cfg.App.RootDir}",
+                ""
+            };
+
+            foreach (var (name, cat) in samples)
+            {
+                var fakeSrc = Path.Combine(_cfg.App.InboxDir ?? "", name);
+                var dest = _router.BuildDestination(fakeSrc, cat, now);
+                lines.Add($"{name} →");
+                lines.Add($"    {dest}");
+            }
+
+            MessageBox.Show(string.Join(Environment.NewLine, lines), "路徑預覽（不搬檔）",
+                MessageBoxButton.OK, MessageBoxImage.Information);
         }
     }
 }
