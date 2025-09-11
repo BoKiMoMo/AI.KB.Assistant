@@ -725,23 +725,23 @@
     ]
   },
   "packageFolders": {
-    "C:\\Users\\aacd8\\.nuget\\packages\\": {},
+    "C:\\Users\\石楷賢\\.nuget\\packages\\": {},
     "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages": {}
   },
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "F:\\C++ × 技術英文養成計畫\\AI.KB.Assistant\\AI.KB.Assistant.csproj",
+      "projectUniqueName": "D:\\GIT-DEMO\\AI.KB.Assistant\\AI.KB.Assistant.csproj",
       "projectName": "AI.KB.Assistant",
-      "projectPath": "F:\\C++ × 技術英文養成計畫\\AI.KB.Assistant\\AI.KB.Assistant.csproj",
-      "packagesPath": "C:\\Users\\aacd8\\.nuget\\packages\\",
-      "outputPath": "F:\\C++ × 技術英文養成計畫\\AI.KB.Assistant\\obj\\",
+      "projectPath": "D:\\GIT-DEMO\\AI.KB.Assistant\\AI.KB.Assistant.csproj",
+      "packagesPath": "C:\\Users\\石楷賢\\.nuget\\packages\\",
+      "outputPath": "D:\\GIT-DEMO\\AI.KB.Assistant\\obj\\",
       "projectStyle": "PackageReference",
       "fallbackFolders": [
         "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
       ],
       "configFilePaths": [
-        "C:\\Users\\aacd8\\AppData\\Roaming\\NuGet\\NuGet.Config",
+        "C:\\Users\\石楷賢\\AppData\\Roaming\\NuGet\\NuGet.Config",
         "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
         "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
       ],

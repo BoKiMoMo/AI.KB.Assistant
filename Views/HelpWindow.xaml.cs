@@ -9,16 +9,9 @@ namespace AI.KB.Assistant.Views
             InitializeComponent();
         }
 
-        private void GoSection_Click(object sender, RoutedEventArgs e)
+        private void BtnClose_Click(object sender, RoutedEventArgs e)
         {
-            if (sender is FrameworkElement fe && fe.Tag is string tag)
-            {
-                var target = ContentPanel.FindName(tag) as FrameworkElement;
-                if (target != null)
-                {
-                    target.BringIntoView();
-                }
-            }
+            Close();
         }
     }
 }

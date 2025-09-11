@@ -59,17 +59,6 @@ C:\Users\aacd8\OneDrive\桌面\Git-Demo\AI.KB.Assistant\obj\Debug\net8.0-windows
 C:\Users\aacd8\OneDrive\桌面\Git-Demo\AI.KB.Assistant\obj\Debug\net8.0-windows\AI.KB.Assistant.pdb
 C:\Users\aacd8\OneDrive\桌面\Git-Demo\AI.KB.Assistant\obj\Debug\net8.0-windows\AI.KB.Assistant.genruntimeconfig.cache
 C:\Users\aacd8\OneDrive\桌面\Git-Demo\AI.KB.Assistant\obj\Debug\net8.0-windows\ref\AI.KB.Assistant.dll
-D:\GIT-DEMO\AI.KB.Assistant\obj\Debug\net8.0-windows\AI.KB.Assistant.csproj.AssemblyReference.cache
-D:\GIT-DEMO\AI.KB.Assistant\obj\Debug\net8.0-windows\Views\HelpWindow.baml
-D:\GIT-DEMO\AI.KB.Assistant\obj\Debug\net8.0-windows\Views\SettingsWindow.baml
-D:\GIT-DEMO\AI.KB.Assistant\obj\Debug\net8.0-windows\Views\HelpWindow.g.cs
-D:\GIT-DEMO\AI.KB.Assistant\obj\Debug\net8.0-windows\Views\MainWindow.g.cs
-D:\GIT-DEMO\AI.KB.Assistant\obj\Debug\net8.0-windows\Views\SettingsWindow.g.cs
-D:\GIT-DEMO\AI.KB.Assistant\obj\Debug\net8.0-windows\App.g.cs
-D:\GIT-DEMO\AI.KB.Assistant\obj\Debug\net8.0-windows\AI.KB.Assistant_Content.g.cs
-D:\GIT-DEMO\AI.KB.Assistant\obj\Debug\net8.0-windows\GeneratedInternalTypeHelper.g.cs
-D:\GIT-DEMO\AI.KB.Assistant\obj\Debug\net8.0-windows\AI.KB.Assistant_MarkupCompile.cache
-D:\GIT-DEMO\AI.KB.Assistant\obj\Debug\net8.0-windows\AI.KB.Assistant_MarkupCompile.lref
 F:\C++ × 技術英文養成計畫\AI.KB.Assistant\obj\Debug\net8.0-windows\AI.KB.Assistant.csproj.AssemblyReference.cache
 F:\C++ × 技術英文養成計畫\AI.KB.Assistant\obj\Debug\net8.0-windows\Views\HelpWindow.baml
 F:\C++ × 技術英文養成計畫\AI.KB.Assistant\obj\Debug\net8.0-windows\Views\SettingsWindow.baml

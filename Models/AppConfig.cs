@@ -1,93 +1,43 @@
-﻿using System.Collections.Generic;
+﻿using Newtonsoft.Json;
 
 namespace AI.KB.Assistant.Models
 {
     /// <summary>
-    /// 對應 config.json 的根設定物件
+    /// 整體設定（對應 config.json）
     /// </summary>
     public sealed class AppConfig
     {
         public AppSection App { get; set; } = new();
+        public OpenAISection OpenAI { get; set; } = new();
         public RoutingSection Routing { get; set; } = new();
         public ClassificationSection Classification { get; set; } = new();
-        public OpenAISection OpenAI { get; set; } = new();
     }
 
     /// <summary>
-    /// 應用程式層級設定
+    /// 應用程式相關路徑 / 旗標
     /// </summary>
     public sealed class AppSection
     {
-        /// <summary>根目錄 (例如：D:\KB)</summary>
+        /// 根目錄（必要）
         public string RootDir { get; set; } = "";
 
-        /// <summary>收件匣/投入匣目錄</summary>
+        /// 收件匣資料夾
         public string InboxDir { get; set; } = "";
 
-        /// <summary>SQLite DB 檔案路徑</summary>
+        /// SQLite DB 路徑
         public string DbPath { get; set; } = "";
 
-        /// <summary>乾跑模式（只模擬不搬檔）</summary>
-        public bool DryRun { get; set; }
+        /// 專案名稱（可選）
+        public string ProjectName { get; set; } = "";
 
-        /// <summary>搬移模式：move / copy</summary>
-        public string MoveMode { get; set; } = "move";
+        /// 乾跑（不真的移動檔案）
+        public bool DryRun { get; set; } = false;
 
-        /// <summary>覆寫策略：overwrite / skip / rename</summary>
-        public string Overwrite { get; set; } = "skip";
+        /// 覆寫既有檔案
+        public bool Overwrite { get; set; } = false;
 
-        /// <summary>目前作用中的專案名稱</summary>
-        public string ProjectName { get; set; } = "Default";
-
-        /// <summary>多專案清單（可於 UI 下拉選）</summary>
-        public List<string> Projects { get; set; } = new();
-
-        /// <summary>
-        /// 分類風格：
-        /// category（依類別路徑），date（依日期路徑），project（依專案路徑）
-        /// </summary>
-        public string ClassificationMode { get; set; } = "category";
-
-        /// <summary>
-        /// 日期粒度：day / week / month（配合 date 模式使用）
-        /// </summary>
-        public string TimeGranularity { get; set; } = "month";
-    }
-
-    /// <summary>
-    /// 檔案路徑與命名規則
-    /// </summary>
-    public sealed class RoutingSection
-    {
-        /// <summary>
-        /// 路徑樣板（支援占位：{root}、{project}、{category}、{yyyy}、{mm}、{dd}）
-        /// 範例：{root}/{category}/{yyyy}/{mm}/
-        /// </summary>
-        public string PathTemplate { get; set; } = "{root}/{category}/{yyyy}/{mm}/";
-
-        /// <summary>是否只允許安全清單內的分類</summary>
-        public bool SafeCategories { get; set; } = false;
-    }
-
-    /// <summary>
-    /// AI 分類與自訂分類
-    /// </summary>
-    public sealed class ClassificationSection
-    {
-        /// <summary>引擎：llm / dummy / hybrid</summary>
-        public string Engine { get; set; } = "llm";
-
-        /// <summary>提示風格（topic、keywords…自由字串）</summary>
-        public string Style { get; set; } = "topic";
-
-        /// <summary>信心度閾值（0~1）</summary>
-        public double Threshold { get; set; } = 0.6;
-
-        /// <summary>當無法判斷時的預設類別</summary>
-        public string FallbackCategory { get; set; } = "unsorted";
-
-        /// <summary>自訂分類清單（會出現在設定頁 ListBox）</summary>
-        public List<string> CustomTaxonomy { get; set; } = new();
+        /// 檔案移動模式：copy / move
+        public string MoveMode { get; set; } = "copy";
     }
 
     /// <summary>
@@ -95,10 +45,40 @@ namespace AI.KB.Assistant.Models
     /// </summary>
     public sealed class OpenAISection
     {
-        /// <summary>OpenAI API Key（執行時於 UI 設定，不建議硬寫入檔）</summary>
+        /// API Key（執行時由 UI 填入）
         public string ApiKey { get; set; } = "";
 
-        /// <summary>模型名稱（例如：gpt-4o-mini / gpt-4o / o3-mini）</summary>
+        /// 模型名稱
         public string Model { get; set; } = "gpt-4o-mini";
+    }
+
+    /// <summary>
+    /// 路由與安全選項
+    /// </summary>
+    public sealed class RoutingSection
+    {
+        /// 僅允許安全類別（若你的分類服務會用到）
+        public bool SafeCategoriesOnly { get; set; } = true;
+    }
+
+    /// <summary>
+    /// 分類相關偏好（供本地規則/LLM 參考）
+    /// </summary>
+    public sealed class ClassificationSection
+    {
+        /// 預設後備分類
+        public string FallbackCategory { get; set; } = "其他";
+
+        /// 分類引擎：local / llm / hybrid（保留供未來切換）
+        public string Engine { get; set; } = "local";
+
+        /// 分類風格：category / date / project
+        public string ClassificationMode { get; set; } = "category";
+
+        /// 日期粒度：day / month / year
+        public string TimeGranularity { get; set; } = "month";
+
+        /// 顯示或輸出風格（保留）
+        public string Style { get; set; } = "default";
     }
 }

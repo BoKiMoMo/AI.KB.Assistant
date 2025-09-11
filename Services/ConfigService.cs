@@ -1,22 +1,39 @@
-// Services/ConfigService.cs
 using System;
 using System.IO;
-using AI.KB.Assistant.Models;
 using Newtonsoft.Json;
+using AI.KB.Assistant.Models;
 
 namespace AI.KB.Assistant.Services
 {
+    /// <summary>
+    /// 設定檔存取服務（讀/寫 config.json）
+    /// </summary>
     public static class ConfigService
     {
-        // 建議用統一設定：縮排＋忽略 null、允許註解
         private static readonly JsonSerializerSettings _jsonSettings = new()
         {
             Formatting = Formatting.Indented,
-            NullValueHandling = NullValueHandling.Ignore,
-            MissingMemberHandling = MissingMemberHandling.Ignore
+            NullValueHandling = NullValueHandling.Include
         };
 
-        public static AppConfig TryLoad(string path = "config.json")
+        /// <summary>
+        /// 讀取設定；若檔案不存在回傳預設物件。
+        /// 失敗會擲出例外。
+        /// </summary>
+        public static AppConfig Load(string path)
+        {
+            if (!File.Exists(path)) return new AppConfig();
+
+            var json = File.ReadAllText(path);
+            var cfg = JsonConvert.DeserializeObject<AppConfig>(json, _jsonSettings) ?? new AppConfig();
+            EnsureSections(cfg);
+            return cfg;
+        }
+
+        /// <summary>
+        /// 嘗試讀取設定；任何錯誤都回傳預設物件，不擲例外。
+        /// </summary>
+        public static AppConfig TryLoad(string path)
         {
             try
             {
@@ -28,41 +45,38 @@ namespace AI.KB.Assistant.Services
             }
         }
 
-        public static AppConfig Load(string path)
-        {
-            if (!File.Exists(path))
-                return new AppConfig();
-
-            var json = File.ReadAllText(path);
-            var cfg = JsonConvert.DeserializeObject<AppConfig>(json, _jsonSettings) ?? new AppConfig();
-
-            // 確保各區塊不為 null
-            cfg.App ??= new AppSection();
-            cfg.Routing ??= new RoutingSection();
-            cfg.Classification ??= new ClassificationSection();
-            cfg.OpenAI ??= new OpenAISection();
-
-            return cfg;
-        }
-
+        /// <summary>
+        /// 儲存設定為 UTF-8 (BOM)；會自動建立目錄。
+        /// </summary>
         public static void Save(string path, AppConfig cfg)
         {
-            cfg ??= new AppConfig();
-
-            // 確保各區塊不為 null（避免寫出來缺段）
-            cfg.App ??= new AppSection();
-            cfg.Routing ??= new RoutingSection();
-            cfg.Classification ??= new ClassificationSection();
-            cfg.OpenAI ??= new OpenAISection();
+            EnsureSections(cfg);
 
             var full = Path.GetFullPath(path);
-            Directory.CreateDirectory(Path.GetDirectoryName(full)!);
+            var dir = Path.GetDirectoryName(full);
+            if (!string.IsNullOrWhiteSpace(dir))
+                Directory.CreateDirectory(dir!);
 
             var json = JsonConvert.SerializeObject(cfg, _jsonSettings);
-
-            // 用 UTF-8 (含 BOM) 寫出以避免中文亂碼
             using var sw = new StreamWriter(full, false, new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
             sw.Write(json);
+        }
+
+        /// <summary>
+        /// 確保各子區塊不為 null（避免舊檔或手動編輯造成空值）
+        /// </summary>
+        private static void EnsureSections(AppConfig cfg)
+        {
+            cfg.App ??= new AppSection();
+            cfg.OpenAI ??= new OpenAISection();
+            cfg.Routing ??= new RoutingSection();
+            cfg.Classification ??= new ClassificationSection();
+
+            // 必填欄位的保底值（避免空字串）
+            cfg.Classification.ClassificationMode ??= "category";
+            cfg.Classification.TimeGranularity ??= "month";
+            cfg.Classification.FallbackCategory ??= "其他";
+            cfg.App.MoveMode ??= "copy";
         }
     }
 }

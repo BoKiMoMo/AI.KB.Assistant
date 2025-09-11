@@ -1,39 +1,54 @@
 ﻿<Window x:Class="AI.KB.Assistant.Views.HelpWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="使用說明" Height="640" Width="880"
+        Title="使用教學" Height="680" Width="920"
         WindowStartupLocation="CenterOwner"
-        Background="#0b1220" Foreground="#f4f4f4"
         FontFamily="Segoe UI, Microsoft JhengHei">
-
-    <DockPanel>
-        <!-- 左側章節目錄 -->
-        <Border DockPanel.Dock="Left" Background="#111a2b" Width="200" Padding="8">
+    <Grid Background="#0b1220">
+        <ScrollViewer Margin="24" VerticalScrollBarVisibility="Auto">
             <StackPanel>
-                <TextBlock Text="章節目錄" FontSize="16" FontWeight="Bold" Margin="0,0,0,8"/>
-                <Button Content="簡介" Click="GoSection_Click" Tag="Intro" Margin="0,2"/>
-                <Button Content="初始設定" Click="GoSection_Click" Tag="Setup" Margin="0,2"/>
-                <Button Content="基本操作" Click="GoSection_Click" Tag="Basic" Margin="0,2"/>
-                <Button Content="標籤與狀態" Click="GoSection_Click" Tag="Tags" Margin="0,2"/>
-                <Button Content="搜尋" Click="GoSection_Click" Tag="Search" Margin="0,2"/>
-                <Button Content="進階功能" Click="GoSection_Click" Tag="Advanced" Margin="0,2"/>
-                <Button Content="疑難排解" Click="GoSection_Click" Tag="Troubleshoot" Margin="0,2"/>
-                <Button Content="範例" Click="GoSection_Click" Tag="Examples" Margin="0,2"/>
-            </StackPanel>
-        </Border>
+                <TextBlock Text="AI 知識庫助手｜使用教學" FontSize="26" FontWeight="Bold" Foreground="#2e7cf6" Margin="0,0,0,12"/>
+                <TextBlock Text="版本：MVP（支援拖放、模擬分類、路由、一鍵搬檔、搜尋、我的最愛、設定）。" Foreground="#cfe3ff" Margin="0,0,0,16"/>
 
-        <!-- 右側內容 -->
-        <ScrollViewer x:Name="ContentScroll" VerticalScrollBarVisibility="Auto" Padding="16">
-            <StackPanel x:Name="ContentPanel" Width="600">
-                <TextBlock x:Name="Intro" Text="📖 簡介：這是一個 AI 輔助的本地知識庫工具，可自動分類檔案、建立資料夾，並提供搜尋與標籤功能。" TextWrapping="Wrap" Margin="0,0,0,16"/>
-                <TextBlock x:Name="Setup" Text="⚙️ 初始設定：請先到「設定」指定 RootDir、InboxDir、DbPath，並可選擇分類風格（類別/日期/專案/檔案類型/時間軸/混合）。" TextWrapping="Wrap" Margin="0,0,0,16"/>
-                <TextBlock x:Name="Basic" Text="🖱 基本操作：將檔案拖曳至收件匣區域，即可自動分類並搬移；或在乾跑模式下預覽結果。" TextWrapping="Wrap" Margin="0,0,0,16"/>
-                <TextBlock x:Name="Tags" Text="🏷 標籤與狀態：每個檔案可手動設定狀態（待處理/執行中/代辦/我的最愛），方便專案管理。" TextWrapping="Wrap" Margin="0,0,0,16"/>
-                <TextBlock x:Name="Search" Text="🔍 搜尋：可輸入關鍵字搜尋檔名、分類、摘要或標籤。" TextWrapping="Wrap" Margin="0,0,0,16"/>
-                <TextBlock x:Name="Advanced" Text="🚀 進階功能：支援 DryRun 批次模擬搬檔；可切換多種分類風格；未來可啟用 OpenAI 自動分類。" TextWrapping="Wrap" Margin="0,0,0,16"/>
-                <TextBlock x:Name="Troubleshoot" Text="🛠 疑難排解：若無法搬檔，請檢查路徑權限；若分類失敗，會歸類到「其他」。" TextWrapping="Wrap" Margin="0,0,0,16"/>
-                <TextBlock x:Name="Examples" Text="📂 範例：拖入「會議紀錄.docx」→ 自動歸類至【會議】資料夾；拖入「發票.pdf」→ 自動歸類至【財務】資料夾。" TextWrapping="Wrap" Margin="0,0,0,16"/>
+                <TextBlock Text="快速開始" FontSize="18" FontWeight="SemiBold" Foreground="#22b07d" Margin="0,6,0,6"/>
+                <TextBlock Foreground="#f4f4f4" TextWrapping="Wrap">
+1) 先到「設定」指定根目錄、收件匣（可先預設），第一次建議保留「乾跑」。{"\n"}
+2) 把檔案直接拖進主視窗（清單會出現模擬分類與路由）。{"\n"}
+3) 確認 OK 後，到「設定」關閉乾跑（DryRun），選擇 copy/move 與覆寫策略。{"\n"}
+4) 按「一鍵搬檔」→ 會跳出總結確認 → 按「是」開始搬檔。{"\n"}
+                </TextBlock>
+
+                <TextBlock Text="分類與路由" FontSize="18" FontWeight="SemiBold" Foreground="#22b07d" Margin="0,16,0,6"/>
+                <TextBlock Foreground="#f4f4f4" TextWrapping="Wrap">
+• 分類風格：類別 / 日期 / 專案（設定頁可切換）。{"\n"}
+• 時間粒度：年 / 月 / 日。{"\n"}
+• 類別目前採本地規則（可後續切 OpenAI）。{"\n"}
+                </TextBlock>
+
+                <TextBlock Text="我的最愛與搜尋" FontSize="18" FontWeight="SemiBold" Foreground="#22b07d" Margin="0,16,0,6"/>
+                <TextBlock Foreground="#f4f4f4" TextWrapping="Wrap">
+• 右鍵清單項目可加入/移除「我的最愛」。{"\n"}
+• 上方的搜尋框可即時過濾檔名/分類/摘要。{"\n"}
+                </TextBlock>
+
+                <TextBlock Text="安全與還原" FontSize="18" FontWeight="SemiBold" Foreground="#22b07d" Margin="0,16,0,6"/>
+                <TextBlock Foreground="#f4f4f4" TextWrapping="Wrap">
+• 建議先以「乾跑」確認路徑，再開啟真搬檔。{"\n"}
+• 覆寫策略可選「覆寫」或「自動改名」。{"\n"}
+                </TextBlock>
+
+                <TextBlock Text="常見問題" FontSize="18" FontWeight="SemiBold" Foreground="#22b07d" Margin="0,16,0,6"/>
+                <TextBlock Foreground="#f4f4f4" TextWrapping="Wrap">
+Q：拖進去沒反應？{"\n"}
+A：請確認視窗標題列有顯示「AI 知識庫助手」，且檔案不是空白捷徑。{"\n\n"}
+Q：搬檔後找不到檔案？{"\n"}
+A：請到設定確認「根目錄」與「分類風格 / 時間粒度」；路由會依設定建資料夾。{"\n"}
+                </TextBlock>
+
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,24,0,0">
+                    <Button Content="關閉" Width="100" Click="BtnClose_Click"/>
+                </StackPanel>
             </StackPanel>
         </ScrollViewer>
-    </DockPanel>
+    </Grid>
 </Window>
