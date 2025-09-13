@@ -1,4 +1,5 @@
 using System.IO;
+using System.Text;
 using Newtonsoft.Json;
 using AI.KB.Assistant.Models;
 
@@ -14,13 +15,12 @@ namespace AI.KB.Assistant.Services
 
         public static AppConfig TryLoad(string path)
         {
-            try { return Load(path); } catch { return new AppConfig(); }
+            if (!File.Exists(path)) return new AppConfig();
+            return Load(path);
         }
 
         public static AppConfig Load(string path)
         {
-            if (!File.Exists(path)) return new AppConfig();
-
             var json = File.ReadAllText(path);
             var cfg = JsonConvert.DeserializeObject<AppConfig>(json, _jsonSettings) ?? new AppConfig();
 
@@ -29,10 +29,18 @@ namespace AI.KB.Assistant.Services
             cfg.Routing ??= new RoutingSection();
             cfg.Classification ??= new ClassificationSection();
 
+            // 預先建立資料夾（若已設定）
+            if (!string.IsNullOrWhiteSpace(cfg.App.RootDir)) Directory.CreateDirectory(cfg.App.RootDir);
+            if (!string.IsNullOrWhiteSpace(cfg.App.InboxDir)) Directory.CreateDirectory(cfg.App.InboxDir);
+            if (!string.IsNullOrWhiteSpace(cfg.App.DbPath))
+            {
+                var dir = Path.GetDirectoryName(Path.GetFullPath(cfg.App.DbPath));
+                if (!string.IsNullOrWhiteSpace(dir)) Directory.CreateDirectory(dir!);
+            }
+
             return cfg;
         }
 
-        /// <summary>存檔（UTF-8 BOM 以避免中文在記事本亂碼）</summary>
         public static void Save(string path, AppConfig cfg)
         {
             cfg.App ??= new AppSection();
@@ -40,11 +48,11 @@ namespace AI.KB.Assistant.Services
             cfg.Routing ??= new RoutingSection();
             cfg.Classification ??= new ClassificationSection();
 
-            var full = Path.GetFullPath(path);
-            Directory.CreateDirectory(Path.GetDirectoryName(full)!);
+            var dir = Path.GetDirectoryName(Path.GetFullPath(path));
+            if (!string.IsNullOrWhiteSpace(dir)) Directory.CreateDirectory(dir!);
 
             var json = JsonConvert.SerializeObject(cfg, _jsonSettings);
-            using var sw = new StreamWriter(full, false, new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+            using var sw = new StreamWriter(path, false, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true)); // UTF-8 BOM
             sw.Write(json);
         }
     }

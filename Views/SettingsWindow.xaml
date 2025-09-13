@@ -1,8 +1,7 @@
 ﻿<Window x:Class="AI.KB.Assistant.Views.SettingsWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="設定"
-        Height="560" Width="860"
+        Title="設定" Height="580" Width="860"
         WindowStartupLocation="CenterOwner"
         FontFamily="Segoe UI, Microsoft JhengHei">
     <Grid Margin="20">
@@ -20,57 +19,45 @@
             <ColumnDefinition Width="160"/>
             <ColumnDefinition Width="*"/>
             <ColumnDefinition Width="Auto"/>
-        </Grid.ColumnDefinitions>
+            </Grid.Columninitions>
 
-        <!-- RootDir -->
-        <TextBlock Grid.Row="0" Grid.Column="0" Text="根目錄：" VerticalAlignment="Center" Margin="0,5"/>
-        <TextBox   x:Name="TxtRootDir" Grid.Row="0" Grid.Column="1" Margin="5"/>
-        <Button Content="瀏覽…" Grid.Row="0" Grid.Column="2" Margin="5" Click="BrowseRoot_Click"/>
+            <!-- 路徑 -->
+            <TextBlock Grid.Row="0" Grid.Column="0" Text="根目錄：" VerticalAlignment="Center" Margin="0,6"/>
+            <TextBox   x:Name="TxtRootDir" Grid.Row="0" Grid.Column="1" Margin="5"/>
+            <Button Content="選資料夾…" Grid.Row="0" Grid.Column="2" Margin="5" Click="BrowseRoot_Click"/>
 
-        <!-- InboxDir -->
-        <TextBlock Grid.Row="1" Grid.Column="0" Text="收件匣：" VerticalAlignment="Center" Margin="0,5"/>
-        <TextBox   x:Name="TxtInboxDir" Grid.Row="1" Grid.Column="1" Margin="5"/>
-        <Button Content="瀏覽…" Grid.Row="1" Grid.Column="2" Margin="5" Click="BrowseInbox_Click"/>
+            <TextBlock Grid.Row="1" Grid.Column="0" Text="收件匣：" VerticalAlignment="Center" Margin="0,6"/>
+            <TextBox   x:Name="TxtInboxDir" Grid.Row="1" Grid.Column="1" Margin="5"/>
+            <Button Content="選資料夾…" Grid.Row="1" Grid.Column="2" Margin="5" Click="BrowseInbox_Click"/>
 
-        <!-- DbPath -->
-        <TextBlock Grid.Row="2" Grid.Column="0" Text="資料庫檔：" VerticalAlignment="Center" Margin="0,5"/>
-        <TextBox   x:Name="TxtDbPath" Grid.Row="2" Grid.Column="1" Margin="5"/>
-        <Button Content="選檔…" Grid.Row="2" Grid.Column="2" Margin="5" Click="BrowseDb_Click"/>
+            <TextBlock Grid.Row="2" Grid.Column="0" Text="資料庫檔：" VerticalAlignment="Center" Margin="0,6"/>
+            <TextBox   x:Name="TxtDbPath" Grid.Row="2" Grid.Column="1" Margin="5"/>
+            <Button Content="選檔…" Grid.Row="2" Grid.Column="2" Margin="5" Click="BrowseDb_Click"/>
 
-        <!-- Project -->
-        <TextBlock Grid.Row="3" Grid.Column="0" Text="專案名稱：" VerticalAlignment="Center" Margin="0,5"/>
-        <TextBox   x:Name="TxtProject" Grid.Row="3" Grid.Column="1" Margin="5"/>
+            <!-- OpenAI -->
+            <TextBlock Grid.Row="3" Grid.Column="0" Text="OpenAI API Key：" VerticalAlignment="Center" Margin="0,6"/>
+            <PasswordBox x:Name="PwdApiKey" Grid.Row="3" Grid.Column="1" Margin="5"/>
+            <TextBlock Grid.Row="4" Grid.Column="0" Text="模型：" VerticalAlignment="Center" Margin="0,6"/>
+            <TextBox   x:Name="TxtModel" Grid.Row="4" Grid.Column="1" Margin="5" Text="gpt-4o-mini"/>
 
-        <!-- Routing -->
-        <TextBlock Grid.Row="4" Grid.Column="0" Text="分類風格：" VerticalAlignment="Center" Margin="0,5"/>
-        <ComboBox  x:Name="CmbMode" Grid.Row="4" Grid.Column="1" Margin="5" SelectedIndex="0">
-            <ComboBoxItem Content="category"/>
-            <ComboBoxItem Content="date"/>
-            <ComboBoxItem Content="project"/>
-        </ComboBox>
+            <!-- 分類參數 -->
+            <StackPanel Grid.Row="5" Grid.ColumnSpan="3" Orientation="Horizontal" Margin="0,10,0,0">
+                <CheckBox x:Name="ChkUseLLM" Content="使用 LLM 分類" Margin="0,0,16,0"/>
+                <TextBlock Text="信心門檻(0~1)：" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                <TextBox x:Name="TxtThreshold" Width="80" Text="0.6" Margin="0,0,16,0"/>
+                <TextBlock Text="建議標籤數：" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                <TextBox x:Name="TxtMaxTags" Width="60" Text="5" Margin="0,0,16,0"/>
+                <CheckBox x:Name="ChkChatSearch" Content="啟用對話搜尋" Margin="0,0,16,0"/>
+            </StackPanel>
 
-        <TextBlock Grid.Row="5" Grid.Column="0" Text="時間顆粒度：" VerticalAlignment="Center" Margin="0,5"/>
-        <ComboBox  x:Name="CmbGran" Grid.Row="5" Grid.Column="1" Margin="5" SelectedIndex="1">
-            <ComboBoxItem Content="year"/>
-            <ComboBoxItem Content="month"/>
-            <ComboBoxItem Content="day"/>
-        </ComboBox>
+            <TextBlock Grid.Row="6" Grid.ColumnSpan="3" Foreground="#666" Margin="0,12,0,0">
+      低於門檻的檔案會自動移至「_自整理」，可於左側篩選「需要整理」檢視並人工修正。
+            </TextBlock>
 
-        <!-- Flags -->
-        <StackPanel Grid.Row="6" Grid.ColumnSpan="3" Orientation="Horizontal" Margin="0,12,0,0">
-            <CheckBox x:Name="ChkDryRun"    Content="乾跑（不實際移動檔案）" Margin="0,0,16,0"/>
-            <CheckBox x:Name="ChkOverwrite" Content="覆寫同名檔案"          Margin="0,0,16,0"/>
-            <TextBlock Text="移動模式：" VerticalAlignment="Center" Margin="0,0,6,0"/>
-            <ComboBox x:Name="CmbMoveMode" Width="120">
-                <ComboBoxItem Content="copy" IsSelected="True"/>
-                <ComboBoxItem Content="move"/>
-            </ComboBox>
-        </StackPanel>
-
-        <!-- Save / Cancel -->
-        <StackPanel Grid.Row="7" Grid.ColumnSpan="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
-            <Button Content="儲存" Width="92" Margin="5" Click="Save_Click"/>
-            <Button Content="取消" Width="92" Margin="5" Click="Cancel_Click"/>
-        </StackPanel>
+            <!-- Buttons -->
+            <StackPanel Grid.Row="7" Grid.ColumnSpan="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+                <Button Content="儲存" Width="88" Margin="5" Click="Save_Click"/>
+                <Button Content="取消" Width="88" Margin="5" Click="Cancel_Click"/>
+            </StackPanel>
     </Grid>
 </Window>
