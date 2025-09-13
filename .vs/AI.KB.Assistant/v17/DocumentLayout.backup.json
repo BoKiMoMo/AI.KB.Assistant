@@ -3,20 +3,24 @@
   "WorkspaceRootPath": "D:\\GIT-DEMO\\AI.KB.Assistant\\",
   "Documents": [
     {
-      "AbsoluteMoniker": "D:0:0:{CC8DE200-3788-4DD6-B449-A2021897A0E8}|AI.KB.Assistant.csproj|d:\\git-demo\\ai.kb.assistant\\views\\settingswindow.xaml.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{CC8DE200-3788-4DD6-B449-A2021897A0E8}|AI.KB.Assistant.csproj|solutionrelative:views\\settingswindow.xaml.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{CC8DE200-3788-4DD6-B449-A2021897A0E8}|AI.KB.Assistant.csproj|d:\\git-demo\\ai.kb.assistant\\views\\settingswindow.xaml||{F11ACC28-31D1-4C80-A34B-F4E09D3D753C}",
-      "RelativeMoniker": "D:0:0:{CC8DE200-3788-4DD6-B449-A2021897A0E8}|AI.KB.Assistant.csproj|solutionrelative:views\\settingswindow.xaml||{F11ACC28-31D1-4C80-A34B-F4E09D3D753C}"
-    },
-    {
       "AbsoluteMoniker": "D:0:0:{CC8DE200-3788-4DD6-B449-A2021897A0E8}|AI.KB.Assistant.csproj|d:\\git-demo\\ai.kb.assistant\\mainwindow.xaml.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
       "RelativeMoniker": "D:0:0:{CC8DE200-3788-4DD6-B449-A2021897A0E8}|AI.KB.Assistant.csproj|solutionrelative:mainwindow.xaml.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
       "AbsoluteMoniker": "D:0:0:{CC8DE200-3788-4DD6-B449-A2021897A0E8}|AI.KB.Assistant.csproj|d:\\git-demo\\ai.kb.assistant\\mainwindow.xaml||{F11ACC28-31D1-4C80-A34B-F4E09D3D753C}",
       "RelativeMoniker": "D:0:0:{CC8DE200-3788-4DD6-B449-A2021897A0E8}|AI.KB.Assistant.csproj|solutionrelative:mainwindow.xaml||{F11ACC28-31D1-4C80-A34B-F4E09D3D753C}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{CC8DE200-3788-4DD6-B449-A2021897A0E8}|AI.KB.Assistant.csproj|d:\\git-demo\\ai.kb.assistant\\services\\dbservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{CC8DE200-3788-4DD6-B449-A2021897A0E8}|AI.KB.Assistant.csproj|solutionrelative:services\\dbservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{CC8DE200-3788-4DD6-B449-A2021897A0E8}|AI.KB.Assistant.csproj|d:\\git-demo\\ai.kb.assistant\\views\\settingswindow.xaml.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{CC8DE200-3788-4DD6-B449-A2021897A0E8}|AI.KB.Assistant.csproj|solutionrelative:views\\settingswindow.xaml.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{CC8DE200-3788-4DD6-B449-A2021897A0E8}|AI.KB.Assistant.csproj|d:\\git-demo\\ai.kb.assistant\\views\\settingswindow.xaml||{F11ACC28-31D1-4C80-A34B-F4E09D3D753C}",
+      "RelativeMoniker": "D:0:0:{CC8DE200-3788-4DD6-B449-A2021897A0E8}|AI.KB.Assistant.csproj|solutionrelative:views\\settingswindow.xaml||{F11ACC28-31D1-4C80-A34B-F4E09D3D753C}"
     },
     {
       "AbsoluteMoniker": "D:0:0:{CC8DE200-3788-4DD6-B449-A2021897A0E8}|AI.KB.Assistant.csproj|d:\\git-demo\\ai.kb.assistant\\config.json||{90A6B3A7-C1A3-4009-A288-E2FF89E96FA0}",
@@ -37,10 +41,6 @@
     {
       "AbsoluteMoniker": "D:0:0:{CC8DE200-3788-4DD6-B449-A2021897A0E8}|AI.KB.Assistant.csproj|d:\\git-demo\\ai.kb.assistant\\services\\routingservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
       "RelativeMoniker": "D:0:0:{CC8DE200-3788-4DD6-B449-A2021897A0E8}|AI.KB.Assistant.csproj|solutionrelative:services\\routingservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{CC8DE200-3788-4DD6-B449-A2021897A0E8}|AI.KB.Assistant.csproj|d:\\git-demo\\ai.kb.assistant\\services\\dbservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{CC8DE200-3788-4DD6-B449-A2021897A0E8}|AI.KB.Assistant.csproj|solutionrelative:services\\dbservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
       "AbsoluteMoniker": "D:0:0:{CC8DE200-3788-4DD6-B449-A2021897A0E8}|AI.KB.Assistant.csproj|d:\\git-demo\\ai.kb.assistant\\services\\configservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
@@ -97,11 +97,41 @@
       "DocumentGroups": [
         {
           "DockedWidth": 200,
-          "SelectedChildIndex": 3,
+          "SelectedChildIndex": 1,
           "Children": [
+            {
+              "$type": "Bookmark",
+              "Name": "ST:0:0:{cce594b6-0c39-4442-ba28-10c64ac7e89f}"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 0,
+              "Title": "MainWindow.xaml.cs",
+              "DocumentMoniker": "D:\\GIT-DEMO\\AI.KB.Assistant\\MainWindow.xaml.cs",
+              "RelativeDocumentMoniker": "MainWindow.xaml.cs",
+              "ToolTip": "D:\\GIT-DEMO\\AI.KB.Assistant\\MainWindow.xaml.cs",
+              "RelativeToolTip": "MainWindow.xaml.cs",
+              "ViewState": "AgIAAMcAAAAAAAAAAADwv98AAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-08-29T06:48:18.781Z",
+              "EditorCaption": ""
+            },
             {
               "$type": "Document",
               "DocumentIndex": 3,
+              "Title": "SettingsWindow.xaml.cs",
+              "DocumentMoniker": "D:\\GIT-DEMO\\AI.KB.Assistant\\Views\\SettingsWindow.xaml.cs",
+              "RelativeDocumentMoniker": "Views\\SettingsWindow.xaml.cs",
+              "ToolTip": "D:\\GIT-DEMO\\AI.KB.Assistant\\Views\\SettingsWindow.xaml.cs",
+              "RelativeToolTip": "Views\\SettingsWindow.xaml.cs",
+              "ViewState": "AgIAAK0AAAAAAAAAAAAAwLwAAAAtAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-09-01T14:19:38.106Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 1,
               "Title": "MainWindow.xaml",
               "DocumentMoniker": "D:\\GIT-DEMO\\AI.KB.Assistant\\MainWindow.xaml",
               "RelativeDocumentMoniker": "MainWindow.xaml",
@@ -114,19 +144,19 @@
             {
               "$type": "Document",
               "DocumentIndex": 2,
-              "Title": "MainWindow.xaml.cs",
-              "DocumentMoniker": "D:\\GIT-DEMO\\AI.KB.Assistant\\MainWindow.xaml.cs",
-              "RelativeDocumentMoniker": "MainWindow.xaml.cs",
-              "ToolTip": "D:\\GIT-DEMO\\AI.KB.Assistant\\MainWindow.xaml.cs",
-              "RelativeToolTip": "MainWindow.xaml.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAAMUAAAAlAAAAAAAAAA==",
+              "Title": "DbService.cs",
+              "DocumentMoniker": "D:\\GIT-DEMO\\AI.KB.Assistant\\Services\\DbService.cs",
+              "RelativeDocumentMoniker": "Services\\DbService.cs",
+              "ToolTip": "D:\\GIT-DEMO\\AI.KB.Assistant\\Services\\DbService.cs",
+              "RelativeToolTip": "Services\\DbService.cs",
+              "ViewState": "AgIAAHAAAAAAAAAAAADwv4oAAAAAAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-08-29T06:48:18.781Z",
+              "WhenOpened": "2025-08-29T07:32:06.22Z",
               "EditorCaption": ""
             },
             {
               "$type": "Document",
-              "DocumentIndex": 1,
+              "DocumentIndex": 4,
               "Title": "SettingsWindow.xaml",
               "DocumentMoniker": "D:\\GIT-DEMO\\AI.KB.Assistant\\Views\\SettingsWindow.xaml",
               "RelativeDocumentMoniker": "Views\\SettingsWindow.xaml",
@@ -138,20 +168,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 0,
-              "Title": "SettingsWindow.xaml.cs",
-              "DocumentMoniker": "D:\\GIT-DEMO\\AI.KB.Assistant\\Views\\SettingsWindow.xaml.cs",
-              "RelativeDocumentMoniker": "Views\\SettingsWindow.xaml.cs",
-              "ToolTip": "D:\\GIT-DEMO\\AI.KB.Assistant\\Views\\SettingsWindow.xaml.cs",
-              "RelativeToolTip": "Views\\SettingsWindow.xaml.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAAMAAAAAAAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-09-01T14:19:38.106Z",
-              "EditorCaption": ""
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 4,
+              "DocumentIndex": 5,
               "Title": "config.json",
               "DocumentMoniker": "D:\\GIT-DEMO\\AI.KB.Assistant\\config.json",
               "RelativeDocumentMoniker": "config.json",
@@ -159,12 +176,11 @@
               "RelativeToolTip": "config.json",
               "ViewState": "AgIAAAAAAAAAAAAAAAAAAAwAAAAYAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001642|",
-              "WhenOpened": "2025-08-29T07:58:40.582Z",
-              "EditorCaption": ""
+              "WhenOpened": "2025-08-29T07:58:40.582Z"
             },
             {
               "$type": "Document",
-              "DocumentIndex": 5,
+              "DocumentIndex": 6,
               "Title": "DateResolver.cs",
               "DocumentMoniker": "D:\\GIT-DEMO\\AI.KB.Assistant\\Helpers\\DateResolver.cs",
               "RelativeDocumentMoniker": "Helpers\\DateResolver.cs",
@@ -172,12 +188,11 @@
               "RelativeToolTip": "Helpers\\DateResolver.cs",
               "ViewState": "AgIAAB8AAAAAAAAAAAAgwDkAAAAAAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-08-29T08:01:45.955Z",
-              "EditorCaption": ""
+              "WhenOpened": "2025-08-29T08:01:45.955Z"
             },
             {
               "$type": "Document",
-              "DocumentIndex": 6,
+              "DocumentIndex": 7,
               "Title": "UnixToDateConverter.cs",
               "DocumentMoniker": "D:\\GIT-DEMO\\AI.KB.Assistant\\Helpers\\UnixToDateConverter.cs",
               "RelativeDocumentMoniker": "Helpers\\UnixToDateConverter.cs",
@@ -185,12 +200,11 @@
               "RelativeToolTip": "Helpers\\UnixToDateConverter.cs",
               "ViewState": "AgIAAAAAAAAAAAAAAAAAwBgAAAAAAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-09-01T08:13:53.47Z",
-              "EditorCaption": ""
+              "WhenOpened": "2025-09-01T08:13:53.47Z"
             },
             {
               "$type": "Document",
-              "DocumentIndex": 7,
+              "DocumentIndex": 8,
               "Title": "LlmService.cs",
               "DocumentMoniker": "D:\\GIT-DEMO\\AI.KB.Assistant\\Services\\LlmService.cs",
               "RelativeDocumentMoniker": "Services\\LlmService.cs",
@@ -198,12 +212,11 @@
               "RelativeToolTip": "Services\\LlmService.cs",
               "ViewState": "AgIAALYAAAAAAAAAAAAgwNAAAAAAAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-08-29T07:32:33.501Z",
-              "EditorCaption": ""
+              "WhenOpened": "2025-08-29T07:32:33.501Z"
             },
             {
               "$type": "Document",
-              "DocumentIndex": 8,
+              "DocumentIndex": 9,
               "Title": "RoutingService.cs",
               "DocumentMoniker": "D:\\GIT-DEMO\\AI.KB.Assistant\\Services\\RoutingService.cs",
               "RelativeDocumentMoniker": "Services\\RoutingService.cs",
@@ -211,21 +224,7 @@
               "RelativeToolTip": "Services\\RoutingService.cs",
               "ViewState": "AgIAACEAAAAAAAAAAAA3wDsAAAAAAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-08-29T07:32:22.39Z",
-              "EditorCaption": ""
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 9,
-              "Title": "DbService.cs",
-              "DocumentMoniker": "D:\\GIT-DEMO\\AI.KB.Assistant\\Services\\DbService.cs",
-              "RelativeDocumentMoniker": "Services\\DbService.cs",
-              "ToolTip": "D:\\GIT-DEMO\\AI.KB.Assistant\\Services\\DbService.cs",
-              "RelativeToolTip": "Services\\DbService.cs",
-              "ViewState": "AgIAAJUAAAAAAAAAAAAgwK8AAAAAAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-08-29T07:32:06.22Z",
-              "EditorCaption": ""
+              "WhenOpened": "2025-08-29T07:32:22.39Z"
             },
             {
               "$type": "Document",
@@ -237,8 +236,7 @@
               "RelativeToolTip": "Services\\ConfigService.cs",
               "ViewState": "AgIAACEAAAAAAAAAAAAgwDsAAAAAAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-08-29T07:31:58.413Z",
-              "EditorCaption": ""
+              "WhenOpened": "2025-08-29T07:31:58.413Z"
             },
             {
               "$type": "Document",
@@ -250,8 +248,7 @@
               "RelativeToolTip": "Models\\AppConfig.cs",
               "ViewState": "AgIAABYAAAAAAAAAAAAgwDAAAAAAAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-08-29T07:25:25.62Z",
-              "EditorCaption": ""
+              "WhenOpened": "2025-08-29T07:25:25.62Z"
             },
             {
               "$type": "Document",
@@ -263,8 +260,7 @@
               "RelativeToolTip": "Models\\Item.cs",
               "ViewState": "AgIAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-08-29T07:31:48.03Z",
-              "EditorCaption": ""
+              "WhenOpened": "2025-08-29T07:31:48.03Z"
             },
             {
               "$type": "Document",
@@ -370,10 +366,6 @@
               "ViewState": "AgIAAEoAAAAAAAAAAAAgwF0AAAAAAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2025-09-02T06:58:40.002Z"
-            },
-            {
-              "$type": "Bookmark",
-              "Name": "ST:0:0:{cce594b6-0c39-4442-ba28-10c64ac7e89f}"
             }
           ]
         }

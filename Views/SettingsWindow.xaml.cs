@@ -1,7 +1,9 @@
 ﻿using System;
 using System.IO;
 using System.Windows;
+using System.Windows.Controls;
 using Microsoft.Win32;
+
 using AI.KB.Assistant.Models;
 using AI.KB.Assistant.Services;
 
@@ -12,78 +14,74 @@ namespace AI.KB.Assistant.Views
         private readonly string _configPath;
         private AppConfig _cfg;
 
-        public SettingsWindow(string configPath, AppConfig current)
+        public SettingsWindow(string configPath, AppConfig cfg)
         {
             InitializeComponent();
-            _configPath = configPath;
-            _cfg = current;
 
-            // 綁定現值
-            TxtRootDir.Text = _cfg.App.RootDir;
-            TxtInboxDir.Text = _cfg.App.InboxDir;
-            TxtDbPath.Text = _cfg.App.DbPath;
+            _configPath = configPath ?? "config.json";
+            _cfg = cfg ?? new AppConfig();
 
-            PwdApiKey.Password = _cfg.OpenAI.ApiKey ?? "";
-            TxtModel.Text = _cfg.OpenAI.Model ?? "gpt-4o-mini";
-
-            ChkUseLLM.IsChecked = _cfg.Classification.UseLLM;
-            TxtThreshold.Text = _cfg.Classification.ConfidenceThreshold.ToString("0.00");
-            TxtMaxTags.Text = _cfg.Classification.MaxTags.ToString();
-            ChkChatSearch.IsChecked = _cfg.Classification.EnableChatSearch;
+            // 載入 UI
+            LoadToUI();
         }
 
-        private void BrowseRoot_Click(object sender, RoutedEventArgs e) => TxtRootDir.Text = PickFolderLikeFileDialog(TxtRootDir.Text);
-        private void BrowseInbox_Click(object sender, RoutedEventArgs e) => TxtInboxDir.Text = PickFolderLikeFileDialog(TxtInboxDir.Text);
+        #region Load / Save
 
-        private string PickFolderLikeFileDialog(string? initial)
+        private void LoadToUI()
         {
-            var dlg = new SaveFileDialog
-            {
-                Title = "選擇資料夾（任意輸入檔名後按儲存即可）",
-                FileName = "這裡代表資料夾",
-                InitialDirectory = Directory.Exists(initial ?? "") ? initial : null,
-                Filter = "All (*.*)|*.*"
-            };
-            return (dlg.ShowDialog() == true) ? Path.GetDirectoryName(dlg.FileName)! : (initial ?? "");
-        }
+            // App
+            TxtRootDir.Text = _cfg.App?.RootDir ?? string.Empty;
+            TxtInboxDir.Text = _cfg.App?.InboxDir ?? string.Empty;
+            TxtDbPath.Text = _cfg.App?.DbPath ?? string.Empty;
 
-        private void BrowseDb_Click(object sender, RoutedEventArgs e)
-        {
-            var dlg = new SaveFileDialog
-            {
-                Title = "選擇 / 建立 SQLite 檔案",
-                Filter = "SQLite (*.db)|*.db|All (*.*)|*.*",
-                FileName = string.IsNullOrWhiteSpace(TxtDbPath.Text) ? "kb.db" : Path.GetFileName(TxtDbPath.Text)
-            };
-            if (dlg.ShowDialog() == true) TxtDbPath.Text = dlg.FileName;
+            ChkDryRun.IsChecked = _cfg.App?.DryRun ?? false;
+            ChkOverwrite.IsChecked = _cfg.App?.Overwrite ?? false;
+
+            SelectComboByValue(CmbMoveMode, _cfg.App?.MoveMode ?? "copy");
+
+            // OpenAI
+            TxtApiKey.Password = _cfg.OpenAI?.ApiKey ?? string.Empty;
+
+            // Classification
+            SelectComboByValue(CmbClassificationMode, _cfg.Classification?.ClassificationMode ?? "category");
+
+            // Routing
+            SelectComboByValue(CmbTimeGranularity, _cfg.Routing?.TimeGranularity ?? "month");
         }
 
         private void Save_Click(object sender, RoutedEventArgs e)
         {
             try
             {
-                _cfg.App.RootDir = (TxtRootDir.Text ?? "").Trim();
-                _cfg.App.InboxDir = (TxtInboxDir.Text ?? "").Trim();
-                _cfg.App.DbPath = (TxtDbPath.Text ?? "").Trim();
+                _cfg.App ??= new AppSection();
+                _cfg.OpenAI ??= new OpenAISection();
+                _cfg.Routing ??= new RoutingSection();
+                _cfg.Classification ??= new ClassificationSection();
 
-                _cfg.OpenAI.ApiKey = PwdApiKey.Password ?? "";
-                _cfg.OpenAI.Model = (TxtModel.Text ?? "gpt-4o-mini").Trim();
+                // App
+                _cfg.App.RootDir = (TxtRootDir.Text ?? string.Empty).Trim();
+                _cfg.App.InboxDir = (TxtInboxDir.Text ?? string.Empty).Trim();
+                _cfg.App.DbPath = (TxtDbPath.Text ?? string.Empty).Trim();
+                _cfg.App.DryRun = ChkDryRun.IsChecked == true;
+                _cfg.App.Overwrite = ChkOverwrite.IsChecked == true;
+                _cfg.App.MoveMode = GetComboText(CmbMoveMode, "copy");
 
-                _cfg.Classification.UseLLM = ChkUseLLM.IsChecked == true;
-                if (double.TryParse(TxtThreshold.Text, out var th))
-                    _cfg.Classification.ConfidenceThreshold = Math.Clamp(th, 0, 1);
-                if (int.TryParse(TxtMaxTags.Text, out var mt))
-                    _cfg.Classification.MaxTags = Math.Max(1, Math.Min(10, mt));
-                _cfg.Classification.EnableChatSearch = ChkChatSearch.IsChecked == true;
+                // OpenAI
+                _cfg.OpenAI.ApiKey = TxtApiKey.Password ?? string.Empty;
+
+                // Classification / Routing
+                _cfg.Classification.ClassificationMode = GetComboText(CmbClassificationMode, "category");
+                _cfg.Routing.TimeGranularity = GetComboText(CmbTimeGranularity, "month");
 
                 ConfigService.Save(_configPath, _cfg);
-                MessageBox.Show("設定已儲存。", "完成");
+
+                MessageBox.Show("設定已儲存！", "完成", MessageBoxButton.OK, MessageBoxImage.Information);
                 DialogResult = true;
                 Close();
             }
             catch (Exception ex)
             {
-                MessageBox.Show("儲存失敗：" + ex.Message, "錯誤", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show($"儲存失敗：{ex.Message}", "錯誤", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -92,101 +90,110 @@ namespace AI.KB.Assistant.Views
             DialogResult = false;
             Close();
         }
-    }
-}
-using System;
-using System.IO;
-using System.Windows;
-using Microsoft.Win32;
-using AI.KB.Assistant.Models;
-using AI.KB.Assistant.Services;
 
-namespace AI.KB.Assistant.Views
-{
-    public partial class SettingsWindow : Window
-    {
-        private readonly string _configPath;
-        private AppConfig _cfg;
+        #endregion
 
-        public SettingsWindow(string configPath, AppConfig current)
+        #region Browse Buttons
+
+        private void BrowseRoot_Click(object sender, RoutedEventArgs e)
         {
-            InitializeComponent();
-            _configPath = configPath;
-            _cfg = current;
-
-            // 綁定現值
-            TxtRootDir.Text = _cfg.App.RootDir;
-            TxtInboxDir.Text = _cfg.App.InboxDir;
-            TxtDbPath.Text = _cfg.App.DbPath;
-
-            PwdApiKey.Password = _cfg.OpenAI.ApiKey ?? "";
-            TxtModel.Text = _cfg.OpenAI.Model ?? "gpt-4o-mini";
-
-            ChkUseLLM.IsChecked = _cfg.Classification.UseLLM;
-            TxtThreshold.Text = _cfg.Classification.ConfidenceThreshold.ToString("0.00");
-            TxtMaxTags.Text = _cfg.Classification.MaxTags.ToString();
-            ChkChatSearch.IsChecked = _cfg.Classification.EnableChatSearch;
+            var picked = PickFolderLikeFileDialog(TxtRootDir.Text);
+            if (!string.IsNullOrWhiteSpace(picked))
+                TxtRootDir.Text = picked!;
         }
 
-        private void BrowseRoot_Click(object sender, RoutedEventArgs e) => TxtRootDir.Text = PickFolderLikeFileDialog(TxtRootDir.Text);
-        private void BrowseInbox_Click(object sender, RoutedEventArgs e) => TxtInboxDir.Text = PickFolderLikeFileDialog(TxtInboxDir.Text);
-
-        private string PickFolderLikeFileDialog(string? initial)
+        private void BrowseInbox_Click(object sender, RoutedEventArgs e)
         {
-            var dlg = new SaveFileDialog
-            {
-                Title = "選擇資料夾（任意輸入檔名後按儲存即可）",
-                FileName = "這裡代表資料夾",
-                InitialDirectory = Directory.Exists(initial ?? "") ? initial : null,
-                Filter = "All (*.*)|*.*"
-            };
-            return (dlg.ShowDialog() == true) ? Path.GetDirectoryName(dlg.FileName)! : (initial ?? "");
+            var picked = PickFolderLikeFileDialog(TxtInboxDir.Text);
+            if (!string.IsNullOrWhiteSpace(picked))
+                TxtInboxDir.Text = picked!;
         }
 
         private void BrowseDb_Click(object sender, RoutedEventArgs e)
         {
+            var dlg = new OpenFileDialog
+            {
+                Title = "選擇資料庫檔 (.db)",
+                Filter = "SQLite Database (*.db)|*.db|所有檔案 (*.*)|*.*",
+                CheckFileExists = false
+            };
+            if (dlg.ShowDialog() == true)
+                TxtDbPath.Text = dlg.FileName;
+        }
+
+        #endregion
+
+        #region Helpers
+
+        /// <summary>
+        /// WPF 原生沒有選資料夾的對話框：借用 OpenFileDialog 來取得「所在資料夾」。
+        /// 作法：使用者在目標資料夾任意輸入一個檔名 → 取其資料夾路徑。
+        /// </summary>
+        private static string? PickFolderLikeFileDialog(string? initialFolder)
+        {
             var dlg = new SaveFileDialog
             {
-                Title = "選擇 / 建立 SQLite 檔案",
-                Filter = "SQLite (*.db)|*.db|All (*.*)|*.*",
-                FileName = string.IsNullOrWhiteSpace(TxtDbPath.Text) ? "kb.db" : Path.GetFileName(TxtDbPath.Text)
+                Title = "選取資料夾（隨便輸入檔名後按儲存）",
+                FileName = "擷取這個資料夾",
+                Filter = "任何檔案 (*.*)|*.*",
+                OverwritePrompt = false
             };
-            if (dlg.ShowDialog() == true) TxtDbPath.Text = dlg.FileName;
-        }
 
-        private void Save_Click(object sender, RoutedEventArgs e)
-        {
             try
             {
-                _cfg.App.RootDir = (TxtRootDir.Text ?? "").Trim();
-                _cfg.App.InboxDir = (TxtInboxDir.Text ?? "").Trim();
-                _cfg.App.DbPath = (TxtDbPath.Text ?? "").Trim();
-
-                _cfg.OpenAI.ApiKey = PwdApiKey.Password ?? "";
-                _cfg.OpenAI.Model = (TxtModel.Text ?? "gpt-4o-mini").Trim();
-
-                _cfg.Classification.UseLLM = ChkUseLLM.IsChecked == true;
-                if (double.TryParse(TxtThreshold.Text, out var th))
-                    _cfg.Classification.ConfidenceThreshold = Math.Clamp(th, 0, 1);
-                if (int.TryParse(TxtMaxTags.Text, out var mt))
-                    _cfg.Classification.MaxTags = Math.Max(1, Math.Min(10, mt));
-                _cfg.Classification.EnableChatSearch = ChkChatSearch.IsChecked == true;
-
-                ConfigService.Save(_configPath, _cfg);
-                MessageBox.Show("設定已儲存。", "完成");
-                DialogResult = true;
-                Close();
+                if (!string.IsNullOrWhiteSpace(initialFolder) && Directory.Exists(initialFolder))
+                    dlg.InitialDirectory = initialFolder;
             }
-            catch (Exception ex)
+            catch { /* ignore invalid paths */ }
+
+            if (dlg.ShowDialog() == true)
             {
-                MessageBox.Show("儲存失敗：" + ex.Message, "錯誤", MessageBoxButton.OK, MessageBoxImage.Error);
+                try
+                {
+                    var dir = Path.GetDirectoryName(dlg.FileName);
+                    if (!string.IsNullOrWhiteSpace(dir)) return dir;
+                }
+                catch { /* ignore */ }
             }
+            return null;
         }
 
-        private void Cancel_Click(object sender, RoutedEventArgs e)
+        private static string GetComboText(ComboBox combo, string fallback)
         {
-            DialogResult = false;
-            Close();
+            if (combo?.SelectedItem is ComboBoxItem cbi)
+                return cbi.Content?.ToString() ?? fallback;
+
+            // 若使用者沒選，就以第一個項目或 fallback
+            if (combo?.Items.Count > 0 && combo.Items[0] is ComboBoxItem first)
+                return first.Content?.ToString() ?? fallback;
+
+            return fallback;
         }
+
+        private static void SelectComboByValue(ComboBox combo, string? value)
+        {
+            if (combo == null) return;
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                combo.SelectedIndex = 0;
+                return;
+            }
+
+            value = value.Trim();
+            foreach (var item in combo.Items)
+            {
+                if (item is ComboBoxItem cbi &&
+                    string.Equals(cbi.Content?.ToString(), value, StringComparison.OrdinalIgnoreCase))
+                {
+                    cbi.IsSelected = true;
+                    combo.SelectedItem = cbi;
+                    return;
+                }
+            }
+            // 沒命中就選第一個
+            if (combo.Items.Count > 0) combo.SelectedIndex = 0;
+        }
+
+        #endregion
     }
 }

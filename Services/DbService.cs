@@ -11,13 +11,16 @@ namespace AI.KB.Assistant.Services
 {
     public sealed class DbService : IDisposable
     {
+        private readonly string _dbPath;
         private readonly string _connStr;
 
         public DbService(string dbPath)
         {
-            var dir = Path.GetDirectoryName(dbPath);
+            _dbPath = dbPath ?? throw new ArgumentNullException(nameof(dbPath));
+            var dir = Path.GetDirectoryName(_dbPath);
             if (!string.IsNullOrWhiteSpace(dir)) Directory.CreateDirectory(dir!);
-            _connStr = $"Data Source={dbPath}";
+
+            _connStr = $"Data Source={_dbPath}";
             EnsureTables();
             RunLightMigrations();
         }
@@ -27,34 +30,31 @@ namespace AI.KB.Assistant.Services
         private void EnsureTables()
         {
             using var cn = Open();
-            cn.Execute("""
-                CREATE TABLE IF NOT EXISTS items(
-                    id           INTEGER PRIMARY KEY AUTOINCREMENT,
-                    path         TEXT NOT NULL,
-                    filename     TEXT NOT NULL,
-                    category     TEXT,
-                    confidence   REAL,
-                    created_ts   INTEGER,
-                    summary      TEXT,
-                    reasoning    TEXT,
-                    status       TEXT,
-                    tags         TEXT,
-                    project      TEXT
-                );
-            """);
-
-            cn.Execute("""
-                CREATE INDEX IF NOT EXISTS idx_items_filename  ON items(filename);
-                CREATE INDEX IF NOT EXISTS idx_items_category  ON items(category);
-                CREATE INDEX IF NOT EXISTS idx_items_status    ON items(status);
-                CREATE INDEX IF NOT EXISTS idx_items_created   ON items(created_ts);
-                CREATE INDEX IF NOT EXISTS idx_items_project   ON items(project);
-            """);
+            cn.Execute(@"
+CREATE TABLE IF NOT EXISTS items(
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    path         TEXT NOT NULL,
+    filename     TEXT NOT NULL,
+    category     TEXT,
+    confidence   REAL,
+    created_ts   INTEGER,
+    summary      TEXT,
+    reasoning    TEXT,
+    status       TEXT,
+    tags         TEXT,
+    project      TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_items_filename  ON items(filename);
+CREATE INDEX IF NOT EXISTS idx_items_category  ON items(category);
+CREATE INDEX IF NOT EXISTS idx_items_status    ON items(status);
+CREATE INDEX IF NOT EXISTS idx_items_created   ON items(created_ts);
+CREATE INDEX IF NOT EXISTS idx_items_project   ON items(project);
+");
         }
 
         private void RunLightMigrations()
         {
-            // 保留：目前欄位已齊
+            // 這裡可視需要做欄位補齊，現在表已完整
         }
 
         public long Add(Item it)
@@ -108,58 +108,7 @@ ORDER BY created_ts DESC;";
             return cn.Query<Item>(sql, new { q });
         }
 
-        // A3 對話搜尋：依條件查詢
-        public IEnumerable<Item> AdvancedSearch(
-            string? keyword = null,
-            IEnumerable<string>? categories = null,
-            IEnumerable<string>? tags = null,
-            long? fromUnix = null,
-            long? toUnix = null)
-        {
-            using var cn = Open();
-
-            var where = new List<string>();
-            var p = new DynamicParameters();
-
-            if (!string.IsNullOrWhiteSpace(keyword))
-            {
-                where.Add("(filename LIKE @kw OR category LIKE @kw OR summary LIKE @kw OR tags LIKE @kw)");
-                p.Add("@kw", "%" + keyword.Trim() + "%");
-            }
-            if (categories != null)
-            {
-                var list = categories.Where(s => !string.IsNullOrWhiteSpace(s)).Distinct().ToArray();
-                if (list.Length > 0) { where.Add("category IN @cats"); p.Add("@cats", list); }
-            }
-            if (tags != null)
-            {
-                // SQLite 沒有陣列欄位：用 LIKE 近似（簡化）
-                var tlist = tags.Where(s => !string.IsNullOrWhiteSpace(s)).Distinct().ToArray();
-                if (tlist.Length > 0)
-                {
-                    var sub = new List<string>();
-                    for (int i = 0; i < tlist.Length; i++)
-                    {
-                        var name = "@t" + i;
-                        sub.Add($"tags LIKE {name}");
-                        p.Add(name, "%" + tlist[i] + "%");
-                    }
-                    where.Add("(" + string.Join(" OR ", sub) + ")");
-                }
-            }
-            if (fromUnix.HasValue) { where.Add("created_ts >= @from"); p.Add("@from", fromUnix.Value); }
-            if (toUnix.HasValue) { where.Add("created_ts <= @to"); p.Add("@to", toUnix.Value); }
-
-            var sql = $@"
-SELECT path, filename, category, confidence, created_ts AS CreatedTs,
-       summary, reasoning, status, tags, project
-FROM items
-{(where.Count > 0 ? "WHERE " + string.Join(" AND ", where) : "")}
-ORDER BY created_ts DESC;";
-
-            return cn.Query<Item>(sql, p);
-        }
-
+        /// <summary>批次更新 status（我的最愛 = favorite 也走這裡）</summary>
         public int UpdateStatusByPath(IEnumerable<string> paths, string status)
         {
             var list = (paths ?? Enumerable.Empty<string>()).Where(p => !string.IsNullOrWhiteSpace(p)).Distinct().ToArray();
@@ -170,6 +119,20 @@ ORDER BY created_ts DESC;";
             return cn.Execute(sql, new { status, paths = list });
         }
 
-        public void Dispose() { /* 交給連線池 */ }
+        /// <summary>批次更新 tags（逗號分隔字串）</summary>
+        public int UpdateTagsByPath(IEnumerable<string> paths, string tags)
+        {
+            var list = (paths ?? Enumerable.Empty<string>()).Where(p => !string.IsNullOrWhiteSpace(p)).Distinct().ToArray();
+            if (list.Length == 0) return 0;
+
+            using var cn = Open();
+            const string sql = @"UPDATE items SET tags=@tags WHERE path IN @paths;";
+            return cn.Execute(sql, new { tags, paths = list });
+        }
+
+        public void Dispose()
+        {
+            // using 連線池，無需特別釋放
+        }
     }
 }

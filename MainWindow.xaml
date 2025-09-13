@@ -2,64 +2,63 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:conv="clr-namespace:AI.KB.Assistant.Helpers"
-        Title="AI 知識庫助手" Height="760" Width="1200"
+        Title="AI 知識庫助手"
+        Height="720" Width="1200"
+        WindowStartupLocation="CenterScreen"
         AllowDrop="True"
         DragEnter="Window_DragEnter"
         Drop="Window_Drop">
 
     <Window.Resources>
+        <!-- Unix 秒數 → yyyy-MM-dd -->
         <conv:UnixToDateConverter x:Key="UnixToDateConverter"/>
-        <Style TargetType="Button">
-            <Setter Property="Margin" Value="6"/>
-            <Setter Property="Padding" Value="8,6"/>
-        </Style>
     </Window.Resources>
 
-    <DockPanel>
-        <!-- 左側：操作 / 篩選 -->
-        <StackPanel DockPanel.Dock="Left" Width="260" Background="#0f1628">
-            <TextBlock Text="快速篩選" Foreground="White" FontWeight="Bold" Margin="12,12,12,6"/>
-            <Button Content="🆕 最近新增" Click="BtnRecent_Click"/>
-            <Button Content="🟡 需要整理（低信心）" Click="BtnPending_Click"/>
-            <Button Content="🚀 執行中" Click="BtnProgress_Click"/>
-            <Button Content="✅ 代辦" Click="BtnTodo_Click"/>
-            <Button Content="⭐ 我的最愛" Click="BtnFavorite_Click"/>
-            <Separator Margin="8"/>
+    <Grid Margin="12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <!-- Toolbar -->
+            <RowDefinition Height="*"/>
+            <!-- List -->
+            <RowDefinition Height="180"/>
+            <!-- Log -->
+        </Grid.RowDefinitions>
 
-            <TextBlock Text="搜尋" Foreground="#cfe3ff" Margin="12,4,12,0"/>
-            <StackPanel Orientation="Horizontal" Margin="8,0,8,8">
-                <TextBox x:Name="SearchBox" Width="150" KeyDown="SearchBox_KeyDown"/>
-                <Button Content="🔍" Width="44" Click="BtnSearch_Click"/>
-            </StackPanel>
-            <CheckBox x:Name="ChkChatSearch" Content="對話搜尋（LLM）" Margin="12,0,12,8"/>
+        <!-- Toolbar -->
+        <StackPanel Grid.Row="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,0,8">
+            <Button x:Name="BtnRecent"   Content="最近"        Width="80" Margin="0,0,8,0" Click="BtnRecent_Click"/>
+            <Button x:Name="BtnPending"  Content="待整理"      Width="80" Margin="0,0,8,0" Click="BtnPending_Click"/>
+            <Button x:Name="BtnProgress" Content="進行中"      Width="80" Margin="0,0,16,0" Click="BtnProgress_Click"/>
 
-            <Button Content="⚙️ 設定" Click="BtnSettings_Click"/>
-            <Button Content="❓ 使用說明" Click="BtnHelp_Click"/>
-            <TextBlock x:Name="TxtStatus" Margin="12" Foreground="#9ecfff"/>
+            <TextBox x:Name="SearchBox"
+                     Width="320" Height="28"
+                     VerticalContentAlignment="Center"
+                     Margin="0,0,8,0"
+                     KeyDown="SearchBox_KeyDown"/>
+            <Button x:Name="BtnSearch" Content="搜尋" Width="80" Click="BtnSearch_Click"/>
+
+            <Separator Width="24"/>
+
+            <Button x:Name="BtnSettings" Content="設定" Width="80" Click="BtnSettings_Click"/>
+            <Button x:Name="BtnHelp"     Content="使用教學" Width="100" Click="BtnHelp_Click"/>
         </StackPanel>
 
-        <!-- 右側：主清單 -->
-        <DockPanel>
-            <Border DockPanel.Dock="Top" Margin="8" Padding="12" BorderBrush="#2e7cf6" BorderThickness="1" CornerRadius="8" Background="#0b1220">
-                <TextBlock Text="把檔案直接拖進來（收件匣）" Foreground="#cfe3ff"/>
-            </Border>
+        <!-- Items -->
+        <ListView x:Name="LvItems" Grid.Row="1">
+            <ListView.View>
+                <GridView>
+                    <GridViewColumn Header="檔名"      DisplayMemberBinding="{Binding Filename}" Width="300"/>
+                    <GridViewColumn Header="分類"      DisplayMemberBinding="{Binding Category}" Width="120"/>
+                    <GridViewColumn Header="信心度"    DisplayMemberBinding="{Binding Confidence}" Width="80"/>
+                    <GridViewColumn Header="建立時間"  DisplayMemberBinding="{Binding CreatedTs, Converter={StaticResource UnixToDateConverter}}" Width="140"/>
+                    <GridViewColumn Header="標籤"      DisplayMemberBinding="{Binding Tags}" Width="160"/>
+                    <GridViewColumn Header="專案"      DisplayMemberBinding="{Binding Project}" Width="160"/>
+                </GridView>
+            </ListView.View>
+        </ListView>
 
-            <ListView x:Name="ListView" Margin="8" SelectionMode="Extended">
-                <ListView.View>
-                    <GridView>
-                        <GridViewColumn Header="檔名"     DisplayMemberBinding="{Binding Filename}" Width="260"/>
-                        <GridViewColumn Header="分類"     DisplayMemberBinding="{Binding Category}" Width="100"/>
-                        <GridViewColumn Header="信心"     DisplayMemberBinding="{Binding Confidence}" Width="60"/>
-                        <GridViewColumn Header="建立時間" Width="120"
-                            DisplayMemberBinding="{Binding CreatedTs, Converter={StaticResource UnixToDateConverter}}"/>
-                        <GridViewColumn Header="摘要"     DisplayMemberBinding="{Binding Summary}" Width="280"/>
-                        <GridViewColumn Header="標籤"     DisplayMemberBinding="{Binding Tags}" Width="180"/>
-                        <GridViewColumn Header="狀態"     DisplayMemberBinding="{Binding Status}" Width="100"/>
-                    </GridView>
-                </ListView.View>
-            </ListView>
-
-            <TextBox x:Name="TxtLog" Margin="8" Height="120" VerticalScrollBarVisibility="Auto" IsReadOnly="True"/>
-        </DockPanel>
-    </DockPanel>
+        <!-- Log -->
+        <TextBox x:Name="TxtLog" Grid.Row="2" Margin="0,8,0,0"
+                 IsReadOnly="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto"/>
+    </Grid>
 </Window>

@@ -7,7 +7,6 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
-using AI.KB.Assistant.Helpers;
 using AI.KB.Assistant.Models;
 using AI.KB.Assistant.Services;
 using AI.KB.Assistant.Views;
@@ -18,39 +17,42 @@ namespace AI.KB.Assistant
     {
         private readonly string _configPath = "config.json";
         private AppConfig _cfg = new();
-        private DbService _db = null!;
-        private LlmService _llm = null!;
 
         private readonly ObservableCollection<Item> _items = new();
+        private string _currentView = "recent"; // recent / in-progress / pending
 
         public MainWindow()
         {
             InitializeComponent();
 
+            // 載入設定
             _cfg = ConfigService.TryLoad(_configPath);
-            _db = new DbService(string.IsNullOrWhiteSpace(_cfg.App.DbPath) ? "kb.db" : _cfg.App.DbPath);
-            _llm = new LlmService(_cfg);
 
-            ListView.ItemsSource = _items;
-            LoadRecent();
+            // 綁定清單
+            LvItems.ItemsSource = _items;
 
-            Log("AI.KB.Assistant 已啟動。拖檔案進來即可分類。");
+            AddLog("AI.KB.Assistant 啟動；可將檔案拖曳到視窗以模擬分類。");
         }
 
-        /* ============ Drag & Drop ============ */
+        #region Drag & Process
 
         private void Window_DragEnter(object sender, DragEventArgs e)
         {
-            if (e.Data.GetDataPresent(DataFormats.FileDrop)) e.Effects = DragDropEffects.Copy;
-            else e.Effects = DragDropEffects.None;
+            if (e.Data.GetDataPresent(DataFormats.FileDrop))
+                e.Effects = DragDropEffects.Copy;
+            else
+                e.Effects = DragDropEffects.None;
         }
 
         private async void Window_Drop(object sender, DragEventArgs e)
         {
+            // 放一個 await，避免 CS1998
+            await Task.Yield();
+
             if (!e.Data.GetDataPresent(DataFormats.FileDrop)) return;
             if (e.Data.GetData(DataFormats.FileDrop) is not string[] files) return;
 
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(Math.Max(10, _cfg.OpenAI.TimeoutSeconds)));
+            using var cts = new CancellationTokenSource();
             int ok = 0, fail = 0;
 
             foreach (var f in files)
@@ -63,156 +65,159 @@ namespace AI.KB.Assistant
                 catch (Exception ex)
                 {
                     fail++;
-                    Log($"處理失敗：{Path.GetFileName(f)} -> {ex.Message}");
+                    AddLog($"處理失敗：{Path.GetFileName(f)} -> {ex.Message}");
                 }
             }
 
-            Log($"完成：成功 {ok}，失敗 {fail}");
-            RefreshCurrentView();
+            AddLog($"完成。成功 {ok}，失敗 {fail}");
         }
 
         private async Task ProcessOneAsync(string srcPath, CancellationToken ct)
         {
+            await Task.Yield();
+
             var fi = new FileInfo(srcPath);
-            var created = DateResolver.FromFilenameOrNow(srcPath).ToUnixTimeSeconds();
-
-            // 取得分類 / 摘要 / 標籤
-            var (cat, conf, sum, reason) = await _llm.ClassifyAsync(fi.Name, null, ct);
-            var summary = await _llm.SummarizeAsync(fi.Name, null, ct);
-            var tagsArr = await _llm.SuggestTagsAsync(fi.Name, cat, summary, ct);
-            var tags = string.Join(",", tagsArr);
-
             var it = new Item
             {
+                Path = fi.FullName,
                 Filename = fi.Name,
-                Path = fi.FullName, // 初始為來源，搬檔後會更新
-                Category = cat,
-                Confidence = conf,
-                CreatedTs = created,
-                Summary = string.IsNullOrWhiteSpace(sum) ? summary : sum,
-                Reasoning = reason,
-                Status = conf < _cfg.Classification.ConfidenceThreshold ? "pending" : "normal",
-                Tags = tags,
-                Project = _cfg.App.ProjectName
+                CreatedTs = new DateTimeOffset(fi.CreationTimeUtc).ToUnixTimeSeconds(),
+                Category = GuessCategory(fi.Name),
+                Confidence = 0.8,
+                Summary = Path.GetFileNameWithoutExtension(fi.Name),
+                Status = "normal",
+                Tags = "",
+                Project = "DefaultProject"
             };
 
-            // 計算目的地路徑
             var targetDir = RoutingService.BuildTargetPath(_cfg, it);
-            var dest = System.IO.Path.Combine(targetDir, fi.Name);
+            AddLog($"[模擬] {fi.Name} → {targetDir}");
 
-            if (_cfg.App.DryRun)
-            {
-                Log($"[模擬] {fi.Name} → {targetDir}");
-            }
-            else
-            {
-                Directory.CreateDirectory(targetDir);
-                bool overwrite = _cfg.App.Overwrite;
-                if ((_cfg.App.MoveMode ?? "copy").Equals("copy", StringComparison.OrdinalIgnoreCase))
-                    File.Copy(srcPath, dest, overwrite);
-                else
-                    File.Move(srcPath, dest, overwrite);
-                it.Path = dest;
-            }
-
-            _db.Add(it);
-            _items.Insert(0, it);
+            _items.Add(it);
         }
 
-        /* ============ 左欄操作 ============ */
-
-        private void BtnRecent_Click(object? sender, RoutedEventArgs e) => LoadRecent();
-        private void BtnPending_Click(object? sender, RoutedEventArgs e) => LoadStatus("pending");
-        private void BtnProgress_Click(object? sender, RoutedEventArgs e) => LoadStatus("in-progress");
-        private void BtnTodo_Click(object? sender, RoutedEventArgs e) => LoadStatus("todo");
-        private void BtnFavorite_Click(object? sender, RoutedEventArgs e) => LoadStatus("favorite");
-
-        private void LoadRecent()
+        private string GuessCategory(string name)
         {
-            _items.Clear();
-            foreach (var it in _db.Recent(7)) _items.Add(it);
-            TxtStatus.Text = $"顯示：最近 7 天（{_items.Count} 筆）";
+            var n = (name ?? "").ToLowerInvariant();
+            if (n.Contains("invoice") || n.Contains("receipt") || n.Contains("發票")) return "票據";
+            if (n.Contains("report") || n.Contains("報表")) return "報表";
+            if (n.Contains("contract") || n.Contains("合約")) return "合約";
+            if (n.EndsWith(".png") || n.EndsWith(".jpg") || n.EndsWith(".jpeg")) return "照片";
+            if (n.EndsWith(".cs") || n.EndsWith(".ts") || n.EndsWith(".py")) return "程式碼";
+            return _cfg.Classification?.FallbackCategory ?? "其他";
         }
 
-        private void LoadStatus(string status)
+        #endregion
+
+        #region Top Buttons / Search
+
+        private void BtnPending_Click(object sender, RoutedEventArgs e)
         {
-            _items.Clear();
-            foreach (var it in _db.ByStatus(status)) _items.Add(it);
-            TxtStatus.Text = $"顯示：{status}（{_items.Count} 筆）";
+            _currentView = "pending";
+            LoadByStatus("pending");
         }
 
-        private void RefreshCurrentView()
+        private void BtnProgress_Click(object sender, RoutedEventArgs e)
         {
-            // 以狀態條顯示為準（簡化）
+            _currentView = "in-progress";
+            LoadByStatus("in-progress");
+        }
+
+        private void BtnRecent_Click(object sender, RoutedEventArgs e)
+        {
+            _currentView = "recent";
             LoadRecent();
         }
 
-        /* ============ 搜尋（關鍵字 / 對話） ============ */
-
         private void BtnSearch_Click(object sender, RoutedEventArgs e) => DoSearch();
-        private void SearchBox_KeyDown(object sender, KeyEventArgs e) { if (e.Key == Key.Enter) DoSearch(); }
 
-        private async void DoSearch()
+        private void SearchBox_KeyDown(object sender, KeyEventArgs e)
         {
-            var kw = (SearchBox.Text ?? "").Trim();
-            if (string.IsNullOrEmpty(kw)) { LoadRecent(); return; }
-
-            if (ChkChatSearch.IsChecked == true && _cfg.Classification.EnableChatSearch)
-            {
-                var (keyword, cats, tags, from, to) = await _llm.ParseQueryAsync(kw);
-                var result = _db.AdvancedSearch(keyword, cats, tags, from, to).ToList();
-
-                _items.Clear(); foreach (var it in result) _items.Add(it);
-                TxtStatus.Text = $"對話搜尋結果：{_items.Count} 筆";
-                Log($"[對話搜尋] 解析 → kw={keyword}, cats=[{string.Join("/", cats ?? Array.Empty<string>())}], tags=[{string.Join("/", tags ?? Array.Empty<string>())}], from={from}, to={to}");
-            }
-            else
-            {
-                var result = _db.Search(kw).ToList();
-                _items.Clear(); foreach (var it in result) _items.Add(it);
-                TxtStatus.Text = $"關鍵字搜尋：{_items.Count} 筆";
-            }
+            if (e.Key == Key.Enter) DoSearch();
         }
 
-        /* ============ 設定 / 說明 ============ */
+        private void DoSearch()
+        {
+            var keyword = (SearchBox.Text ?? "").Trim();
+            if (string.IsNullOrEmpty(keyword))
+            {
+                LoadRecent();
+                return;
+            }
+
+            var filtered = _items.Where(x =>
+                    (x.Filename ?? "").IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    (x.Category ?? "").IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    (x.Summary ?? "").IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    (x.Tags ?? "").IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0)
+                .ToList();
+
+            LvItems.ItemsSource = new ObservableCollection<Item>(filtered);
+            AddLog($"搜尋「{keyword}」→ {filtered.Count} 筆。");
+        }
+
+        private void LoadRecent()
+        {
+            LvItems.ItemsSource = _items;
+        }
+
+        private void LoadByStatus(string status)
+        {
+            var filtered = _items
+                .Where(x => string.Equals(x.Status, status, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+            LvItems.ItemsSource = new ObservableCollection<Item>(filtered);
+        }
+
+        #endregion
+
+        #region Settings / Help
 
         private void BtnSettings_Click(object sender, RoutedEventArgs e)
         {
-            var win = new SettingsWindow(_configPath, _cfg) { Owner = this };
-            if (win.ShowDialog() == true)
+            // 有你的 SettingsWindow 就開；沒有就提示
+            try
             {
-                _cfg = ConfigService.Load(_configPath);
-                _llm = new LlmService(_cfg);
-                _db = new DbService(string.IsNullOrWhiteSpace(_cfg.App.DbPath) ? "kb.db" : _cfg.App.DbPath);
-                Log("設定已重新載入。");
-                LoadRecent();
+                var win = new Views.SettingsWindow(_configPath, _cfg) { Owner = this };
+                if (win.ShowDialog() == true)
+                {
+                    _cfg = ConfigService.TryLoad(_configPath);
+                    AddLog("已重新載入設定。");
+                }
+            }
+            catch
+            {
+                MessageBox.Show("找不到 SettingsWindow 或建構子簽章不符，請先加入設定視窗。", "提示",
+                    MessageBoxButton.OK, MessageBoxImage.Information);
             }
         }
 
         private void BtnHelp_Click(object sender, RoutedEventArgs e)
         {
-            var msg =
-@"【AI 知識庫助手－使用說明】
-
-1) 拖曳檔案到頂部框框 → 系統自動分類
-2) 低於信心門檻的檔案 → 自動放入 _自整理，並顯示「pending」
-3) 左側可快速檢視：最近新增 / 需要整理 / 執行中 / 代辦 / 我的最愛
-4) 搜尋列：
-   - 預設：關鍵字搜尋（檔名/類別/摘要/標籤）
-   - 勾選「對話搜尋」：可輸入『上個月的會議 #專案A』
-5) 設定：
-   - 可開關 LLM、調整信心門檻、標籤數、模型與 API Key
-6) 搬檔模式：
-   - 預設為『乾跑』（只模擬）；要實際搬檔，請關閉 乾跑，並選擇 copy/move 與覆寫策略。
-";
-            MessageBox.Show(msg, "使用說明", MessageBoxButton.OK, MessageBoxImage.Information);
+            try
+            {
+                var win = new Views.HelpWindow { Owner = this };
+                win.ShowDialog();
+            }
+            catch
+            {
+                MessageBox.Show("找不到 HelpWindow，請先加入使用教學視窗。", "提示",
+                    MessageBoxButton.OK, MessageBoxImage.Information);
+            }
         }
 
-        /* ============ Log ============ */
-        private void Log(string msg)
+        #endregion
+
+        #region Logger
+
+        private void AddLog(string msg)
         {
+            if (TxtLog == null) return;
             TxtLog.AppendText($"[{DateTime.Now:HH:mm:ss}] {msg}\r\n");
             TxtLog.ScrollToEnd();
         }
+
+        #endregion
     }
 }
