@@ -19,226 +19,214 @@ namespace AI.KB.Assistant
         private AppConfig _cfg = new();
         private readonly ObservableCollection<Item> _items = new();
         private DbService? _db;
-        private string _currentView = "recent"; // recent / in-progress / pending / favorite
+        private LlmService _local = new();
+        private string _currentView = "recent";
 
         public MainWindow()
         {
             InitializeComponent();
-
-            // 載入設定
             _cfg = ConfigService.TryLoad(_configPath);
 
-            // 建立 DB Service
-            if (!string.IsNullOrWhiteSpace(_cfg.App.DbPath))
+            if (!string.IsNullOrWhiteSpace(_cfg.App?.DbPath))
                 _db = new DbService(_cfg.App.DbPath);
 
-            // 綁定清單
-            var lv = FindName("ListView") as ListView;
-            if (lv != null) lv.ItemsSource = _items;
+            ListView.ItemsSource = _items;
 
-            // 允許拖曳
             AllowDrop = true;
             DragEnter += (_, e) => e.Effects = DragDropEffects.Copy;
             Drop += Window_Drop;
 
-            AddLog("AI.KB.Assistant 已啟動。把檔案拖進來即可分類並存入 DB。");
-
-            LoadRecent(); // 啟動時載入最近
+            LoadRecent();
+            AddLog("啟動完成。拖曳檔案可分類與搬檔，右鍵可標記狀態。");
         }
 
         #region Drag & Process
-
         private async void Window_Drop(object sender, DragEventArgs e)
         {
             if (!e.Data.GetDataPresent(DataFormats.FileDrop)) return;
             if (e.Data.GetData(DataFormats.FileDrop) is not string[] files) return;
 
             using var cts = new CancellationTokenSource();
-            int ok = 0, fail = 0;
 
+            int ok = 0, fail = 0;
             foreach (var f in files)
             {
-                try
-                {
-                    await ProcessOneAsync(f, cts.Token);
-                    ok++;
-                }
-                catch (Exception ex)
-                {
-                    fail++;
-                    AddLog($"處理失敗：{Path.GetFileName(f)} -> {ex.Message}");
-                }
+                try { await ProcessOneAsync(f, cts.Token); ok++; }
+                catch (Exception ex) { fail++; AddLog($"處理失敗 {Path.GetFileName(f)}：{ex.Message}"); }
             }
-
-            AddLog($"完成。成功 {ok}，失敗 {fail}");
-            LoadRecent(); // 重新整理列表
+            AddLog($"完成：成功 {ok}、失敗 {fail}");
+            ReloadCurrentView();
         }
 
         private async Task ProcessOneAsync(string srcPath, CancellationToken ct)
         {
             await Task.Yield();
-
             var fi = new FileInfo(srcPath);
+            if (!fi.Exists) throw new FileNotFoundException("來源檔不存在", srcPath);
+
+            var (cat, conf) = await _local.ClassifyLocalAsync(fi.Name);
+
             var it = new Item
             {
                 Path = fi.FullName,
                 Filename = fi.Name,
                 CreatedTs = (long)(fi.CreationTimeUtc.Subtract(DateTime.UnixEpoch).TotalSeconds),
-                Category = GuessCategory(fi.Name),
-                Confidence = 0.8,
+                Category = cat,
+                Confidence = conf,
                 Summary = Path.GetFileNameWithoutExtension(fi.Name),
                 Status = "normal",
                 Tags = "",
-                Project = _cfg.App.ProjectName ?? "DefaultProject"
+                Project = string.IsNullOrWhiteSpace(_cfg.App?.ProjectName) ? "DefaultProject" : _cfg.App.ProjectName
             };
 
-            // 計算目標路徑
+            // 目的地
             var targetDir = RoutingService.BuildTargetPath(_cfg, it);
+            Directory.CreateDirectory(targetDir);
 
-            if (_cfg.App.DryRun)
+            var dest = Path.Combine(targetDir, SafeFileName(fi.Name));
+            if (File.Exists(dest) && !_cfg.App.Overwrite)
+                dest = RoutingService.ResolveCollision(dest);
+
+            if (_cfg.App?.DryRun == true)
             {
-                AddLog($"[模擬搬檔] {fi.Name} -> {targetDir}");
+                AddLog($"[乾跑] {fi.Name} → {dest}");
             }
             else
             {
-                Directory.CreateDirectory(targetDir);
-                var dest = Path.Combine(targetDir, fi.Name);
-
-                if (File.Exists(dest) && !_cfg.App.Overwrite)
+                if (string.Equals(_cfg.App?.MoveMode, "move", StringComparison.OrdinalIgnoreCase))
                 {
-                    AddLog($"檔案已存在，略過：{dest}");
+                    File.Copy(fi.FullName, dest, overwrite: _cfg.App.Overwrite);
+                    File.Delete(fi.FullName);
                 }
                 else
                 {
-                    if (_cfg.App.MoveMode == "move")
-                        File.Move(fi.FullName, dest, overwrite: _cfg.App.Overwrite);
-                    else
-                        File.Copy(fi.FullName, dest, overwrite: _cfg.App.Overwrite);
-
-                    AddLog($"搬檔完成：{fi.Name} -> {dest}");
+                    File.Copy(fi.FullName, dest, overwrite: _cfg.App.Overwrite);
                 }
+                AddLog($"已輸出：{dest}");
             }
 
-            // 存入 DB
             _db?.Add(it);
-
-            // 更新清單
             _items.Add(it);
         }
 
-        private static string GuessCategory(string name)
+        private static string SafeFileName(string name)
         {
-            var n = name.ToLowerInvariant();
-            if (n.Contains("invoice") || n.Contains("receipt") || n.Contains("發票")) return "票據";
-            if (n.Contains("report") || n.Contains("報表")) return "報表";
-            if (n.Contains("contract") || n.Contains("合約")) return "合約";
-            if (n.EndsWith(".png") || n.EndsWith(".jpg")) return "照片";
-            if (n.EndsWith(".cs") || n.EndsWith(".ts") || n.EndsWith(".py")) return "程式碼";
-            return "其他";
+            foreach (var c in Path.GetInvalidFileNameChars())
+                name = name.Replace(c, '_');
+            return name;
         }
-
         #endregion
 
-        #region Top Buttons / Search
-
-        private void BtnPending_Click(object sender, RoutedEventArgs e)
-        {
-            _currentView = "pending";
-            LoadByStatus("pending");
-        }
-
-        private void BtnProgress_Click(object sender, RoutedEventArgs e)
-        {
-            _currentView = "in-progress";
-            LoadByStatus("in-progress");
-        }
-
-        private void BtnRecent_Click(object sender, RoutedEventArgs e)
-        {
-            _currentView = "recent";
-            LoadRecent();
-        }
-
-        private void BtnFavorites_Click(object sender, RoutedEventArgs e)
-        {
-            _currentView = "favorite";
-            LoadByStatus("favorite");
-        }
-
-        private void BtnSearch_Click(object sender, RoutedEventArgs e) => DoSearch();
-
-        private void SearchBox_KeyDown(object sender, KeyEventArgs e)
-        {
-            if (e.Key == Key.Enter) DoSearch();
-        }
-
-        private void DoSearch()
-        {
-            var tb = FindName("SearchBox") as TextBox;
-            var keyword = tb?.Text?.Trim() ?? "";
-            if (string.IsNullOrEmpty(keyword))
-            {
-                LoadRecent();
-                return;
-            }
-
-            var results = _db?.Search(keyword).ToList() ?? new();
-            var lv = FindName("ListView") as ListView;
-            if (lv != null) lv.ItemsSource = new ObservableCollection<Item>(results);
-
-            AddLog($"搜尋「{keyword}」, {results.Count} 筆。");
-        }
+        #region Views & Search
+        private void BtnRecent_Click(object sender, RoutedEventArgs e) { _currentView = "recent"; LoadRecent(); }
+        private void BtnProgress_Click(object sender, RoutedEventArgs e) { _currentView = "in-progress"; LoadByStatus("in-progress"); }
+        private void BtnPending_Click(object sender, RoutedEventArgs e) { _currentView = "todo"; LoadByStatus("todo"); }
+        private void BtnFavorites_Click(object sender, RoutedEventArgs e) { _currentView = "favorite"; LoadByStatus("favorite"); }
 
         private void LoadRecent()
         {
-            var results = _db?.Recent(7).ToList() ?? new();
-            var lv = FindName("ListView") as ListView;
-            if (lv != null) lv.ItemsSource = new ObservableCollection<Item>(results);
+            if (_db == null) { ListView.ItemsSource = _items; return; }
+            var rows = _db.Recent(7).ToList();
+            ReplaceItems(rows);
         }
 
         private void LoadByStatus(string status)
         {
-            var results = _db?.ByStatus(status).ToList() ?? new();
-            var lv = FindName("ListView") as ListView;
-            if (lv != null) lv.ItemsSource = new ObservableCollection<Item>(results);
+            if (_db == null)
+            {
+                var rows = _items.Where(x => string.Equals(x.Status, status, StringComparison.OrdinalIgnoreCase)).ToList();
+                ListView.ItemsSource = new ObservableCollection<Item>(rows);
+                return;
+            }
+            ReplaceItems(_db.ByStatus(status).ToList());
         }
 
-        #endregion
-
-        #region Settings / Help
-
-        private void BtnSettings_Click(object sender, RoutedEventArgs e)
+        private void ReloadCurrentView()
         {
-            var win = new Views.SettingsWindow(_configPath, _cfg) { Owner = this };
-            if (win.ShowDialog() == true)
+            switch (_currentView)
             {
-                _cfg = ConfigService.TryLoad(_configPath);
-                if (!string.IsNullOrWhiteSpace(_cfg.App.DbPath))
-                    _db = new DbService(_cfg.App.DbPath);
-
-                AddLog("已重新載入設定與資料庫。");
-                LoadRecent();
+                case "in-progress": LoadByStatus("in-progress"); break;
+                case "todo": LoadByStatus("todo"); break;
+                case "favorite": LoadByStatus("favorite"); break;
+                default: LoadRecent(); break;
             }
         }
 
-        private void BtnHelp_Click(object sender, RoutedEventArgs e)
+        private void ReplaceItems(System.Collections.Generic.IEnumerable<Item> list)
         {
-            var win = new HelpWindow { Owner = this };
-            win.ShowDialog();
+            _items.Clear();
+            foreach (var it in list) _items.Add(it);
+            ListView.ItemsSource = _items;
         }
 
+        private void BtnSearch_Click(object sender, RoutedEventArgs e) => DoSearch();
+        private void SearchBox_KeyDown(object sender, KeyEventArgs e) { if (e.Key == Key.Enter) DoSearch(); }
+        private void DoSearch()
+        {
+            var kw = (SearchBox.Text ?? "").Trim();
+            if (string.IsNullOrEmpty(kw)) { ReloadCurrentView(); return; }
+
+            if (_db == null)
+            {
+                var rows = _items.Where(x =>
+                    (x.Filename ?? "").Contains(kw, StringComparison.OrdinalIgnoreCase) ||
+                    (x.Category ?? "").Contains(kw, StringComparison.OrdinalIgnoreCase) ||
+                    (x.Summary ?? "").Contains(kw, StringComparison.OrdinalIgnoreCase) ||
+                    (x.Tags ?? "").Contains(kw, StringComparison.OrdinalIgnoreCase) ||
+                    (x.Project ?? "").Contains(kw, StringComparison.OrdinalIgnoreCase)
+                ).ToList();
+                ListView.ItemsSource = new ObservableCollection<Item>(rows);
+                AddLog($"[本地] 搜尋「{kw}」共 {rows.Count} 筆");
+                return;
+            }
+
+            var rs = _db.Search(kw).ToList();
+            ReplaceItems(rs);
+            AddLog($"[DB] 搜尋「{kw}」共 {rs.Count} 筆");
+        }
         #endregion
 
-        #region Logger
+        #region Context Menu: Status
+        private void CtxMarkFavorite_Click(object sender, RoutedEventArgs e) => UpdateSelectedStatus("favorite");
+        private void CtxMarkTodo_Click(object sender, RoutedEventArgs e) => UpdateSelectedStatus("todo");
+        private void CtxMarkInProgress_Click(object sender, RoutedEventArgs e) => UpdateSelectedStatus("in-progress");
+        private void CtxMarkNormal_Click(object sender, RoutedEventArgs e) => UpdateSelectedStatus("normal");
+
+        private void UpdateSelectedStatus(string status)
+        {
+            var selected = ListView.SelectedItems.Cast<Item>().ToList();
+            if (selected.Count == 0) { AddLog("未選取項目"); return; }
+
+            foreach (var it in selected) it.Status = status;
+            _db?.UpdateStatusByPath(selected.Select(s => s.Path), status);
+
+            ReloadCurrentView();
+            AddLog($"已標記 {selected.Count} 筆為：{status}");
+        }
+        #endregion
+
+        #region Settings / Help / Log
+        private void BtnSettings_Click(object sender, RoutedEventArgs e)
+        {
+            var w = new SettingsWindow(_configPath, _cfg) { Owner = this };
+            if (w.ShowDialog() == true)
+            {
+                _cfg = ConfigService.TryLoad(_configPath);
+                _db?.Dispose(); _db = null;
+                if (!string.IsNullOrWhiteSpace(_cfg.App?.DbPath))
+                    _db = new DbService(_cfg.App.DbPath);
+                ReloadCurrentView();
+                AddLog("設定已重新載入。");
+            }
+        }
+
+        private void BtnHelp_Click(object sender, RoutedEventArgs e) => new HelpWindow { Owner = this }.ShowDialog();
 
         private void AddLog(string msg)
         {
-            var tb = FindName("TxtLog") as TextBox;
-            if (tb == null) return;
-            tb.AppendText($"[{DateTime.Now:HH:mm:ss}] {msg}\r\n");
-            tb.ScrollToEnd();
+            TxtLog.AppendText($"[{DateTime.Now:HH:mm:ss}] {msg}\r\n");
+            TxtLog.ScrollToEnd();
         }
-
         #endregion
     }
 }

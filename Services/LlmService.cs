@@ -2,61 +2,54 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using AI.KB.Assistant.Models;
 
 namespace AI.KB.Assistant.Services
 {
-    /// <summary>本地規則分類；保留 LLM 接口未來接 OpenAI</summary>
+    /// <summary>本地規則分類器（第三階段再換成 LLM）</summary>
     public sealed class LlmService
     {
-        private readonly AppConfig _cfg;
-
-        private readonly Dictionary<string, string[]> _keywordMap = new()
+        private static readonly Dictionary<string, string[]> Map = new(StringComparer.OrdinalIgnoreCase)
         {
-            ["會議"] = new[] { "會議", "meeting", "minutes" },
-            ["報告"] = new[] { "報告", "report" },
-            ["財務"] = new[] { "財務", "發票", "invoice", "receipt", "帳單", "bill" },
-            ["合約"] = new[] { "合約", "契約", "contract" },
-            ["人事"] = new[] { "人事", "hr", "resume", "履歷" },
-            ["研究"] = new[] { "研究", "paper", "thesis", "analysis" },
-            ["設計"] = new[] { "設計", "design", "ui", "ux", "figma", "psd" },
-            ["簡報"] = new[] { "簡報", "slides", "presentation", "ppt" },
-            ["行銷"] = new[] { "行銷", "marketing", "campaign" },
-            ["法務"] = new[] { "法務", "法律", "legal", "compliance" },
-            ["技術"] = new[] { "技術", "code", "程式", "source", "git" },
-            ["圖片"] = new[] { "圖片", "image", "photo", "jpg", "jpeg", "png" },
-            ["影音"] = new[] { "影音", "video", "audio", "mp3", "mp4", "mov" },
-            ["壓縮"] = new[] { "壓縮", "zip", "rar", "7z" },
+            ["合約/法律"] = new[] { "contract", "nda", "terms", "law", "legal", "合約", "法律", "條款" },
+            ["財務/帳務"] = new[] { "invoice", "receipt", "tax", "bill", "報表", "帳務", "發票", "報稅", "請款" },
+            ["簡報/提案"] = new[] { "ppt", "pptx", "key", "keynote", "deck", "簡報", "提案", "presentation" },
+            ["報告/文件"] = new[] { "report", "doc", "docx", "spec", "minutes", "會議紀錄", "規格", "報告" },
+            ["人事/履歷"] = new[] { "resume", "cv", "hr", "履歷", "面試" },
+            ["採購/供應商"] = new[] { "purchase", "po", "vendor", "quote", "採購", "供應商", "報價" },
+
+            ["程式碼/專案"] = new[] { "cs", "ts", "js", "py", "java", "go", "rs", "cpp", "git", "source", "repo", "solution", "sln" },
+            ["設計/UIUX"] = new[] { "fig", "figma", "sketch", "psd", "ai", "xd", "ui", "ux", "wireframe", "設計" },
+            ["研究/分析"] = new[] { "paper", "thesis", "dataset", "benchmark", "analysis", "研究", "分析" },
+
+            ["行銷/活動"] = new[] { "campaign", "ad", "edm", "行銷", "活動", "企劃" },
+            ["客戶/銷售"] = new[] { "crm", "客訴", "sales", "proposal", "方案" },
+
+            ["圖片/相片"] = new[] { "jpg", "jpeg", "png", "heic", "raw", "tiff", "bmp", "photo", "image" },
+            ["影音"] = new[] { "mp4", "mov", "avi", "mkv", "wav", "mp3", "audio", "video" },
+            ["截圖"] = new[] { "screenshot", "截圖", "screen shot" },
+
+            ["壓縮/封存"] = new[] { "zip", "rar", "7z", "tar", "gz", "tgz" },
+            ["安裝包/執行檔"] = new[] { "exe", "msi", "dmg", "pkg", "appimage" },
+
             ["個人文件"] = new[] { "個人", "private", "self" },
-            ["採購/供應商"] = new[] { "採購", "供應商", "purchase", "vendor" },
-            ["教學/課程"] = new[] { "教學", "課程", "lesson", "class", "tutorial" },
-            ["其他"] = Array.Empty<string>()
+            ["教學/課程"] = new[] { "lesson", "tutorial", "course", "課程", "教學" },
         };
 
-        public LlmService(AppConfig cfg) => _cfg = cfg;
-
-        public async Task<(string primary_category, double confidence, string summary, string reasoning)>
-            ClassifyAsync(string text)
+        public Task<(string category, double conf)> ClassifyLocalAsync(string fileName)
         {
-            // 目前只用規則；留 LLM 接口未來擴充
-            return await Task.FromResult(RuleBasedClassify(text));
-        }
+            var name = fileName?.ToLowerInvariant() ?? "";
+            var ext = System.IO.Path.GetExtension(name).Trim('.');
 
-        private (string primary_category, double confidence, string summary, string reasoning)
-            RuleBasedClassify(string text)
-        {
-            if (string.IsNullOrWhiteSpace(text))
-                return (_cfg.Classification.FallbackCategory, 0.0, "", "空白輸入");
-
-            var t = text.ToLowerInvariant();
-            foreach (var kv in _keywordMap)
+            foreach (var kv in Map)
             {
-                if (kv.Value.Any(k => t.Contains(k, StringComparison.OrdinalIgnoreCase)))
-                    return (kv.Key, 0.9, $"自動判定為 {kv.Key}", $"關鍵字命中：{kv.Key}");
+                if (kv.Value.Any(k =>
+                        name.Contains(k, StringComparison.OrdinalIgnoreCase) ||
+                        (!string.IsNullOrEmpty(ext) && string.Equals(ext, k, StringComparison.OrdinalIgnoreCase))))
+                {
+                    return Task.FromResult((kv.Key, 0.9));
+                }
             }
-
-            return (_cfg.Classification.FallbackCategory, 0.3,
-                    $"歸類至 {_cfg.Classification.FallbackCategory}", "未命中任何規則");
+            return Task.FromResult(("其他", 0.3));
         }
     }
 }

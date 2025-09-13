@@ -1,7 +1,5 @@
-﻿using System;
-using System.IO;
+﻿using System.IO;
 using System.Windows;
-using System.Windows.Controls;
 using Microsoft.Win32;
 using AI.KB.Assistant.Models;
 using AI.KB.Assistant.Services;
@@ -13,99 +11,65 @@ namespace AI.KB.Assistant.Views
         private readonly string _configPath;
         private AppConfig _cfg;
 
-        public SettingsWindow(string configPath, AppConfig? cfg = null)
+        public SettingsWindow(string configPath, AppConfig current)
         {
             InitializeComponent();
             _configPath = configPath;
-            _cfg = cfg ?? ConfigService.Load(_configPath);
+            _cfg = current ?? new AppConfig();
+            BindToUi();
+        }
 
-            // App
+        private void BindToUi()
+        {
             TxtRootDir.Text = _cfg.App?.RootDir ?? "";
             TxtInboxDir.Text = _cfg.App?.InboxDir ?? "";
             TxtDbPath.Text = _cfg.App?.DbPath ?? "";
-            ChkDryRun.IsChecked = _cfg.App?.DryRun ?? false;
+            TxtProject.Text = _cfg.App?.ProjectName ?? "DefaultProject";
+
+            // mode
+            var mode = (_cfg.Classification?.ClassificationMode ?? "category").ToLowerInvariant();
+            CmbMode.SelectedIndex = mode switch { "date" => 1, "project" => 2, _ => 0 };
+
+            // granularity
+            var gran = (_cfg.Classification?.TimeGranularity ?? "month").ToLowerInvariant();
+            CmbGran.SelectedIndex = gran switch { "year" => 0, "day" => 2, _ => 1 };
+
+            ChkDryRun.IsChecked = _cfg.App?.DryRun ?? true;
             ChkOverwrite.IsChecked = _cfg.App?.Overwrite ?? false;
-            SelectComboByValue(CmbMoveMode, _cfg.App?.MoveMode ?? "copy");
 
-            // OpenAI
-            TxtApiKey.Password = _cfg.OpenAI?.ApiKey ?? "";
-
-            // Classification
-            SelectComboByValue(CmbClassificationMode, _cfg.Classification?.ClassificationMode ?? "category");
-            SelectComboByValue(CmbTimeGranularity, _cfg.Classification?.TimeGranularity ?? "month");
+            // move/copy
+            var move = (_cfg.App?.MoveMode ?? "copy").ToLowerInvariant();
+            CmbMoveMode.SelectedIndex = move == "move" ? 1 : 0;
         }
 
-        #region Browse
-        private void BrowseRoot_Click(object sender, RoutedEventArgs e)
+        private void CollectFromUi()
         {
-            var dlg = new SaveFileDialog
-            {
-                Title = "選擇根目錄",
-                FileName = "在此輸入任意檔名",
-                Filter = "所有檔案|*.*"
-            };
-            if (dlg.ShowDialog() == true)
-                TxtRootDir.Text = Path.GetDirectoryName(dlg.FileName) ?? "";
-        }
+            _cfg.App ??= new AppSection();
+            _cfg.Classification ??= new ClassificationSection();
 
-        private void BrowseInbox_Click(object sender, RoutedEventArgs e)
-        {
-            var dlg = new SaveFileDialog
-            {
-                Title = "選擇收件匣資料夾",
-                FileName = "在此輸入任意檔名",
-                Filter = "所有檔案|*.*"
-            };
-            if (dlg.ShowDialog() == true)
-                TxtInboxDir.Text = Path.GetDirectoryName(dlg.FileName) ?? "";
-        }
+            _cfg.App.RootDir = TxtRootDir.Text.Trim();
+            _cfg.App.InboxDir = TxtInboxDir.Text.Trim();
+            _cfg.App.DbPath = TxtDbPath.Text.Trim();
+            _cfg.App.ProjectName = TxtProject.Text.Trim();
 
-        private void BrowseDb_Click(object sender, RoutedEventArgs e)
-        {
-            var dlg = new SaveFileDialog
-            {
-                Title = "選擇或建立資料庫檔 (*.db)",
-                FileName = "assistant.db",
-                Filter = "SQLite Database (*.db)|*.db|所有檔案 (*.*)|*.*"
-            };
-            if (dlg.ShowDialog() == true)
-                TxtDbPath.Text = dlg.FileName;
+            _cfg.App.DryRun = ChkDryRun.IsChecked == true;
+            _cfg.App.Overwrite = ChkOverwrite.IsChecked == true;
+            _cfg.App.MoveMode = (CmbMoveMode.SelectedItem as System.Windows.Controls.ComboBoxItem)?.Content?.ToString() ?? "copy";
+
+            _cfg.Classification.ClassificationMode =
+                (CmbMode.SelectedItem as System.Windows.Controls.ComboBoxItem)?.Content?.ToString() ?? "category";
+
+            _cfg.Classification.TimeGranularity =
+                (CmbGran.SelectedItem as System.Windows.Controls.ComboBoxItem)?.Content?.ToString() ?? "month";
         }
-        #endregion
 
         private void Save_Click(object sender, RoutedEventArgs e)
         {
-            try
-            {
-                _cfg.App ??= new AppSection();
-                _cfg.OpenAI ??= new OpenAISection();
-                _cfg.Classification ??= new ClassificationSection();
-
-                // App
-                _cfg.App.RootDir = TxtRootDir.Text.Trim();
-                _cfg.App.InboxDir = TxtInboxDir.Text.Trim();
-                _cfg.App.DbPath = TxtDbPath.Text.Trim();
-                _cfg.App.DryRun = ChkDryRun.IsChecked == true;
-                _cfg.App.Overwrite = ChkOverwrite.IsChecked == true;
-                _cfg.App.MoveMode = GetComboText(CmbMoveMode, "copy");
-
-                // OpenAI
-                _cfg.OpenAI.ApiKey = TxtApiKey.Password?.Trim() ?? "";
-
-                // Classification
-                _cfg.Classification.ClassificationMode = GetComboText(CmbClassificationMode, "category");
-                _cfg.Classification.TimeGranularity = GetComboText(CmbTimeGranularity, "month");
-
-                ConfigService.Save(_configPath, _cfg);
-
-                MessageBox.Show("設定已儲存！", "完成", MessageBoxButton.OK, MessageBoxImage.Information);
-                DialogResult = true;
-                Close();
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"儲存失敗：{ex.Message}", "錯誤", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
+            CollectFromUi();
+            ConfigService.Save(_configPath, _cfg);
+            MessageBox.Show("設定已儲存！", "完成", MessageBoxButton.OK, MessageBoxImage.Information);
+            DialogResult = true;
+            Close();
         }
 
         private void Cancel_Click(object sender, RoutedEventArgs e)
@@ -114,27 +78,21 @@ namespace AI.KB.Assistant.Views
             Close();
         }
 
-        #region Helpers
-        private static void SelectComboByValue(ComboBox combo, string? value)
+        // 不用 WinForms，這招可取資料夾路徑（在欲選資料夾輸入隨意檔名後按儲存）
+        private void BrowseRoot_Click(object sender, RoutedEventArgs e)
         {
-            if (combo == null || string.IsNullOrEmpty(value)) return;
-            foreach (var item in combo.Items)
-            {
-                if (item is ComboBoxItem ci &&
-                    string.Equals(ci.Content?.ToString(), value, StringComparison.OrdinalIgnoreCase))
-                {
-                    combo.SelectedItem = ci;
-                    break;
-                }
-            }
+            var dlg = new SaveFileDialog { Title = "選擇根目錄", FileName = "在此資料夾按儲存即可", Filter = "任何檔案|*.*" };
+            if (dlg.ShowDialog() == true) TxtRootDir.Text = Path.GetDirectoryName(dlg.FileName) ?? "";
         }
-
-        private static string GetComboText(ComboBox combo, string fallback)
+        private void BrowseInbox_Click(object sender, RoutedEventArgs e)
         {
-            if (combo?.SelectedItem is ComboBoxItem ci)
-                return ci.Content?.ToString() ?? fallback;
-            return fallback;
+            var dlg = new SaveFileDialog { Title = "選擇收件匣資料夾", FileName = "在此資料夾按儲存即可", Filter = "任何檔案|*.*" };
+            if (dlg.ShowDialog() == true) TxtInboxDir.Text = Path.GetDirectoryName(dlg.FileName) ?? "";
         }
-        #endregion
+        private void BrowseDb_Click(object sender, RoutedEventArgs e)
+        {
+            var dlg = new SaveFileDialog { Title = "選擇或建立 SQLite 檔", Filter = "SQLite (*.db)|*.db|所有檔案 (*.*)|*.*" };
+            if (dlg.ShowDialog() == true) TxtDbPath.Text = dlg.FileName;
+        }
     }
 }

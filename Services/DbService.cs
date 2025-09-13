@@ -1,141 +1,98 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Data;
 using System.IO;
 using System.Linq;
-using System.Text;
+using Dapper;
+using Microsoft.Data.Sqlite;
 using AI.KB.Assistant.Models;
-using Newtonsoft.Json;
 
 namespace AI.KB.Assistant.Services
 {
-    /// <summary>
-    /// 簡易 JSON 檔持久化版資料庫（免 SQLite）。
-    /// 後續若要換 SQLite，對外方法維持即可。
-    /// </summary>
+    /// <summary>SQLite 存取層：建表、查詢、狀態更新</summary>
     public sealed class DbService : IDisposable
     {
-        private readonly string _dbPath;
-        private readonly object _lock = new();
-        private List<Item> _mem = new();
+        private readonly string _connStr;
 
         public DbService(string dbPath)
         {
-            _dbPath = string.IsNullOrWhiteSpace(dbPath)
-                ? Path.Combine(Environment.CurrentDirectory, "data.json")
-                : dbPath.EndsWith(".json", StringComparison.OrdinalIgnoreCase) ? dbPath
-                  : Path.ChangeExtension(dbPath, ".json");
-
-            Load();
+            var dir = Path.GetDirectoryName(Path.GetFullPath(dbPath))!;
+            Directory.CreateDirectory(dir);
+            _connStr = $"Data Source={dbPath}";
+            EnsureTables();
         }
 
-        private void Load()
-        {
-            try
-            {
-                if (!File.Exists(_dbPath))
-                {
-                    _mem = new List<Item>();
-                    return;
-                }
-                var json = File.ReadAllText(_dbPath, Encoding.UTF8);
-                _mem = JsonConvert.DeserializeObject<List<Item>>(json) ?? new List<Item>();
-            }
-            catch
-            {
-                _mem = new List<Item>();
-            }
-        }
+        private IDbConnection Open() => new SqliteConnection(_connStr);
 
-        private void Save()
+        private void EnsureTables()
         {
-            try
-            {
-                var dir = Path.GetDirectoryName(Path.GetFullPath(_dbPath));
-                if (!string.IsNullOrWhiteSpace(dir)) Directory.CreateDirectory(dir!);
-                var json = JsonConvert.SerializeObject(_mem, Formatting.Indented);
-                File.WriteAllText(_dbPath, json, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
-            }
-            catch
-            {
-                // 寫檔失敗時先忽略；可加日誌
-            }
+            using var cn = Open();
+            cn.Execute("""
+                CREATE TABLE IF NOT EXISTS items(
+                    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                    path         TEXT NOT NULL,
+                    filename     TEXT NOT NULL,
+                    category     TEXT,
+                    confidence   REAL,
+                    created_ts   INTEGER,
+                    summary      TEXT,
+                    reasoning    TEXT,
+                    status       TEXT,
+                    tags         TEXT,
+                    project      TEXT
+                );
+                CREATE INDEX IF NOT EXISTS idx_items_created ON items(created_ts);
+                CREATE INDEX IF NOT EXISTS idx_items_status  ON items(status);
+                CREATE INDEX IF NOT EXISTS idx_items_cat     ON items(category);
+                CREATE INDEX IF NOT EXISTS idx_items_proj    ON items(project);
+            """);
         }
 
         public long Add(Item it)
         {
-            lock (_lock)
-            {
-                // 以 path+filename 當唯一性
-                if (!_mem.Any(x => string.Equals(x.Path, it.Path, StringComparison.OrdinalIgnoreCase)))
-                {
-                    _mem.Add(it);
-                    Save();
-                }
-                return _mem.Count;
-            }
+            using var cn = Open();
+            return cn.ExecuteScalar<long>(
+                @"INSERT INTO items(path,filename,category,confidence,created_ts,summary,reasoning,status,tags,project)
+                  VALUES(@Path,@Filename,@Category,@Confidence,@CreatedTs,@Summary,@Reasoning,@Status,@Tags,@Project);
+                  SELECT last_insert_rowid();", it);
         }
 
         public IEnumerable<Item> Recent(int days = 7)
         {
             var since = DateTimeOffset.Now.AddDays(-Math.Abs(days)).ToUnixTimeSeconds();
-            lock (_lock)
-            {
-                return _mem.Where(x => x.CreatedTs >= since)
-                           .OrderByDescending(x => x.CreatedTs)
-                           .ToList();
-            }
+            using var cn = Open();
+            return cn.Query<Item>(
+                @"SELECT path,filename,category,confidence,created_ts AS CreatedTs,summary,reasoning,status,tags,project
+                  FROM items WHERE created_ts >= @since ORDER BY created_ts DESC;", new { since });
         }
 
         public IEnumerable<Item> ByStatus(string status)
         {
-            lock (_lock)
-            {
-                return _mem.Where(x => string.Equals(x.Status, status, StringComparison.OrdinalIgnoreCase))
-                           .OrderByDescending(x => x.CreatedTs)
-                           .ToList();
-            }
+            using var cn = Open();
+            return cn.Query<Item>(
+                @"SELECT path,filename,category,confidence,created_ts AS CreatedTs,summary,reasoning,status,tags,project
+                  FROM items WHERE LOWER(status)=LOWER(@status) ORDER BY created_ts DESC;", new { status });
         }
 
         public IEnumerable<Item> Search(string keyword)
         {
-            var q = (keyword ?? "").Trim();
-            if (q.Length == 0) return Enumerable.Empty<Item>();
-
-            lock (_lock)
-            {
-                return _mem.Where(x =>
-                          (x.Filename ?? "").IndexOf(q, StringComparison.OrdinalIgnoreCase) >= 0
-                       || (x.Category ?? "").IndexOf(q, StringComparison.OrdinalIgnoreCase) >= 0
-                       || (x.Summary ?? "").IndexOf(q, StringComparison.OrdinalIgnoreCase) >= 0
-                       || (x.Tags ?? "").IndexOf(q, StringComparison.OrdinalIgnoreCase) >= 0)
-                       .OrderByDescending(x => x.CreatedTs)
-                       .ToList();
-            }
+            var q = "%" + (keyword ?? "").Trim() + "%";
+            using var cn = Open();
+            return cn.Query<Item>(
+                @"SELECT path,filename,category,confidence,created_ts AS CreatedTs,summary,reasoning,status,tags,project
+                  FROM items
+                  WHERE filename LIKE @q OR category LIKE @q OR summary LIKE @q OR tags LIKE @q OR project LIKE @q
+                  ORDER BY created_ts DESC;", new { q });
         }
 
         public int UpdateStatusByPath(IEnumerable<string> paths, string status)
         {
-            if (paths == null) return 0;
-            var set = new HashSet<string>(paths.Where(p => !string.IsNullOrWhiteSpace(p)),
-                                          StringComparer.OrdinalIgnoreCase);
-            if (set.Count == 0) return 0;
-
-            lock (_lock)
-            {
-                int count = 0;
-                foreach (var it in _mem.Where(x => set.Contains(x.Path)))
-                {
-                    it.Status = status;
-                    count++;
-                }
-                if (count > 0) Save();
-                return count;
-            }
+            var list = (paths ?? Array.Empty<string>()).Where(p => !string.IsNullOrWhiteSpace(p)).Distinct().ToArray();
+            if (list.Length == 0) return 0;
+            using var cn = Open();
+            return cn.Execute(@"UPDATE items SET status=@status WHERE path IN @paths;", new { status, paths = list });
         }
 
-        public void Dispose()
-        {
-            // 無額外資源
-        }
+        public void Dispose() { }
     }
 }

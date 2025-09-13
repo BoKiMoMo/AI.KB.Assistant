@@ -12,11 +12,7 @@
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
-            <!-- App flags -->
             <RowDefinition Height="Auto"/>
-            <!-- 分類風格 -->
-            <RowDefinition Height="Auto"/>
-            <!-- 時間粒度 -->
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
@@ -41,12 +37,27 @@
         <TextBox   x:Name="TxtDbPath" Grid.Row="2" Grid.Column="1" Margin="5"/>
         <Button Content="選檔…" Grid.Row="2" Grid.Column="2" Margin="5" Click="BrowseDb_Click"/>
 
-        <!-- API Key -->
-        <TextBlock Grid.Row="3" Grid.Column="0" Text="OpenAI API Key：" VerticalAlignment="Center" Margin="0,5"/>
-        <PasswordBox x:Name="TxtApiKey" Grid.Row="3" Grid.Column="1" Margin="5" PasswordChar="●"/>
+        <!-- Project -->
+        <TextBlock Grid.Row="3" Grid.Column="0" Text="專案名稱：" VerticalAlignment="Center" Margin="0,5"/>
+        <TextBox   x:Name="TxtProject" Grid.Row="3" Grid.Column="1" Margin="5"/>
 
-        <!-- App flags -->
-        <StackPanel Grid.Row="4" Grid.ColumnSpan="3" Orientation="Horizontal" Margin="0,10,0,0">
+        <!-- Routing -->
+        <TextBlock Grid.Row="4" Grid.Column="0" Text="分類風格：" VerticalAlignment="Center" Margin="0,5"/>
+        <ComboBox  x:Name="CmbMode" Grid.Row="4" Grid.Column="1" Margin="5" SelectedIndex="0">
+            <ComboBoxItem Content="category"/>
+            <ComboBoxItem Content="date"/>
+            <ComboBoxItem Content="project"/>
+        </ComboBox>
+
+        <TextBlock Grid.Row="5" Grid.Column="0" Text="時間顆粒度：" VerticalAlignment="Center" Margin="0,5"/>
+        <ComboBox  x:Name="CmbGran" Grid.Row="5" Grid.Column="1" Margin="5" SelectedIndex="1">
+            <ComboBoxItem Content="year"/>
+            <ComboBoxItem Content="month"/>
+            <ComboBoxItem Content="day"/>
+        </ComboBox>
+
+        <!-- Flags -->
+        <StackPanel Grid.Row="6" Grid.ColumnSpan="3" Orientation="Horizontal" Margin="0,12,0,0">
             <CheckBox x:Name="ChkDryRun"    Content="乾跑（不實際移動檔案）" Margin="0,0,16,0"/>
             <CheckBox x:Name="ChkOverwrite" Content="覆寫同名檔案"          Margin="0,0,16,0"/>
             <TextBlock Text="移動模式：" VerticalAlignment="Center" Margin="0,0,6,0"/>
@@ -56,39 +67,10 @@
             </ComboBox>
         </StackPanel>
 
-        <!-- 分類風格 -->
-        <StackPanel Grid.Row="5" Grid.ColumnSpan="3" Orientation="Horizontal" Margin="0,10,0,0">
-            <TextBlock Text="分類風格：" VerticalAlignment="Center" Margin="0,0,6,0"/>
-            <ComboBox x:Name="CmbClassificationMode" Width="160">
-                <ComboBoxItem Content="category"/>
-                <ComboBoxItem Content="date"/>
-                <ComboBoxItem Content="project"/>
-            </ComboBox>
-            <TextBlock Text="（category：依類別；date：依年/月/日；project：專案 + 日期）"
-                       VerticalAlignment="Center" Margin="12,0,0,0" Foreground="#666"/>
-        </StackPanel>
-
-        <!-- 時間粒度 -->
-        <StackPanel Grid.Row="6" Grid.ColumnSpan="3" Orientation="Horizontal" Margin="0,6,0,0">
-            <TextBlock Text="時間粒度：" VerticalAlignment="Center" Margin="0,0,6,0"/>
-            <ComboBox x:Name="CmbTimeGranularity" Width="160">
-                <ComboBoxItem Content="day"/>
-                <ComboBoxItem Content="month"/>
-                <ComboBoxItem Content="year"/>
-            </ComboBox>
-            <TextBlock Text="（date 分類時使用，例如：年/季/月/週/日：目前提供 day/month/year）"
-                       VerticalAlignment="Center" Margin="12,0,0,0" Foreground="#666"/>
-        </StackPanel>
-
-        <TextBlock Grid.Row="7" Grid.ColumnSpan="3" Margin="0,16,0,0" Foreground="#666">
-            小技巧：選資料夾時，跳出的檔案對話框請在欲選取的資料夾中隨便輸入檔名後按【儲存/開啟】，本程式會取其資料夾路徑。
-        </TextBlock>
-
         <!-- Save / Cancel -->
-        <StackPanel Grid.Row="8" Grid.ColumnSpan="3" Orientation="Horizontal"
-                    HorizontalAlignment="Right" Margin="0,20,0,0">
-            <Button Content="儲存" Width="88" Margin="5" Click="Save_Click"/>
-            <Button Content="取消" Width="88" Margin="5" Click="Cancel_Click"/>
+        <StackPanel Grid.Row="7" Grid.ColumnSpan="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+            <Button Content="儲存" Width="92" Margin="5" Click="Save_Click"/>
+            <Button Content="取消" Width="92" Margin="5" Click="Cancel_Click"/>
         </StackPanel>
     </Grid>
 </Window>

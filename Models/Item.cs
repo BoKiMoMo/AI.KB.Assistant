@@ -9,9 +9,8 @@ namespace AI.KB.Assistant.Models
         public long CreatedTs { get; set; }
         public string Summary { get; set; } = "";
         public string Reasoning { get; set; } = "";
-        /// <summary>normal / pending / in-progress / todo / favorite</summary>
-        public string Status { get; set; } = "normal";
-        public string Tags { get; set; } = "";
+        public string Status { get; set; } = "normal"; // normal / todo / in-progress / favorite
+        public string Tags { get; set; } = "";         // ³r¸¹¤À¹j
         public string Project { get; set; } = "DefaultProject";
     }
 }

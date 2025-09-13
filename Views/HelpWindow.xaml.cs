@@ -9,9 +9,6 @@ namespace AI.KB.Assistant.Views
             InitializeComponent();
         }
 
-        private void BtnClose_Click(object sender, RoutedEventArgs e)
-        {
-            Close();
-        }
+        private void BtnClose_Click(object sender, RoutedEventArgs e) => Close();
     }
 }

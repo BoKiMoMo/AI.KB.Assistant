@@ -2,51 +2,50 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:conv="clr-namespace:AI.KB.Assistant.Helpers"
-        Title="AI 知識庫助手"
-        Height="720" Width="1200"
-        WindowStartupLocation="CenterScreen"
-        FontFamily="Segoe UI, Microsoft JhengHei"
+        Title="AI 知識庫助手" Height="720" Width="1200"
+        WindowStartupLocation="CenterScreen" FontFamily="Segoe UI, Microsoft JhengHei"
         AllowDrop="True">
-
     <Window.Resources>
-        <!-- Unix 秒轉 yyyy-MM-dd -->
         <conv:UnixToDateConverter x:Key="UnixToDateConverter"/>
     </Window.Resources>
 
     <DockPanel>
-        <!-- 上方工具列 -->
+        <!-- 工具列 -->
         <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="8">
-            <Button x:Name="BtnRecent" Content="最近" Width="88" Margin="4" Click="BtnRecent_Click"/>
-            <Button x:Name="BtnProgress" Content="處理中" Width="88" Margin="4" Click="BtnProgress_Click"/>
-            <Button x:Name="BtnPending" Content="待辦" Width="88" Margin="4" Click="BtnPending_Click"/>
-            <Button x:Name="BtnFavorites" Content="我的最愛" Width="88" Margin="4" Click="BtnFavorites_Click"/>
+            <Button Content="最近" Width="88" Margin="4" Click="BtnRecent_Click"/>
+            <Button Content="執行中" Width="88" Margin="4" Click="BtnProgress_Click"/>
+            <Button Content="待辦" Width="88" Margin="4" Click="BtnPending_Click"/>
+            <Button Content="我的最愛" Width="88" Margin="4" Click="BtnFavorites_Click"/>
 
-            <!-- 搜尋框 -->
-            <TextBox x:Name="SearchBox" Width="240" Margin="16,0,4,0"
-                     VerticalContentAlignment="Center"
-                     KeyDown="SearchBox_KeyDown"
-                     ToolTip="輸入關鍵字後按 Enter"/>
-            <Button x:Name="BtnSearch" Content="搜尋" Width="72" Margin="4" Click="BtnSearch_Click"/>
+            <TextBox x:Name="SearchBox" Width="260" Margin="16,0,4,0" KeyDown="SearchBox_KeyDown" ToolTip="輸入關鍵字後按 Enter"/>
+            <Button Content="搜尋" Width="72" Margin="4" Click="BtnSearch_Click"/>
 
-            <!-- 右側工具 -->
-            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                <Button x:Name="BtnSettings" Content="設定" Width="88" Margin="12,0,4,0" Click="BtnSettings_Click"/>
-                <Button x:Name="BtnHelp" Content="使用教學" Width="100" Margin="4,0,0,0" Click="BtnHelp_Click"/>
+            <StackPanel Orientation="Horizontal">
+                <Button Content="設定" Width="88" Margin="12,0,4,0" Click="BtnSettings_Click"/>
+                <Button Content="使用教學" Width="100" Margin="4,0,0,0" Click="BtnHelp_Click"/>
             </StackPanel>
         </StackPanel>
 
-        <!-- 主清單 -->
-        <Grid DockPanel.Dock="Top" Margin="8">
-            <ListView x:Name="ListView" ItemsSource="{Binding Items}">
+        <!-- 主清單（含右鍵選單） -->
+        <Grid Margin="8">
+            <ListView x:Name="ListView">
+                <ListView.ContextMenu>
+                    <ContextMenu>
+                        <MenuItem Header="標記為：我的最愛" Click="CtxMarkFavorite_Click"/>
+                        <MenuItem Header="標記為：待辦" Click="CtxMarkTodo_Click"/>
+                        <MenuItem Header="標記為：執行中" Click="CtxMarkInProgress_Click"/>
+                        <Separator/>
+                        <MenuItem Header="標記為：普通" Click="CtxMarkNormal_Click"/>
+                    </ContextMenu>
+                </ListView.ContextMenu>
                 <ListView.View>
                     <GridView>
-                        <GridViewColumn Header="檔案" DisplayMemberBinding="{Binding Filename}" Width="220"/>
-                        <GridViewColumn Header="分類" DisplayMemberBinding="{Binding Category}" Width="120"/>
-                        <GridViewColumn Header="信心度" DisplayMemberBinding="{Binding Confidence}" Width="80"/>
-                        <GridViewColumn Header="建立時間"
-                                        DisplayMemberBinding="{Binding CreatedTs, Converter={StaticResource UnixToDateConverter}}" Width="140"/>
-                        <GridViewColumn Header="摘要" DisplayMemberBinding="{Binding Summary}" Width="240"/>
-                        <GridViewColumn Header="狀態" DisplayMemberBinding="{Binding Status}" Width="100"/>
+                        <GridViewColumn Header="檔案" DisplayMemberBinding="{Binding Filename}" Width="240"/>
+                        <GridViewColumn Header="分類" DisplayMemberBinding="{Binding Category}" Width="160"/>
+                        <GridViewColumn Header="信心" DisplayMemberBinding="{Binding Confidence}" Width="80"/>
+                        <GridViewColumn Header="建立時間" DisplayMemberBinding="{Binding CreatedTs, Converter={StaticResource UnixToDateConverter}}" Width="140"/>
+                        <GridViewColumn Header="摘要" DisplayMemberBinding="{Binding Summary}" Width="260"/>
+                        <GridViewColumn Header="狀態" DisplayMemberBinding="{Binding Status}" Width="120"/>
                         <GridViewColumn Header="標籤" DisplayMemberBinding="{Binding Tags}" Width="160"/>
                         <GridViewColumn Header="專案" DisplayMemberBinding="{Binding Project}" Width="160"/>
                     </GridView>
@@ -54,14 +53,9 @@
             </ListView>
         </Grid>
 
-        <!-- 下方 Log -->
+        <!-- Log -->
         <DockPanel DockPanel.Dock="Bottom" Margin="8">
-            <TextBox x:Name="TxtLog"
-                     Height="120"
-                     VerticalScrollBarVisibility="Auto"
-                     IsReadOnly="True"
-                     TextWrapping="Wrap"
-                     AcceptsReturn="True"/>
+            <TextBox x:Name="TxtLog" Height="120" VerticalScrollBarVisibility="Auto" IsReadOnly="True" TextWrapping="Wrap" AcceptsReturn="True"/>
         </DockPanel>
     </DockPanel>
 </Window>
