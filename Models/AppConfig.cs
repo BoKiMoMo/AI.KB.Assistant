@@ -1,13 +1,15 @@
-﻿using Newtonsoft.Json;
+﻿using System.Collections.Generic;
 
 namespace AI.KB.Assistant.Models
 {
+    /// <summary>整體設定（對應 config.json）</summary>
     public sealed class AppConfig
     {
         public AppSection App { get; set; } = new();
         public OpenAISection OpenAI { get; set; } = new();
         public RoutingSection Routing { get; set; } = new();
         public ClassificationSection Classification { get; set; } = new();
+        public ViewsSection Views { get; set; } = new();
     }
 
     public sealed class AppSection
@@ -16,33 +18,39 @@ namespace AI.KB.Assistant.Models
         public string InboxDir { get; set; } = "";
         public string DbPath { get; set; } = "";
         public string ProjectName { get; set; } = "DefaultProject";
-        public bool DryRun { get; set; } = true;   // 預設先模擬
-        public bool Overwrite { get; set; } = false;
-        public string MoveMode { get; set; } = "copy"; // copy / move
+        public bool DryRun { get; set; } = true;
+        public string MoveMode { get; set; } = "copy";     // copy | move
+        public string OverwritePolicy { get; set; } = "skip"; // skip | rename | replace
     }
 
     public sealed class OpenAISection
     {
         public string ApiKey { get; set; } = "";
         public string Model { get; set; } = "gpt-4o-mini";
-        public int TimeoutSeconds { get; set; } = 20;
     }
 
     public sealed class RoutingSection
     {
-        public string TimeGranularity { get; set; } = "month"; // year/month/day
+        public string TimeGranularity { get; set; } = "year"; // year 固定，不再分月份
+        public string ClassificationMode { get; set; } = "category"; // category | project | date
         public bool SafeCategoriesOnly { get; set; } = false;
     }
 
     public sealed class ClassificationSection
     {
-        public string ClassificationMode { get; set; } = "category"; // category/project/date
         public string FallbackCategory { get; set; } = "其他";
-        public string Style { get; set; } = "default";
-        public string Engine { get; set; } = "local"; // local/llm/hybrid
+        public string Engine { get; set; } = "local"; // local | openai（第三階段）
         public double ConfidenceThreshold { get; set; } = 0.6;
-        public bool UseLLM { get; set; } = true;
-        public int MaxTags { get; set; } = 5;
-        public bool EnableChatSearch { get; set; } = true;
+        public string AutoFolderName { get; set; } = "自整理";
+
+        // v2 規則
+        public Dictionary<string, List<string>> ExtensionMap { get; set; } = new(); // 類別 → 副檔名（含點或不含點都接受）
+        public Dictionary<string, List<string>> KeywordMap { get; set; } = new(); // 類別 → 關鍵字
+        public Dictionary<string, List<string>> RegexMap { get; set; } = new(); // 類別 → 正則
+    }
+
+    public sealed class ViewsSection
+    {
+        public List<string> FavoriteTags { get; set; } = new(); // 最近標籤（右鍵快捷）
     }
 }

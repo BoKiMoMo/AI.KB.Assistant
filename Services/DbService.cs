@@ -11,18 +11,14 @@ namespace AI.KB.Assistant.Services
 {
     public sealed class DbService : IDisposable
     {
-        private readonly string _dbPath;
         private readonly string _connStr;
 
         public DbService(string dbPath)
         {
-            _dbPath = dbPath ?? throw new ArgumentNullException(nameof(dbPath));
-            var dir = Path.GetDirectoryName(_dbPath);
+            var dir = Path.GetDirectoryName(dbPath);
             if (!string.IsNullOrWhiteSpace(dir)) Directory.CreateDirectory(dir!);
-
-            _connStr = $"Data Source={_dbPath}";
+            _connStr = $"Data Source={dbPath}";
             EnsureTables();
-            RunLightMigrations();
         }
 
         private IDbConnection Open() => new SqliteConnection(_connStr);
@@ -36,13 +32,16 @@ CREATE TABLE IF NOT EXISTS items(
     path         TEXT NOT NULL,
     filename     TEXT NOT NULL,
     category     TEXT,
+    filetype     TEXT,
     confidence   REAL,
     created_ts   INTEGER,
+    year         INTEGER,
     summary      TEXT,
     reasoning    TEXT,
     status       TEXT,
     tags         TEXT,
-    project      TEXT
+    project      TEXT,
+    scope_locked INTEGER DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_items_filename  ON items(filename);
 CREATE INDEX IF NOT EXISTS idx_items_category  ON items(category);
@@ -50,30 +49,42 @@ CREATE INDEX IF NOT EXISTS idx_items_status    ON items(status);
 CREATE INDEX IF NOT EXISTS idx_items_created   ON items(created_ts);
 CREATE INDEX IF NOT EXISTS idx_items_project   ON items(project);
 ");
+
+            // 兼容舊版：嘗試補欄位（忽略失敗）
+            TryAddColumn(cn, "items", "filetype", "TEXT");
+            TryAddColumn(cn, "items", "year", "INTEGER");
+            TryAddColumn(cn, "items", "scope_locked", "INTEGER DEFAULT 0");
         }
 
-        private void RunLightMigrations()
+        private static void TryAddColumn(IDbConnection cn, string table, string col, string defType)
         {
-            // 這裡可視需要做欄位補齊，現在表已完整
+            try
+            {
+                var exists = cn.Query<string>($"PRAGMA table_info({table});")
+                               .Any(r => string.Equals(r?.Split('|').ElementAtOrDefault(1) ?? "", col, StringComparison.OrdinalIgnoreCase));
+                if (!exists)
+                    cn.Execute($"ALTER TABLE {table} ADD COLUMN {col} {defType};");
+            }
+            catch { /* ignore */ }
         }
 
         public long Add(Item it)
         {
             using var cn = Open();
             const string sql = @"
-INSERT INTO items(path, filename, category, confidence, created_ts, summary, reasoning, status, tags, project)
-VALUES(@Path, @Filename, @Category, @Confidence, @CreatedTs, @Summary, @Reasoning, @Status, @Tags, @Project);
+INSERT INTO items(path, filename, category, filetype, confidence, created_ts, year, summary, reasoning, status, tags, project, scope_locked)
+VALUES(@Path, @Filename, @Category, @FileType, @Confidence, @CreatedTs, @Year, @Summary, @Reasoning, @Status, @Tags, @Project, @ScopeLocked);
 SELECT last_insert_rowid();";
             return cn.ExecuteScalar<long>(sql, it);
         }
 
-        public IEnumerable<Item> Recent(int days = 7)
+        public IEnumerable<Item> Recent(int days = 14)
         {
             var since = DateTimeOffset.Now.AddDays(-Math.Abs(days)).ToUnixTimeSeconds();
             using var cn = Open();
             const string sql = @"
-SELECT path, filename, category, confidence, created_ts AS CreatedTs,
-       summary, reasoning, status, tags, project
+SELECT path, filename, category, filetype AS FileType, confidence,
+       created_ts AS CreatedTs, year, summary, reasoning, status, tags, project, scope_locked AS ScopeLocked
 FROM items
 WHERE created_ts >= @since
 ORDER BY created_ts DESC;";
@@ -84,8 +95,8 @@ ORDER BY created_ts DESC;";
         {
             using var cn = Open();
             const string sql = @"
-SELECT path, filename, category, confidence, created_ts AS CreatedTs,
-       summary, reasoning, status, tags, project
+SELECT path, filename, category, filetype AS FileType, confidence,
+       created_ts AS CreatedTs, year, summary, reasoning, status, tags, project, scope_locked AS ScopeLocked
 FROM items
 WHERE LOWER(status) = LOWER(@status)
 ORDER BY created_ts DESC;";
@@ -96,43 +107,80 @@ ORDER BY created_ts DESC;";
         {
             using var cn = Open();
             const string sql = @"
-SELECT path, filename, category, confidence, created_ts AS CreatedTs,
-       summary, reasoning, status, tags, project
+SELECT path, filename, category, filetype AS FileType, confidence,
+       created_ts AS CreatedTs, year, summary, reasoning, status, tags, project, scope_locked AS ScopeLocked
 FROM items
-WHERE filename LIKE @q
-   OR category LIKE @q
-   OR summary  LIKE @q
-   OR tags     LIKE @q
+WHERE filename LIKE @q OR category LIKE @q OR summary LIKE @q OR tags LIKE @q OR project LIKE @q
 ORDER BY created_ts DESC;";
             var q = "%" + (keyword ?? "").Trim() + "%";
             return cn.Query<Item>(sql, new { q });
         }
 
-        /// <summary>批次更新 status（我的最愛 = favorite 也走這裡）</summary>
+        public IEnumerable<Item> SearchAdvanced(string? filenameLike, string? category, string? status, string? tag)
+        {
+            using var cn = Open();
+            var where = new List<string>();
+            var p = new DynamicParameters();
+
+            if (!string.IsNullOrWhiteSpace(filenameLike))
+            {
+                var like = filenameLike.Replace('*', '%');
+                where.Add("filename LIKE @f");
+                p.Add("f", like);
+            }
+            if (!string.IsNullOrWhiteSpace(category))
+            {
+                where.Add("LOWER(category) = LOWER(@c)");
+                p.Add("c", category);
+            }
+            if (!string.IsNullOrWhiteSpace(status))
+            {
+                where.Add("LOWER(status) = LOWER(@s)");
+                p.Add("s", status);
+            }
+            if (!string.IsNullOrWhiteSpace(tag))
+            {
+                where.Add("tags LIKE @t");
+                p.Add("t", "%" + tag + "%");
+            }
+
+            var sql = $@"
+SELECT path, filename, category, filetype AS FileType, confidence,
+       created_ts AS CreatedTs, year, summary, reasoning, status, tags, project, scope_locked AS ScopeLocked
+FROM items
+{(where.Count > 0 ? "WHERE " + string.Join(" AND ", where) : "")}
+ORDER BY created_ts DESC;";
+
+            return cn.Query<Item>(sql, p);
+        }
+
         public int UpdateStatusByPath(IEnumerable<string> paths, string status)
         {
-            var list = (paths ?? Enumerable.Empty<string>()).Where(p => !string.IsNullOrWhiteSpace(p)).Distinct().ToArray();
+            var list = paths?.Where(p => !string.IsNullOrWhiteSpace(p)).Distinct().ToArray() ?? Array.Empty<string>();
             if (list.Length == 0) return 0;
-
             using var cn = Open();
             const string sql = @"UPDATE items SET status=@status WHERE path IN @paths;";
             return cn.Execute(sql, new { status, paths = list });
         }
 
-        /// <summary>批次更新 tags（逗號分隔字串）</summary>
         public int UpdateTagsByPath(IEnumerable<string> paths, string tags)
         {
-            var list = (paths ?? Enumerable.Empty<string>()).Where(p => !string.IsNullOrWhiteSpace(p)).Distinct().ToArray();
+            var list = paths?.Where(p => !string.IsNullOrWhiteSpace(p)).Distinct().ToArray() ?? Array.Empty<string>();
             if (list.Length == 0) return 0;
-
             using var cn = Open();
             const string sql = @"UPDATE items SET tags=@tags WHERE path IN @paths;";
             return cn.Execute(sql, new { tags, paths = list });
         }
 
-        public void Dispose()
+        public int UpdateCategoryByPath(IEnumerable<string> paths, string category, double confidence)
         {
-            // using 連線池，無需特別釋放
+            var list = paths?.Where(p => !string.IsNullOrWhiteSpace(p)).Distinct().ToArray() ?? Array.Empty<string>();
+            if (list.Length == 0) return 0;
+            using var cn = Open();
+            const string sql = @"UPDATE items SET category=@category, confidence=@confidence WHERE path IN @paths;";
+            return cn.Execute(sql, new { category, confidence, paths = list });
         }
+
+        public void Dispose() { }
     }
 }

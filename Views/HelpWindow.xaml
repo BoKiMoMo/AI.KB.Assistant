@@ -1,34 +1,20 @@
 ﻿<Window x:Class="AI.KB.Assistant.Views.HelpWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="使用教學"
-        Height="640" Width="880"
+        Title="使用教學" Height="560" Width="780"
         WindowStartupLocation="CenterOwner"
         FontFamily="Segoe UI, Microsoft JhengHei">
-    <DockPanel>
-        <ScrollViewer DockPanel.Dock="Top" Margin="16">
-            <StackPanel>
-                <TextBlock Text="AI 知識庫助手｜使用教學" FontSize="22" FontWeight="Bold" Margin="0,0,0,14"/>
-                <TextBlock Text="拖放檔案 → 自動判斷類別 → 產生目錄 → （可選）搬檔到目標資料夾" Margin="0,0,0,12"/>
-
-                <TextBlock Text="快速開始" FontSize="16" FontWeight="SemiBold" Margin="0,8,0,4"/>
-                <TextBlock Text="1) 先到「設定」指定 根目錄/DB/搬移模式；想先試用就勾「乾跑」避免真的搬檔。" TextWrapping="Wrap"/>
-                <TextBlock Text="2) 回到主畫面，把檔案拖進視窗清單。" TextWrapping="Wrap"/>
-                <TextBlock Text="3) 右鍵項目可標記「我的最愛 / 待辦 / 執行中」，搜尋欄可快速篩選。" TextWrapping="Wrap" Margin="0,0,0,12"/>
-
-                <TextBlock Text="分類風格" FontSize="16" FontWeight="SemiBold" Margin="0,8,0,4"/>
-                <TextBlock Text="．類別優先：類別/年/月(/日)" TextWrapping="Wrap"/>
-                <TextBlock Text="．日期優先：年/月(/日)/類別" TextWrapping="Wrap"/>
-                <TextBlock Text="．專案優先：專案/類別/年/月(/日)" TextWrapping="Wrap" Margin="0,0,0,12"/>
-
-                <TextBlock Text="常見問題" FontSize="16" FontWeight="SemiBold" Margin="0,8,0,4"/>
-                <TextBlock Text="Q：拖放沒反應？A：請確認視窗已啟動，且檔案不是捷徑；嘗試重新執行。" TextWrapping="Wrap"/>
-                <TextBlock Text="Q：中文亂碼？A：設定檔使用 UTF-8 BOM 輸出，通常無須更動。" TextWrapping="Wrap"/>
-            </StackPanel>
-        </ScrollViewer>
-
-        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="16">
-            <Button Content="關閉" Width="88" Click="BtnClose_Click"/>
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Margin="20" >
+            <TextBlock Text="AI 知識庫助手：使用教學（第二階段）" FontSize="20" FontWeight="Bold" Margin="0,0,0,10"/>
+            <TextBlock Text="1) 拖曳檔案到主視窗，下方會顯示入列與處理進度。" TextWrapping="Wrap" Margin="0,4"/>
+            <TextBlock Text="2) 系統會依副檔名/關鍵字/正則自動分類；信心不足的會進『自整理』。" TextWrapping="Wrap" Margin="0,4"/>
+            <TextBlock Text="3) 右鍵可加入我的最愛、設定狀態、加/減標籤、或重跑分類。" TextWrapping="Wrap" Margin="0,4"/>
+            <TextBlock Text="4) 搜尋框支援條件語法：filename:*.pdf  tag:發票  status:pending  category:財務。" TextWrapping="Wrap" Margin="0,4"/>
+            <TextBlock Text="5) 工具列『執行搬檔』會依設定（DryRun/MoveMode/Overwrite）搬移至最終路由。" TextWrapping="Wrap" Margin="0,4"/>
+            <TextBlock Text="6) 預覽支援圖片、純文字；統計顯示本週新增、我的最愛、自整理數量。" TextWrapping="Wrap" Margin="0,4"/>
+            <TextBlock Text="7) 快捷鍵：Ctrl+F 搜尋、Ctrl+L 清除 Log。" TextWrapping="Wrap" Margin="0,4"/>
+            <TextBlock Text="8) 設定可調：根目錄/收件匣/資料庫、移動模式、同名策略、分類門檻/自整理名稱、OpenAI Key（第三階段）。" TextWrapping="Wrap" Margin="0,4"/>
         </StackPanel>
-    </DockPanel>
+    </ScrollViewer>
 </Window>

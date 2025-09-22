@@ -26,7 +26,6 @@ namespace AI.KB.Assistant.Helpers
                 }
             }
             catch { }
-
             return DateTimeOffset.Now;
         }
 
@@ -36,16 +35,16 @@ namespace AI.KB.Assistant.Helpers
             var m = RxDate.Match(fileNameWithoutExt);
             if (!m.Success) return false;
 
-            int y = SafeInt(m.Groups[1].Value);
-            int mo = SafeInt(m.Groups[2].Value);
-            int d = SafeInt(m.Groups[3].Value);
-            int h = m.Groups[4].Success ? SafeInt(m.Groups[4].Value) : 0;
-            int mi = m.Groups[5].Success ? SafeInt(m.Groups[5].Value) : 0;
-            int s = m.Groups[6].Success ? SafeInt(m.Groups[6].Value) : 0;
+            int year = SafeInt(m.Groups[1].Value);
+            int month = SafeInt(m.Groups[2].Value);
+            int day = SafeInt(m.Groups[3].Value);
+            int hour = m.Groups[4].Success ? SafeInt(m.Groups[4].Value) : 0;
+            int minute = m.Groups[5].Success ? SafeInt(m.Groups[5].Value) : 0;
+            int second = m.Groups[6].Success ? SafeInt(m.Groups[6].Value) : 0;
 
             try
             {
-                var local = new DateTime(y, mo, d, h, mi, s, DateTimeKind.Local);
+                var local = new DateTime(year, month, day, hour, minute, second, DateTimeKind.Local);
                 result = new DateTimeOffset(local);
                 return true;
             }

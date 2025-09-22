@@ -7,53 +7,47 @@ namespace AI.KB.Assistant.Services
 {
     public static class RoutingService
     {
-        public static string BuildTargetPath(AppConfig cfg, Item it)
+        // 最終目錄：Root / yyyy / <專案名稱> / <業務語意> / <檔案型態>
+        public static string BuildTargetDirectory(AppConfig cfg, Item it)
         {
             var root = string.IsNullOrWhiteSpace(cfg.App.RootDir) ? "." : cfg.App.RootDir;
+            var year = (it.Year > 0 ? it.Year : DateTime.Now.Year).ToString(CultureInfo.InvariantCulture);
+            var proj = Safe(string.IsNullOrWhiteSpace(it.Project) ? cfg.App.ProjectName : it.Project);
+            var cat = Safe(string.IsNullOrWhiteSpace(it.Category) ? cfg.Classification.FallbackCategory : it.Category);
+            var type = Safe(string.IsNullOrWhiteSpace(it.FileType) ? (Path.GetExtension(it.Filename) ?? "").TrimStart('.').ToLowerInvariant() : it.FileType);
 
-            // 低信心 → _自整理
-            if (it.Confidence < Math.Max(0, Math.Min(1, cfg.Classification.ConfidenceThreshold)))
-            {
-                var special = Path.Combine(root, "_自整理");
-                Directory.CreateDirectory(special);
-                return special;
-            }
-
-            string sub = (cfg.Classification.ClassificationMode ?? "category").ToLowerInvariant() switch
-            {
-                "date" => DatePath(it.CreatedTs, cfg.Routing.TimeGranularity),
-                "project" => CombineSafe(cfg.App.ProjectName, DatePath(it.CreatedTs, cfg.Routing.TimeGranularity)),
-                _ => CombineSafe(it.Category, DatePath(it.CreatedTs, cfg.Routing.TimeGranularity)),
-            };
-
-            var full = Path.GetFullPath(Path.Combine(root, sub));
-            Directory.CreateDirectory(full);
-            return full;
+            var sub = Path.Combine(year, proj, cat, type);
+            return Path.GetFullPath(Path.Combine(root, sub));
         }
 
-        private static string DatePath(long unix, string? granularity)
+        public static string BuildAutoFolder(AppConfig cfg)
         {
-            var dt = DateTimeOffset.FromUnixTimeSeconds(
-                        unix > 0 ? unix : DateTimeOffset.Now.ToUnixTimeSeconds())
-                    .ToLocalTime().DateTime;
-
-            return (granularity ?? "month").ToLowerInvariant() switch
-            {
-                "year" => dt.ToString("yyyy", CultureInfo.InvariantCulture),
-                "day" => Path.Combine(dt.ToString("yyyy"), dt.ToString("MM"), dt.ToString("dd")),
-                _ => Path.Combine(dt.ToString("yyyy"), dt.ToString("MM")),
-            };
+            var root = string.IsNullOrWhiteSpace(cfg.App.RootDir) ? "." : cfg.App.RootDir;
+            var auto = string.IsNullOrWhiteSpace(cfg.Classification.AutoFolderName) ? "自整理" : cfg.Classification.AutoFolderName;
+            return Path.Combine(root, Safe(auto));
         }
 
-        private static string CombineSafe(params string[] parts)
+        public static string Safe(string? name)
         {
-            string San(string? s)
+            name ??= "";
+            foreach (var ch in Path.GetInvalidFileNameChars()) name = name.Replace(ch, '_');
+            return name.Trim();
+        }
+
+        public static string ResolveCollision(string path)
+        {
+            if (!File.Exists(path)) return path;
+            string dir = Path.GetDirectoryName(path)!;
+            string name = Path.GetFileNameWithoutExtension(path);
+            string ext = Path.GetExtension(path);
+            int i = 1;
+            string candidate;
+            do
             {
-                s ??= "";
-                foreach (var ch in Path.GetInvalidFileNameChars()) s = s.Replace(ch, '_');
-                return s.Trim();
-            }
-            return Path.Combine(Array.ConvertAll(parts, San));
+                candidate = Path.Combine(dir, $"{name} ({i}){ext}");
+                i++;
+            } while (File.Exists(candidate));
+            return candidate;
         }
     }
 }

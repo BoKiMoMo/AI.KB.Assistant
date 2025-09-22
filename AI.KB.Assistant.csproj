@@ -10,6 +10,8 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Remove="Helpers\StringSplitConverter.cs" />
+    <Compile Remove="Helpers\UnixToDateConverter.cs" />
     <Compile Remove="Services\ClassifierService.cs" />
   </ItemGroup>
 

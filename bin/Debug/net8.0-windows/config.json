@@ -1,0 +1,25 @@
+{
+	"App": {
+		"RootDir": "D:\\KnowledgeRoot",
+		"InboxDir": "D:\\KnowledgeRoot\\Inbox",
+		"DbPath": "D:\\KnowledgeRoot\\data.db",
+		"ProjectName": "DefaultProject",
+		"DryRun": true,
+		"Overwrite": false,
+		"MoveMode": "copy"
+	},
+	"OpenAI": {
+		"ApiKey": "",
+		"Model": "gpt-4o-mini"
+	},
+	"Routing": {
+		"SafeCategoriesOnly": true
+	},
+	"Classification": {
+		"ClassificationMode": "category",
+		"TimeGranularity": "month",
+		"FallbackCategory": "其他",
+		"Engine": "local",
+		"Style": "default"
+	}
+}
