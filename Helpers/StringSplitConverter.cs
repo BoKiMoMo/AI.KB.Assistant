@@ -1,11 +1,12 @@
-﻿using System;
+﻿// Helpers/StringSplitConverter.cs
+using System;
 using System.Globalization;
 using System.Linq;
 using System.Windows.Data;
 
-namespace AI.KB.Assistant
+namespace AI.KB.Assistant.Helpers
 {
-    /// <summary>逗號分隔字串 → IEnumerable&lt;string&gt;</summary>
+    /// <summary>「逗號分隔字串」→ IEnumerable&lt;string&gt;，供標籤徽章顯示</summary>
     public class StringSplitConverter : IValueConverter
     {
         public object Convert(object value, Type targetType, object parameter, CultureInfo culture)

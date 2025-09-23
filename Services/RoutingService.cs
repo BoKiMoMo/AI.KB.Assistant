@@ -1,3 +1,4 @@
+// Services/RoutingService.cs
 using System;
 using System.Globalization;
 using System.IO;
@@ -7,17 +8,20 @@ namespace AI.KB.Assistant.Services
 {
     public static class RoutingService
     {
-        // 最終目錄：Root / yyyy / <專案名稱> / <業務語意> / <檔案型態>
         public static string BuildTargetDirectory(AppConfig cfg, Item it)
         {
             var root = string.IsNullOrWhiteSpace(cfg.App.RootDir) ? "." : cfg.App.RootDir;
-            var year = (it.Year > 0 ? it.Year : DateTime.Now.Year).ToString(CultureInfo.InvariantCulture);
-            var proj = Safe(string.IsNullOrWhiteSpace(it.Project) ? cfg.App.ProjectName : it.Project);
-            var cat = Safe(string.IsNullOrWhiteSpace(it.Category) ? cfg.Classification.FallbackCategory : it.Category);
-            var type = Safe(string.IsNullOrWhiteSpace(it.FileType) ? (Path.GetExtension(it.Filename) ?? "").TrimStart('.').ToLowerInvariant() : it.FileType);
 
-            var sub = Path.Combine(year, proj, cat, type);
-            return Path.GetFullPath(Path.Combine(root, sub));
+            string datePart = DatePath(it.CreatedTs, cfg.Routing.TimeGranularity);
+            string sub = cfg.Routing.ClassificationMode?.ToLowerInvariant() switch
+            {
+                "date" => datePart,
+                "project" => Path.Combine(Safe(cfg.App.ProjectName), datePart),
+                _ => Path.Combine(Safe(it.Category), datePart), // category
+            };
+
+            var full = Path.GetFullPath(Path.Combine(root, sub));
+            return full;
         }
 
         public static string BuildAutoFolder(AppConfig cfg)
@@ -25,6 +29,22 @@ namespace AI.KB.Assistant.Services
             var root = string.IsNullOrWhiteSpace(cfg.App.RootDir) ? "." : cfg.App.RootDir;
             var auto = string.IsNullOrWhiteSpace(cfg.Classification.AutoFolderName) ? "自整理" : cfg.Classification.AutoFolderName;
             return Path.Combine(root, Safe(auto));
+        }
+
+        private static string DatePath(long unix, string granularity)
+        {
+            if (unix <= 0) unix = DateTimeOffset.Now.ToUnixTimeSeconds();
+            var dt = DateTimeOffset.FromUnixTimeSeconds(unix).ToLocalTime().DateTime;
+
+            return (granularity?.ToLowerInvariant()) switch
+            {
+                "day" => Path.Combine(dt.ToString("yyyy", CultureInfo.InvariantCulture),
+                                       dt.ToString("MM", CultureInfo.InvariantCulture),
+                                       dt.ToString("dd", CultureInfo.InvariantCulture)),
+                "year" => dt.ToString("yyyy", CultureInfo.InvariantCulture),
+                _ => Path.Combine(dt.ToString("yyyy", CultureInfo.InvariantCulture),
+                                       dt.ToString("MM", CultureInfo.InvariantCulture)),
+            };
         }
 
         public static string Safe(string? name)

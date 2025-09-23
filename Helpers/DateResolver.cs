@@ -1,4 +1,5 @@
-﻿using System;
+﻿// Helpers/DateResolver.cs
+using System;
 using System.IO;
 using System.Text.RegularExpressions;
 
@@ -26,6 +27,7 @@ namespace AI.KB.Assistant.Helpers
                 }
             }
             catch { }
+
             return DateTimeOffset.Now;
         }
 

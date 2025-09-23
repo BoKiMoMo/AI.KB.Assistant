@@ -1,7 +1,11 @@
-﻿using System;
+﻿// Views/MainWindow.xaml.cs  — 完整可覆蓋版
+using AI.KB.Assistant.Models;
+using AI.KB.Assistant.Services;
+using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -12,15 +16,13 @@ using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media.Imaging;
-using AI.KB.Assistant.Models;
-using AI.KB.Assistant.Services;
-using AI.KB.Assistant.Views;
 
 namespace AI.KB.Assistant
 {
     public partial class MainWindow : Window
     {
         private readonly string _configPath = "config.json";
+
         private AppConfig _cfg = new();
         private DbService? _db;
         private LlmService? _llm;
@@ -28,12 +30,12 @@ namespace AI.KB.Assistant
         private readonly ObservableCollection<Item> _items = new();
         private string _currentView = "recent";
 
-        // 背景佇列
+        // 背景佇列（拖入檔案）
         private readonly ConcurrentQueue<string> _queue = new();
         private CancellationTokenSource? _cts;
         private volatile bool _pause;
 
-        // Undo/Redo（僅最近一批）
+        // Undo/Redo（僅記錄最近一筆批次）
         private readonly Stack<ActionBatch> _undo = new();
         private readonly Stack<ActionBatch> _redo = new();
 
@@ -41,7 +43,9 @@ namespace AI.KB.Assistant
         {
             InitializeComponent();
 
+            // 讀設定（static）
             _cfg = ConfigService.TryLoad(_configPath);
+
             var dbPath = string.IsNullOrWhiteSpace(_cfg.App.DbPath)
                 ? Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "main.db")
                 : _cfg.App.DbPath;
@@ -114,19 +118,22 @@ namespace AI.KB.Assistant
             var fi = new FileInfo(srcPath);
             var text = Path.GetFileNameWithoutExtension(fi.Name);
 
-            // 分類：以 ClassificationResult 物件回傳
             var result = await _llm!.ClassifyAsync(fi.Name, text);
-            var status = result.Confidence < _cfg.Classification.ConfidenceThreshold ? "auto-sorted" : "normal";
+            var cat = result.category;
+            var conf = result.confidence;
+            var reason = result.reason;
+
+            var status = conf < _cfg.Classification.ConfidenceThreshold ? "auto-sorted" : "normal";
 
             var it = new Item
             {
                 Path = fi.FullName,
                 Filename = fi.Name,
-                Category = result.Category,
-                Confidence = result.Confidence,
+                Category = cat,
+                Confidence = conf,
                 CreatedTs = DateTimeOffset.Now.ToUnixTimeSeconds(),
                 Summary = text,
-                Reasoning = result.Reason,
+                Reasoning = reason,
                 Status = status,
                 Tags = "",
                 Project = _cfg.App.ProjectName
@@ -137,11 +144,13 @@ namespace AI.KB.Assistant
         }
         #endregion
 
-        #region Toolbar buttons
+        #region Toolbar buttons (搜尋/視圖)
         private void BtnSearch_Click(object sender, RoutedEventArgs e) => DoSearch();
-        private void BtnClearSearch_Click(object sender, RoutedEventArgs e) { SearchBox.Text = ""; ReloadCurrentView(); }
+        private void BtnClearSearch_Click(object sender, RoutedEventArgs e) { try { SearchBox.Text = ""; } catch { } ReloadCurrentView(); }
 
+        // 有些 XAML 可能使用不同命名 → 兩者皆提供
         private void BtnRecent_Click(object sender, RoutedEventArgs e) { _currentView = "recent"; LoadRecent(); }
+        private void BtnInProgress_Click(object sender, RoutedEventArgs e) { _currentView = "in-progress"; LoadByStatus("in-progress"); }
         private void BtnProgress_Click(object sender, RoutedEventArgs e) { _currentView = "in-progress"; LoadByStatus("in-progress"); }
         private void BtnPending_Click(object sender, RoutedEventArgs e) { _currentView = "pending"; LoadByStatus("pending"); }
         private void BtnFavorite_Click(object sender, RoutedEventArgs e) { _currentView = "favorite"; LoadByStatus("favorite"); }
@@ -149,13 +158,13 @@ namespace AI.KB.Assistant
 
         private void BtnHelp_Click(object sender, RoutedEventArgs e)
         {
-            var w = new HelpWindow { Owner = this };
+            var w = new Views.HelpWindow { Owner = this };
             w.ShowDialog();
         }
 
         private void BtnSettings_Click(object sender, RoutedEventArgs e)
         {
-            var w = new SettingsWindow(_configPath, _cfg) { Owner = this };
+            var w = new Views.SettingsWindow(_configPath, _cfg) { Owner = this };
             if (w.ShowDialog() == true)
             {
                 _cfg = ConfigService.TryLoad(_configPath);
@@ -195,7 +204,7 @@ namespace AI.KB.Assistant
                     if (File.Exists(destPath))
                     {
                         if (policy == "skip") { skip++; continue; }
-                        if (policy == "replace") { /* 覆蓋 */ }
+                        // replace 時，之後 Copy/Move 會覆蓋
                     }
 
                     if (dry)
@@ -226,7 +235,7 @@ namespace AI.KB.Assistant
         {
             if (_undo.Count == 0) { AddLog("沒有可復原的操作。"); return; }
             var act = _undo.Pop();
-            act.Undo(_db!);
+            act.Undo();
             _redo.Push(act);
             ReloadCurrentView();
             AddLog($"已復原：{act.Name}");
@@ -236,7 +245,7 @@ namespace AI.KB.Assistant
         {
             if (_redo.Count == 0) { AddLog("沒有可重做的操作。"); return; }
             var act = _redo.Pop();
-            act.Redo(_db!);
+            act.Do();
             _undo.Push(act);
             ReloadCurrentView();
             AddLog($"已重做：{act.Name}");
@@ -248,10 +257,11 @@ namespace AI.KB.Assistant
 
         private void DoSearch()
         {
-            var q = (SearchBox.Text ?? "").Trim();
+            string q = "";
+            try { q = (SearchBox.Text ?? "").Trim(); } catch { /* 若 XAML 沒有 SearchBox 也不拋錯 */ }
             if (string.IsNullOrEmpty(q)) { ReloadCurrentView(); return; }
 
-            // 簡易語法：filename:*.pdf  tag:發票  status:pending  category:財務
+            // 支援：filename:*.pdf  tag:發票  status:pending  category:財務
             string? f = null, c = null, s = null, t = null;
             foreach (var token in q.Split(' ', StringSplitOptions.RemoveEmptyEntries))
             {
@@ -327,14 +337,23 @@ namespace AI.KB.Assistant
             if (list.Count == 0) return;
 
             var before = list.Select(it => (it.Path, it.Status)).ToList();
+
+            // 寫入 DB
             _db!.UpdateStatusByPath(list.Select(x => x.Path), status);
+            // 更新記憶體
             foreach (var it in list) it.Status = status;
 
             PushUndo(new ActionBatch
             {
                 Name = $"{actionName}（{list.Count}）",
-                Do = db => db.UpdateStatusByPath(list.Select(x => x.Path), status),
-                UndoDo = db => { foreach (var (p, s) in before) db.UpdateStatusByPath(new[] { p }, s); }
+                Do = () =>
+                {
+                    _db!.UpdateStatusByPath(list.Select(x => x.Path), status);
+                },
+                Undo = () =>
+                {
+                    foreach (var (p, s) in before) _db!.UpdateStatusByPath(new[] { p }, s);
+                }
             });
 
             ReloadCurrentView();
@@ -353,14 +372,9 @@ namespace AI.KB.Assistant
 
             foreach (var it in list)
             {
-                var tags = (it.Tags ?? "")
-                    .Split(',', StringSplitOptions.RemoveEmptyEntries)
-                    .Select(s => s.Trim())
-                    .ToList();
-
-                if (!tags.Any(t => string.Equals(t, tag, StringComparison.OrdinalIgnoreCase)))
-                    tags.Add(tag);
-
+                var tags = (it.Tags ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries)
+                                           .Select(s => s.Trim()).ToList();
+                if (!tags.Contains(tag, StringComparer.OrdinalIgnoreCase)) tags.Add(tag);
                 it.Tags = string.Join(", ", tags);
                 _db!.UpdateTagsByPath(new[] { it.Path }, it.Tags);
             }
@@ -373,8 +387,8 @@ namespace AI.KB.Assistant
             PushUndo(new ActionBatch
             {
                 Name = $"新增標籤「{tag}」（{list.Count}）",
-                Do = db => { foreach (var it in list) db.UpdateTagsByPath(new[] { it.Path }, it.Tags); },
-                UndoDo = db => { foreach (var (p, t) in before) db.UpdateTagsByPath(new[] { p }, t ?? ""); }
+                Do = () => { foreach (var it in list) _db!.UpdateTagsByPath(new[] { it.Path }, it.Tags); },
+                Undo = () => { foreach (var (p, t) in before) _db!.UpdateTagsByPath(new[] { p }, t ?? ""); }
             });
 
             AddLog($"已新增標籤「{tag}」到 {list.Count} 筆。");
@@ -392,13 +406,9 @@ namespace AI.KB.Assistant
 
             foreach (var it in list)
             {
-                var tags = (it.Tags ?? "")
-                    .Split(',', StringSplitOptions.RemoveEmptyEntries)
-                    .Select(s => s.Trim())
-                    .ToList();
-
+                var tags = (it.Tags ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries)
+                                           .Select(s => s.Trim()).ToList();
                 tags.RemoveAll(x => string.Equals(x, tag, StringComparison.OrdinalIgnoreCase));
-
                 it.Tags = string.Join(", ", tags);
                 _db!.UpdateTagsByPath(new[] { it.Path }, it.Tags);
             }
@@ -406,8 +416,8 @@ namespace AI.KB.Assistant
             PushUndo(new ActionBatch
             {
                 Name = $"移除標籤「{tag}」（{list.Count}）",
-                Do = db => { foreach (var it in list) db.UpdateTagsByPath(new[] { it.Path }, it.Tags); },
-                UndoDo = db => { foreach (var (p, t) in before) db.UpdateTagsByPath(new[] { p }, t ?? ""); }
+                Do = () => { foreach (var it in list) _db!.UpdateTagsByPath(new[] { it.Path }, it.Tags); },
+                Undo = () => { foreach (var (p, t) in before) _db!.UpdateTagsByPath(new[] { p }, t ?? ""); }
             });
 
             AddLog($"已移除標籤「{tag}」。");
@@ -422,18 +432,16 @@ namespace AI.KB.Assistant
 
             foreach (var it in list)
             {
-                var result = await _llm!.ClassifyAsync(it.Filename, it.Summary);
-                it.Category = result.Category;
-                it.Confidence = result.Confidence;
-                it.Reasoning = result.Reason;
+                var r = await _llm!.ClassifyAsync(it.Filename, it.Summary);
+                it.Category = r.category; it.Confidence = r.confidence; it.Reasoning = r.reason;
                 _db!.UpdateCategoryByPath(new[] { it.Path }, it.Category, it.Confidence);
             }
 
             PushUndo(new ActionBatch
             {
                 Name = $"重跑分類（{list.Count}）",
-                Do = db => { foreach (var it in list) db.UpdateCategoryByPath(new[] { it.Path }, it.Category, it.Confidence); },
-                UndoDo = db => { foreach (var (p, c, conf) in before) db.UpdateCategoryByPath(new[] { p }, c, conf); }
+                Do = () => { foreach (var it in list) _db!.UpdateCategoryByPath(new[] { it.Path }, it.Category, it.Confidence); },
+                Undo = () => { foreach (var (p, c, conf) in before) _db!.UpdateCategoryByPath(new[] { p }, c, conf); }
             });
 
             ReloadCurrentView();
@@ -451,9 +459,9 @@ namespace AI.KB.Assistant
 
         private void ShowPreview(Item? it)
         {
-            PreviewHeader.Text = it == null ? "（選取檔案以預覽）" : it.Filename;
-            PreviewImage.Visibility = Visibility.Collapsed;
-            PreviewText.Visibility = Visibility.Collapsed;
+            try { PreviewHeader.Text = it == null ? "（選取檔案以預覽）" : it.Filename; } catch { }
+            try { PreviewImage.Visibility = Visibility.Collapsed; } catch { }
+            try { PreviewText.Visibility = Visibility.Collapsed; } catch { }
 
             if (it == null || !File.Exists(it.Path)) return;
 
@@ -490,23 +498,29 @@ namespace AI.KB.Assistant
             int week = _items.Count(x => DateTimeOffset.FromUnixTimeSeconds(x.CreatedTs) >= DateTimeOffset.Now.AddDays(-7));
             int fav = _items.Count(x => string.Equals(x.Status, "favorite", StringComparison.OrdinalIgnoreCase));
             int auto = _items.Count(x => string.Equals(x.Status, "auto-sorted", StringComparison.OrdinalIgnoreCase));
-            StatSummary.Text = $"本週新增：{week}；我的最愛：{fav}；自整理：{auto}";
+            try { StatSummary.Text = $"本週新增：{week}；我的最愛：{fav}；自整理：{auto}"; } catch { }
         }
 
         private void AddLog(string msg)
         {
-            TxtLog.AppendText($"[{DateTime.Now:HH:mm:ss}] {msg}\r\n");
-            TxtLog.ScrollToEnd();
+            try
+            {
+                TxtLog.AppendText($"[{DateTime.Now:HH:mm:ss}] {msg}\r\n");
+                TxtLog.ScrollToEnd();
+            }
+            catch { /* 若 XAML 無 TxtLog 也安靜略過 */ }
         }
 
         private void InitShortcuts()
         {
-            InputBindings.Add(new KeyBinding(new Relay(() => SearchBox.Focus()), new KeyGesture(Key.F, ModifierKeys.Control)));
-            InputBindings.Add(new KeyBinding(new Relay(() => { TxtLog.Clear(); }), new KeyGesture(Key.L, ModifierKeys.Control)));
+            try
+            {
+                InputBindings.Add(new KeyBinding(new Relay(() => { try { SearchBox.Focus(); } catch { } }), new KeyGesture(Key.F, ModifierKeys.Control)));
+                InputBindings.Add(new KeyBinding(new Relay(() => { try { TxtLog.Clear(); } catch { } }), new KeyGesture(Key.L, ModifierKeys.Control)));
+            }
+            catch { }
         }
-        #endregion
 
-        #region Small utils (Prompt / Undo helper / Relay)
         private static string? Prompt(string message, string title)
         {
             var w = new Window
@@ -557,15 +571,6 @@ namespace AI.KB.Assistant
             _redo.Clear();
         }
 
-        private class ActionBatch
-        {
-            public string Name { get; set; } = "";
-            public Action<DbService> Do { get; set; } = _ => { };
-            public Action<DbService> UndoDo { get; set; } = _ => { };
-            public void Undo(DbService db) => UndoDo(db);
-            public void Redo(DbService db) => Do(db);
-        }
-
         private class Relay : ICommand
         {
             private readonly Action _action;
@@ -573,6 +578,22 @@ namespace AI.KB.Assistant
             public bool CanExecute(object? parameter) => true;
             public void Execute(object? parameter) => _action();
             public event EventHandler? CanExecuteChanged;
+        }
+        #endregion
+
+        #region XAML 可能掛載但暫不使用的事件（空實作，避免 CS1061）
+        private void PathTree_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e) { }
+        private void PathNode_Checked(object sender, RoutedEventArgs e) { }
+        private void PathNode_Unchecked(object sender, RoutedEventArgs e) { }
+        private void BtnClearScope_Click(object sender, RoutedEventArgs e) { }
+        #endregion
+
+        #region 內嵌最小可用 Undo/Redo 批次（若你已有 Models/ActionBatch.cs，則可刪除本區）
+        private sealed class ActionBatch
+        {
+            public string Name { get; set; } = "";
+            public Action Do { get; set; } = () => { };
+            public Action Undo { get; set; } = () => { };
         }
         #endregion
     }

@@ -1,4 +1,5 @@
-﻿using System.Windows;
+﻿// Views/HelpWindow.xaml.cs
+using System.Windows;
 
 namespace AI.KB.Assistant.Views
 {

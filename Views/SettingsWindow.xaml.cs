@@ -1,9 +1,10 @@
-﻿using System.Linq;
+﻿// Views/SettingsWindow.xaml.cs
+using System.Linq;
 using System.Windows;
 using Microsoft.Win32;
+using System.IO;
 using AI.KB.Assistant.Models;
 using AI.KB.Assistant.Services;
-using System.IO;
 
 namespace AI.KB.Assistant.Views
 {
@@ -31,7 +32,7 @@ namespace AI.KB.Assistant.Views
             CmbOverwrite.SelectedItem = CmbOverwrite.Items.Cast<FrameworkElement>().FirstOrDefault(i => (string)(i as dynamic).Content == _cfg.App.OverwritePolicy);
 
             CmbClassMode.SelectedItem = CmbClassMode.Items.Cast<FrameworkElement>().FirstOrDefault(i => (string)(i as dynamic).Content == _cfg.Routing.ClassificationMode);
-            CmbGranularity.SelectedItem = CmbGranularity.Items.Cast<FrameworkElement>().FirstOrDefault(i => (string)(i as dynamic).Content == "year");
+            CmbGranularity.SelectedItem = CmbGranularity.Items.Cast<FrameworkElement>().FirstOrDefault(i => (string)(i as dynamic).Content == _cfg.Routing.TimeGranularity);
 
             SldThreshold.Value = _cfg.Classification.ConfidenceThreshold;
             LblThreshold.Text = $"{SldThreshold.Value:0.00}";
@@ -59,7 +60,7 @@ namespace AI.KB.Assistant.Views
             _cfg.App.OverwritePolicy = ((dynamic)CmbOverwrite.SelectedItem).Content.ToString();
 
             _cfg.Routing.ClassificationMode = ((dynamic)CmbClassMode.SelectedItem).Content.ToString();
-            _cfg.Routing.TimeGranularity = "year";
+            _cfg.Routing.TimeGranularity = ((dynamic)CmbGranularity.SelectedItem).Content.ToString();
 
             _cfg.Classification.ConfidenceThreshold = SldThreshold.Value;
             _cfg.Classification.AutoFolderName = TxtAutoFolder.Text.Trim();
@@ -90,6 +91,7 @@ namespace AI.KB.Assistant.Views
             Close();
         }
 
+        // 無 WinForms 的資料夾挑選（用選檔取其目錄）
         private void PickFolderRoot_Click(object sender, RoutedEventArgs e)
         {
             var dlg = new SaveFileDialog { Title = "選擇根目錄（任意輸入檔名後按儲存）", Filter = "All (*.*)|*.*" };

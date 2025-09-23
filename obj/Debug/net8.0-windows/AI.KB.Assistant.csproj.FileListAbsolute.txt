@@ -40,15 +40,15 @@ D:\GIT-DEMO\AI.KB.Assistant\bin\Debug\net8.0-windows\runtimes\win-x86\native\e_s
 D:\GIT-DEMO\AI.KB.Assistant\obj\Debug\net8.0-windows\AI.KB.Assistant.csproj.AssemblyReference.cache
 D:\GIT-DEMO\AI.KB.Assistant\obj\Debug\net8.0-windows\Views\HelpWindow.baml
 D:\GIT-DEMO\AI.KB.Assistant\obj\Debug\net8.0-windows\Views\SettingsWindow.baml
-D:\GIT-DEMO\AI.KB.Assistant\obj\Debug\net8.0-windows\MainWindow.g.cs
 D:\GIT-DEMO\AI.KB.Assistant\obj\Debug\net8.0-windows\Views\HelpWindow.g.cs
+D:\GIT-DEMO\AI.KB.Assistant\obj\Debug\net8.0-windows\Views\MainWindow.g.cs
 D:\GIT-DEMO\AI.KB.Assistant\obj\Debug\net8.0-windows\Views\SettingsWindow.g.cs
 D:\GIT-DEMO\AI.KB.Assistant\obj\Debug\net8.0-windows\App.g.cs
 D:\GIT-DEMO\AI.KB.Assistant\obj\Debug\net8.0-windows\AI.KB.Assistant_Content.g.cs
 D:\GIT-DEMO\AI.KB.Assistant\obj\Debug\net8.0-windows\GeneratedInternalTypeHelper.g.cs
 D:\GIT-DEMO\AI.KB.Assistant\obj\Debug\net8.0-windows\AI.KB.Assistant_MarkupCompile.cache
 D:\GIT-DEMO\AI.KB.Assistant\obj\Debug\net8.0-windows\AI.KB.Assistant_MarkupCompile.lref
-D:\GIT-DEMO\AI.KB.Assistant\obj\Debug\net8.0-windows\MainWindow.baml
+D:\GIT-DEMO\AI.KB.Assistant\obj\Debug\net8.0-windows\Views\MainWindow.baml
 D:\GIT-DEMO\AI.KB.Assistant\obj\Debug\net8.0-windows\AI.KB.Assistant.g.resources
 D:\GIT-DEMO\AI.KB.Assistant\obj\Debug\net8.0-windows\AI.KB.Assistant.GeneratedMSBuildEditorConfig.editorconfig
 D:\GIT-DEMO\AI.KB.Assistant\obj\Debug\net8.0-windows\AI.KB.Assistant.AssemblyInfoInputs.cache

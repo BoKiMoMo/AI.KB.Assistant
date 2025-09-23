@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿// Models/AppConfig.cs
+using System.Collections.Generic;
 
 namespace AI.KB.Assistant.Models
 {
@@ -19,7 +20,7 @@ namespace AI.KB.Assistant.Models
         public string DbPath { get; set; } = "";
         public string ProjectName { get; set; } = "DefaultProject";
         public bool DryRun { get; set; } = true;
-        public string MoveMode { get; set; } = "copy";     // copy | move
+        public string MoveMode { get; set; } = "copy"; // copy | move
         public string OverwritePolicy { get; set; } = "skip"; // skip | rename | replace
     }
 
@@ -31,7 +32,7 @@ namespace AI.KB.Assistant.Models
 
     public sealed class RoutingSection
     {
-        public string TimeGranularity { get; set; } = "year"; // year 固定，不再分月份
+        public string TimeGranularity { get; set; } = "month"; // day | month | year
         public string ClassificationMode { get; set; } = "category"; // category | project | date
         public bool SafeCategoriesOnly { get; set; } = false;
     }
@@ -44,7 +45,7 @@ namespace AI.KB.Assistant.Models
         public string AutoFolderName { get; set; } = "自整理";
 
         // v2 規則
-        public Dictionary<string, List<string>> ExtensionMap { get; set; } = new(); // 類別 → 副檔名（含點或不含點都接受）
+        public Dictionary<string, List<string>> ExtensionMap { get; set; } = new(); // 類別 → 副檔名
         public Dictionary<string, List<string>> KeywordMap { get; set; } = new(); // 類別 → 關鍵字
         public Dictionary<string, List<string>> RegexMap { get; set; } = new(); // 類別 → 正則
     }

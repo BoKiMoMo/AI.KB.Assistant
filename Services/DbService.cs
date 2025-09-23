@@ -9,116 +9,118 @@ using AI.KB.Assistant.Models;
 
 namespace AI.KB.Assistant.Services
 {
+    /// <summary>
+    /// SQLite 輕量資料層：items 表（索引與欄位與第二階段一致）
+    /// </summary>
     public sealed class DbService : IDisposable
     {
         private readonly string _connStr;
 
         public DbService(string dbPath)
         {
-            var dir = Path.GetDirectoryName(dbPath);
+            if (string.IsNullOrWhiteSpace(dbPath))
+                throw new ArgumentException("dbPath is required.", nameof(dbPath));
+
+            var dir = Path.GetDirectoryName(Path.GetFullPath(dbPath));
             if (!string.IsNullOrWhiteSpace(dir)) Directory.CreateDirectory(dir!);
+
             _connStr = $"Data Source={dbPath}";
             EnsureTables();
         }
 
         private IDbConnection Open() => new SqliteConnection(_connStr);
 
+        /// <summary>建立/升級資料表與索引（若不存在）</summary>
         private void EnsureTables()
         {
             using var cn = Open();
+
+            // items 表：與第二階段欄位對齊
             cn.Execute(@"
 CREATE TABLE IF NOT EXISTS items(
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
     path         TEXT NOT NULL,
     filename     TEXT NOT NULL,
     category     TEXT,
-    filetype     TEXT,
     confidence   REAL,
     created_ts   INTEGER,
-    year         INTEGER,
     summary      TEXT,
     reasoning    TEXT,
     status       TEXT,
     tags         TEXT,
-    project      TEXT,
-    scope_locked INTEGER DEFAULT 0
+    project      TEXT
 );
-CREATE INDEX IF NOT EXISTS idx_items_filename  ON items(filename);
-CREATE INDEX IF NOT EXISTS idx_items_category  ON items(category);
-CREATE INDEX IF NOT EXISTS idx_items_status    ON items(status);
-CREATE INDEX IF NOT EXISTS idx_items_created   ON items(created_ts);
-CREATE INDEX IF NOT EXISTS idx_items_project   ON items(project);
+CREATE INDEX IF NOT EXISTS idx_items_filename ON items(filename);
+CREATE INDEX IF NOT EXISTS idx_items_category ON items(category);
+CREATE INDEX IF NOT EXISTS idx_items_status   ON items(status);
+CREATE INDEX IF NOT EXISTS idx_items_created  ON items(created_ts);
+CREATE INDEX IF NOT EXISTS idx_items_project  ON items(project);
 ");
-
-            // 兼容舊版：嘗試補欄位（忽略失敗）
-            TryAddColumn(cn, "items", "filetype", "TEXT");
-            TryAddColumn(cn, "items", "year", "INTEGER");
-            TryAddColumn(cn, "items", "scope_locked", "INTEGER DEFAULT 0");
         }
 
-        private static void TryAddColumn(IDbConnection cn, string table, string col, string defType)
-        {
-            try
-            {
-                var exists = cn.Query<string>($"PRAGMA table_info({table});")
-                               .Any(r => string.Equals(r?.Split('|').ElementAtOrDefault(1) ?? "", col, StringComparison.OrdinalIgnoreCase));
-                if (!exists)
-                    cn.Execute($"ALTER TABLE {table} ADD COLUMN {col} {defType};");
-            }
-            catch { /* ignore */ }
-        }
+        #region CRUD / Query
 
         public long Add(Item it)
         {
-            using var cn = Open();
             const string sql = @"
-INSERT INTO items(path, filename, category, filetype, confidence, created_ts, year, summary, reasoning, status, tags, project, scope_locked)
-VALUES(@Path, @Filename, @Category, @FileType, @Confidence, @CreatedTs, @Year, @Summary, @Reasoning, @Status, @Tags, @Project, @ScopeLocked);
+INSERT INTO items(path, filename, category, confidence, created_ts, summary, reasoning, status, tags, project)
+VALUES(@Path, @Filename, @Category, @Confidence, @CreatedTs, @Summary, @Reasoning, @Status, @Tags, @Project);
 SELECT last_insert_rowid();";
+            using var cn = Open();
             return cn.ExecuteScalar<long>(sql, it);
         }
 
         public IEnumerable<Item> Recent(int days = 14)
         {
             var since = DateTimeOffset.Now.AddDays(-Math.Abs(days)).ToUnixTimeSeconds();
-            using var cn = Open();
             const string sql = @"
-SELECT path, filename, category, filetype AS FileType, confidence,
-       created_ts AS CreatedTs, year, summary, reasoning, status, tags, project, scope_locked AS ScopeLocked
+SELECT path, filename, category, confidence, created_ts AS CreatedTs,
+       summary, reasoning, status, tags, project
 FROM items
 WHERE created_ts >= @since
 ORDER BY created_ts DESC;";
+            using var cn = Open();
             return cn.Query<Item>(sql, new { since });
         }
 
         public IEnumerable<Item> ByStatus(string status)
         {
-            using var cn = Open();
             const string sql = @"
-SELECT path, filename, category, filetype AS FileType, confidence,
-       created_ts AS CreatedTs, year, summary, reasoning, status, tags, project, scope_locked AS ScopeLocked
+SELECT path, filename, category, confidence, created_ts AS CreatedTs,
+       summary, reasoning, status, tags, project
 FROM items
-WHERE LOWER(status) = LOWER(@status)
+WHERE LOWER(status)=LOWER(@status)
 ORDER BY created_ts DESC;";
+            using var cn = Open();
             return cn.Query<Item>(sql, new { status });
         }
 
         public IEnumerable<Item> Search(string keyword)
         {
-            using var cn = Open();
+            var q = "%" + (keyword ?? "").Trim() + "%";
             const string sql = @"
-SELECT path, filename, category, filetype AS FileType, confidence,
-       created_ts AS CreatedTs, year, summary, reasoning, status, tags, project, scope_locked AS ScopeLocked
+SELECT path, filename, category, confidence, created_ts AS CreatedTs,
+       summary, reasoning, status, tags, project
 FROM items
 WHERE filename LIKE @q OR category LIKE @q OR summary LIKE @q OR tags LIKE @q OR project LIKE @q
 ORDER BY created_ts DESC;";
-            var q = "%" + (keyword ?? "").Trim() + "%";
+            using var cn = Open();
             return cn.Query<Item>(sql, new { q });
         }
 
+        /// <summary>
+        /// 進階搜尋（MainWindow 呼叫版本）：
+        /// filenameLike：支援 * 萬用字元（自動轉成 %）
+        /// category/status/tag：完全比對（不分大小寫）
+        /// </summary>
         public IEnumerable<Item> SearchAdvanced(string? filenameLike, string? category, string? status, string? tag)
+            => SearchAdvanced(filenameLike, category, status, tag, project: null);
+
+        /// <summary>
+        /// 進階搜尋（含 project 過濾的擴充版本，供未來 UI 使用）
+        /// </summary>
+        public IEnumerable<Item> SearchAdvanced(string? filenameLike, string? category, string? status, string? tag, string? project)
         {
-            using var cn = Open();
             var where = new List<string>();
             var p = new DynamicParameters();
 
@@ -143,44 +145,65 @@ ORDER BY created_ts DESC;";
                 where.Add("tags LIKE @t");
                 p.Add("t", "%" + tag + "%");
             }
+            if (!string.IsNullOrWhiteSpace(project))
+            {
+                where.Add("LOWER(project) = LOWER(@p)");
+                p.Add("p", project);
+            }
 
             var sql = $@"
-SELECT path, filename, category, filetype AS FileType, confidence,
-       created_ts AS CreatedTs, year, summary, reasoning, status, tags, project, scope_locked AS ScopeLocked
+SELECT path, filename, category, confidence, created_ts AS CreatedTs,
+       summary, reasoning, status, tags, project
 FROM items
 {(where.Count > 0 ? "WHERE " + string.Join(" AND ", where) : "")}
 ORDER BY created_ts DESC;";
 
+            using var cn = Open();
             return cn.Query<Item>(sql, p);
         }
 
+        #endregion
+
+        #region Batch Updates (by path)
+
         public int UpdateStatusByPath(IEnumerable<string> paths, string status)
         {
-            var list = paths?.Where(p => !string.IsNullOrWhiteSpace(p)).Distinct().ToArray() ?? Array.Empty<string>();
+            var list = NormalizePathList(paths);
             if (list.Length == 0) return 0;
-            using var cn = Open();
+
             const string sql = @"UPDATE items SET status=@status WHERE path IN @paths;";
+            using var cn = Open();
             return cn.Execute(sql, new { status, paths = list });
         }
 
         public int UpdateTagsByPath(IEnumerable<string> paths, string tags)
         {
-            var list = paths?.Where(p => !string.IsNullOrWhiteSpace(p)).Distinct().ToArray() ?? Array.Empty<string>();
+            var list = NormalizePathList(paths);
             if (list.Length == 0) return 0;
-            using var cn = Open();
+
             const string sql = @"UPDATE items SET tags=@tags WHERE path IN @paths;";
+            using var cn = Open();
             return cn.Execute(sql, new { tags, paths = list });
         }
 
         public int UpdateCategoryByPath(IEnumerable<string> paths, string category, double confidence)
         {
-            var list = paths?.Where(p => !string.IsNullOrWhiteSpace(p)).Distinct().ToArray() ?? Array.Empty<string>();
+            var list = NormalizePathList(paths);
             if (list.Length == 0) return 0;
-            using var cn = Open();
+
             const string sql = @"UPDATE items SET category=@category, confidence=@confidence WHERE path IN @paths;";
+            using var cn = Open();
             return cn.Execute(sql, new { category, confidence, paths = list });
         }
 
-        public void Dispose() { }
+        #endregion
+
+        private static string[] NormalizePathList(IEnumerable<string> paths)
+            => paths?.Where(p => !string.IsNullOrWhiteSpace(p)).Distinct().ToArray() ?? Array.Empty<string>();
+
+        public void Dispose()
+        {
+            // using 連線；無需額外釋放
+        }
     }
 }

@@ -3,8 +3,8 @@
   "WorkspaceRootPath": "D:\\GIT-DEMO\\AI.KB.Assistant\\",
   "Documents": [
     {
-      "AbsoluteMoniker": "D:0:0:{CC8DE200-3788-4DD6-B449-A2021897A0E8}|AI.KB.Assistant.csproj|d:\\git-demo\\ai.kb.assistant\\services\\configservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{CC8DE200-3788-4DD6-B449-A2021897A0E8}|AI.KB.Assistant.csproj|solutionrelative:services\\configservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+      "AbsoluteMoniker": "D:0:0:{CC8DE200-3788-4DD6-B449-A2021897A0E8}|AI.KB.Assistant.csproj|d:\\git-demo\\ai.kb.assistant\\services\\dbservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{CC8DE200-3788-4DD6-B449-A2021897A0E8}|AI.KB.Assistant.csproj|solutionrelative:services\\dbservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     }
   ],
   "DocumentGroupContainers": [
@@ -19,14 +19,14 @@
             {
               "$type": "Document",
               "DocumentIndex": 0,
-              "Title": "ConfigService.cs",
-              "DocumentMoniker": "D:\\GIT-DEMO\\AI.KB.Assistant\\Services\\ConfigService.cs",
-              "RelativeDocumentMoniker": "Services\\ConfigService.cs",
-              "ToolTip": "D:\\GIT-DEMO\\AI.KB.Assistant\\Services\\ConfigService.cs",
-              "RelativeToolTip": "Services\\ConfigService.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAAE8AAAAzAAAAAAAAAA==",
+              "Title": "DbService.cs",
+              "DocumentMoniker": "D:\\GIT-DEMO\\AI.KB.Assistant\\Services\\DbService.cs",
+              "RelativeDocumentMoniker": "Services\\DbService.cs",
+              "ToolTip": "D:\\GIT-DEMO\\AI.KB.Assistant\\Services\\DbService.cs",
+              "RelativeToolTip": "Services\\DbService.cs",
+              "ViewState": "AgIAAMIAAAAAAAAAAAAYwNEAAAAAAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-09-22T08:27:01.735Z",
+              "WhenOpened": "2025-09-23T16:13:07.061Z",
               "EditorCaption": ""
             }
           ]
