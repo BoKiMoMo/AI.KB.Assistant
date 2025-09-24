@@ -1,25 +1,16 @@
-{
-	"App": {
-		"RootDir": "D:\\KnowledgeRoot",
-		"InboxDir": "D:\\KnowledgeRoot\\Inbox",
-		"DbPath": "D:\\KnowledgeRoot\\data.db",
-		"ProjectName": "DefaultProject",
-		"DryRun": true,
-		"Overwrite": false,
-		"MoveMode": "copy"
-	},
-	"OpenAI": {
-		"ApiKey": "",
-		"Model": "gpt-4o-mini"
-	},
-	"Routing": {
-		"SafeCategoriesOnly": true
-	},
-	"Classification": {
-		"ClassificationMode": "category",
-		"TimeGranularity": "month",
-		"FallbackCategory": "其他",
-		"Engine": "local",
-		"Style": "default"
-	}
+﻿{
+  "RootDir": "",
+  "DbPath": "main.db",
+  "DryRun": true,
+  "MoveMode": "move",
+  "OverwritePolicy": "skip",
+  "ClassificationMode": "category",
+  "TimeGranularity": "day",
+  "ConfidenceThreshold": 0.6,
+  "AutoFolderName": "自整理",
+  "ExtensionMap": {},
+  "KeywordMap": {},
+  "RegexMap": {},
+  "OpenAIApiKey": "",
+  "OpenAIModel": "gpt-4o-mini"
 }

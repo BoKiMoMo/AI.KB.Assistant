@@ -1,5 +1,4 @@
-﻿// Helpers/StringSplitConverter.cs
-using System;
+﻿using System;
 using System.Globalization;
 using System.Linq;
 using System.Windows.Data;

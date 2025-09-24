@@ -1,73 +1,51 @@
-// Services/RoutingService.cs
 using System;
-using System.Globalization;
 using System.IO;
 using AI.KB.Assistant.Models;
+using AI.KB.Assistant.Helpers;
 
 namespace AI.KB.Assistant.Services
 {
+    /// <summary>
+    /// 決定檔案要搬到哪個資料夾
+    /// </summary>
     public static class RoutingService
     {
-        public static string BuildTargetDirectory(AppConfig cfg, Item it)
+        public static string GetTargetPath(AppConfig cfg, Item item)
         {
-            var root = string.IsNullOrWhiteSpace(cfg.App.RootDir) ? "." : cfg.App.RootDir;
+            var root = cfg.RootDir;
+            if (string.IsNullOrEmpty(root)) return item.Path;
 
-            string datePart = DatePath(it.CreatedTs, cfg.Routing.TimeGranularity);
-            string sub = cfg.Routing.ClassificationMode?.ToLowerInvariant() switch
+            string datePart = "";
+            if (cfg.TimeGranularity == "year")
+                datePart = DateTimeOffset.FromUnixTimeSeconds(item.CreatedTs).Year.ToString();
+            else if (cfg.TimeGranularity == "month")
             {
-                "date" => datePart,
-                "project" => Path.Combine(Safe(cfg.App.ProjectName), datePart),
-                _ => Path.Combine(Safe(it.Category), datePart), // category
-            };
-
-            var full = Path.GetFullPath(Path.Combine(root, sub));
-            return full;
-        }
-
-        public static string BuildAutoFolder(AppConfig cfg)
-        {
-            var root = string.IsNullOrWhiteSpace(cfg.App.RootDir) ? "." : cfg.App.RootDir;
-            var auto = string.IsNullOrWhiteSpace(cfg.Classification.AutoFolderName) ? "自整理" : cfg.Classification.AutoFolderName;
-            return Path.Combine(root, Safe(auto));
-        }
-
-        private static string DatePath(long unix, string granularity)
-        {
-            if (unix <= 0) unix = DateTimeOffset.Now.ToUnixTimeSeconds();
-            var dt = DateTimeOffset.FromUnixTimeSeconds(unix).ToLocalTime().DateTime;
-
-            return (granularity?.ToLowerInvariant()) switch
+                var dt = DateTimeOffset.FromUnixTimeSeconds(item.CreatedTs);
+                datePart = $"{dt:yyyy-MM}";
+            }
+            else if (cfg.TimeGranularity == "day")
             {
-                "day" => Path.Combine(dt.ToString("yyyy", CultureInfo.InvariantCulture),
-                                       dt.ToString("MM", CultureInfo.InvariantCulture),
-                                       dt.ToString("dd", CultureInfo.InvariantCulture)),
-                "year" => dt.ToString("yyyy", CultureInfo.InvariantCulture),
-                _ => Path.Combine(dt.ToString("yyyy", CultureInfo.InvariantCulture),
-                                       dt.ToString("MM", CultureInfo.InvariantCulture)),
-            };
+                var dt = DateTimeOffset.FromUnixTimeSeconds(item.CreatedTs);
+                datePart = $"{dt:yyyy-MM-dd}";
+            }
+
+            var proj = string.IsNullOrEmpty(item.Project) ? "General" : item.Project;
+            var category = string.IsNullOrEmpty(item.Category) ? cfg.AutoFolderName : item.Category;
+            var fileType = string.IsNullOrEmpty(item.FileType) ? "Other" : item.FileType;
+
+            var safeName = SanitizeFileName(item.Filename);
+
+            var dir = Path.Combine(root, datePart, proj, category, fileType);
+            Directory.CreateDirectory(dir);
+
+            return Path.Combine(dir, safeName);
         }
 
-        public static string Safe(string? name)
+        private static string SanitizeFileName(string name)
         {
-            name ??= "";
-            foreach (var ch in Path.GetInvalidFileNameChars()) name = name.Replace(ch, '_');
-            return name.Trim();
-        }
-
-        public static string ResolveCollision(string path)
-        {
-            if (!File.Exists(path)) return path;
-            string dir = Path.GetDirectoryName(path)!;
-            string name = Path.GetFileNameWithoutExtension(path);
-            string ext = Path.GetExtension(path);
-            int i = 1;
-            string candidate;
-            do
-            {
-                candidate = Path.Combine(dir, $"{name} ({i}){ext}");
-                i++;
-            } while (File.Exists(candidate));
-            return candidate;
+            foreach (var c in Path.GetInvalidFileNameChars())
+                name = name.Replace(c, '_');
+            return name;
         }
     }
 }

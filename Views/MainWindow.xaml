@@ -1,231 +1,131 @@
-﻿<Window x:Class="AI.KB.Assistant.MainWindow"
+﻿<Window x:Class="AI.KB.Assistant.Views.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:h="clr-namespace:AI.KB.Assistant.Helpers"
-        Title="AI 知識庫助手（第二階段）"
-        Height="800" Width="1280"
-        MinHeight="600" MinWidth="980"
+        xmlns:local="clr-namespace:AI.KB.Assistant.Helpers"
+        Title="AI 本地知識庫（第二階段）"
+        Height="760" Width="1280"
         WindowStartupLocation="CenterScreen"
         AllowDrop="True"
         Drop="Window_Drop"
         DragEnter="Window_DragEnter">
 
-    <!-- 全域資源 -->
     <Window.Resources>
-        <h:UnixToDateConverter x:Key="UnixToDateConverter"/>
-        <h:StringSplitConverter x:Key="StringSplitConverter"/>
-
-        <!-- Tag Badge 樣式 -->
-        <Style x:Key="TagBadge" TargetType="Border">
-            <Setter Property="CornerRadius" Value="8"/>
-            <Setter Property="Padding" Value="2,0"/>
-            <Setter Property="Margin" Value="2"/>
-            <Setter Property="Background" Value="#223a5a"/>
-            <Setter Property="BorderBrush" Value="#2e7cf6"/>
-            <Setter Property="BorderThickness" Value="1"/>
-        </Style>
-
-        <!-- TreeViewItem（含 CheckBox 的外觀） -->
-        <HierarchicalDataTemplate x:Key="PathTreeTemplate" ItemsSource="{Binding Children}">
-            <StackPanel Orientation="Horizontal">
-                <CheckBox Content="{Binding Name}"
-                          IsChecked="{Binding IsChecked, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                          Checked="PathNode_Checked"
-                          Unchecked="PathNode_Unchecked"
-                          VerticalAlignment="Center"/>
-            </StackPanel>
-        </HierarchicalDataTemplate>
+        <local:UnixToDateConverter x:Key="UnixToDateConverter"/>
+        <local:StringSplitConverter x:Key="StringSplitConverter"/>
     </Window.Resources>
 
-    <DockPanel LastChildFill="True" Margin="10">
-
+    <DockPanel>
         <!-- 上方工具列 -->
-        <Grid DockPanel.Dock="Top" Margin="0,0,0,8">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="Auto"/>
-            </Grid.ColumnDefinitions>
+        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Background="#EEE" Margin="5">
+            <TextBox x:Name="SearchBox" Width="260" Height="26" Margin="0,0,8,0"/>
+            <Button Content="搜尋" Width="70" Margin="0,0,8,0" Click="BtnSearch_Click"/>
+            <Button Content="清除" Width="70" Margin="0,0,8,0" Click="BtnClearSearch_Click"/>
+            <Button Content="搬檔" Width="70" Margin="0,0,8,0" Click="BtnExecuteMove_Click"/>
+            <Button Content="取消" Width="70" Margin="0,0,8,0" Click="BtnCancelQueue_Click"/>
+            <Button Content="復原" Width="70" Margin="0,0,8,0" Click="BtnUndo_Click"/>
+            <Button Content="重做" Width="70" Margin="0,0,8,0" Click="BtnRedo_Click"/>
+            <Button Content="設定" Width="70" Margin="0,0,8,0" Click="BtnSettings_Click"/>
+            <Button Content="說明" Width="70" Margin="0,0,8,0" Click="BtnHelp_Click"/>
+            <TextBlock x:Name="StatSummary" VerticalAlignment="Center" Margin="12,0,0,0"/>
+        </StackPanel>
 
-            <!-- 左：搜尋與視圖切換 -->
-            <StackPanel Orientation="Horizontal">
-                <!-- 搜尋框 -->
-                <Grid Width="360" Height="28" Margin="0,0,6,0">
-                    <TextBox x:Name="SearchBox"
-                             VerticalContentAlignment="Center"
-                             KeyDown="SearchBox_KeyDown"/>
-                    <!-- 水印 -->
-                    <TextBlock Margin="6,0,0,0" VerticalAlignment="Center" Foreground="#88000000" IsHitTestVisible="False"
-                               Text="搜尋：filename:*.pdf  tag:發票  status:pending  category:財務">
-                        <TextBlock.Style>
-                            <Style TargetType="TextBlock">
-                                <Setter Property="Visibility" Value="Collapsed"/>
-                                <Style.Triggers>
-                                    <MultiDataTrigger>
-                                        <MultiDataTrigger.Conditions>
-                                            <Condition Binding="{Binding Text, ElementName=SearchBox}" Value=""/>
-                                            <Condition Binding="{Binding IsKeyboardFocusWithin, ElementName=SearchBox}" Value="False"/>
-                                        </MultiDataTrigger.Conditions>
-                                        <Setter Property="Visibility" Value="Visible"/>
-                                    </MultiDataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </TextBlock.Style>
-                    </TextBlock>
-                </Grid>
-
-                <Button Content="搜尋" Width="80" Margin="0,0,6,0" Click="BtnSearch_Click"/>
-                <Button Content="清除" Width="64" Margin="0,0,8,0" Click="BtnClearSearch_Click"/>
-
-                <Separator Width="12"/>
-
-                <Button Content="最近" Width="80" Margin="0,0,6,0" Click="BtnRecent_Click"/>
-                <Button Content="處理中" Width="80" Margin="0,0,6,0" Click="BtnProgress_Click"/>
-                <Button Content="待處理" Width="80" Margin="0,0,6,0" Click="BtnPending_Click"/>
-                <Button Content="我的最愛" Width="100" Margin="0,0,6,0" Click="BtnFavorite_Click"/>
-                <Button Content="自整理" Width="80" Margin="0,0,6,0" Click="BtnAutoSorted_Click"/>
-
-                <Separator Width="12"/>
-
-                <Button Content="執行搬檔" Width="100" Margin="0,0,6,0" Click="BtnExecuteMove_Click"/>
-                <Button Content="取消佇列" Width="100" Margin="0,0,6,0" Click="BtnCancelQueue_Click"/>
-                <Button Content="Undo" Width="64" Margin="0,0,6,0" Click="BtnUndo_Click"/>
-                <Button Content="Redo" Width="64" Margin="0,0,6,0" Click="BtnRedo_Click"/>
-            </StackPanel>
-
-            <!-- 右：說明與設定 -->
-            <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
-                <Button Content="使用教學" Width="100" Margin="6,0,0,0" Click="BtnHelp_Click"/>
-                <Button Content="設定" Width="80" Margin="6,0,0,0" Click="BtnSettings_Click"/>
-            </StackPanel>
-        </Grid>
-
-        <!-- 中央主區塊（左 路徑樹 / 中 清單 / 右 預覽＋統計） -->
+        <!-- 主區域 -->
         <Grid>
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="260"/>
-                <ColumnDefinition Width="8"/>
+                <ColumnDefinition Width="250"/>
                 <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="8"/>
-                <ColumnDefinition Width="360"/>
+                <ColumnDefinition Width="350"/>
             </Grid.ColumnDefinitions>
-            <Grid.RowDefinitions>
-                <RowDefinition Height="*"/>
-                <RowDefinition Height="28"/>
-            </Grid.RowDefinitions>
 
-            <!-- 左：路徑樹 -->
-            <GroupBox Grid.Column="0" Header="路徑表（Ctrl+點：多選；Shift+點：排除）" Margin="0,0,0,8">
-                <TreeView x:Name="PathTree"
-                          ItemTemplate="{StaticResource PathTreeTemplate}"
-                          SelectedItemChanged="PathTree_SelectedItemChanged"/>
-            </GroupBox>
-
-            <!-- 中：清單 -->
-            <ListView x:Name="ListView" Grid.Column="2" Grid.Row="0" Margin="0,0,0,8"
-                      SelectionMode="Extended" SelectionChanged="ListView_SelectionChanged">
-                <ListView.View>
-                    <GridView AllowsColumnReorder="True">
-                        <GridViewColumn Header="檔案" DisplayMemberBinding="{Binding Filename}" Width="320"/>
-                        <GridViewColumn Header="業務" DisplayMemberBinding="{Binding Category}" Width="120"/>
-                        <GridViewColumn Header="標籤" Width="220">
-                            <GridViewColumn.CellTemplate>
-                                <DataTemplate>
-                                    <ItemsControl>
-                                        <ItemsControl.ItemsSource>
-                                            <Binding Path="Tags" Converter="{StaticResource StringSplitConverter}"/>
-                                        </ItemsControl.ItemsSource>
-                                        <ItemsControl.ItemsPanel>
-                                            <ItemsPanelTemplate>
-                                                <WrapPanel/>
-                                            </ItemsPanelTemplate>
-                                        </ItemsControl.ItemsPanel>
-                                        <ItemsControl.ItemTemplate>
-                                            <DataTemplate>
-                                                <Border Style="{StaticResource TagBadge}">
-                                                    <TextBlock Text="{Binding}" Margin="4,0"/>
-                                                </Border>
-                                            </DataTemplate>
-                                        </ItemsControl.ItemTemplate>
-                                    </ItemsControl>
-                                </DataTemplate>
-                            </GridViewColumn.CellTemplate>
-                        </GridViewColumn>
-                        <GridViewColumn Header="型態" DisplayMemberBinding="{Binding FileType}" Width="90"/>
-                        <GridViewColumn Header="信心" DisplayMemberBinding="{Binding Confidence}" Width="70"/>
-                        <GridViewColumn Header="狀態" DisplayMemberBinding="{Binding Status}" Width="100"/>
-                        <GridViewColumn Header="建立日" Width="110">
-                            <GridViewColumn.CellTemplate>
-                                <DataTemplate>
-                                    <TextBlock Text="{Binding CreatedTs, Converter={StaticResource UnixToDateConverter}}"/>
-                                </DataTemplate>
-                            </GridViewColumn.CellTemplate>
-                        </GridViewColumn>
-                    </GridView>
-                </ListView.View>
-
-                <!-- 右鍵選單 -->
-                <ListView.ContextMenu>
-                    <ContextMenu>
-                        <MenuItem Header="加入我的最愛" Click="MarkFavorite_Click"/>
-                        <MenuItem Header="設為處理中" Click="MarkInProgress_Click"/>
-                        <MenuItem Header="設為待處理" Click="MarkPending_Click"/>
-                        <Separator/>
-                        <MenuItem Header="新增標籤…" Click="AddTag_Click"/>
-                        <MenuItem Header="移除標籤…" Click="RemoveTag_Click"/>
-                        <Separator/>
-                        <MenuItem Header="重跑分類" Click="Reclassify_Click"/>
-                    </ContextMenu>
-                </ListView.ContextMenu>
-            </ListView>
-
-            <!-- 右：預覽 + 統計 -->
-            <DockPanel Grid.Column="4" Grid.Row="0">
-                <GroupBox Header="預覽" Margin="0,0,0,8">
-                    <Grid>
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="*"/>
-                        </Grid.RowDefinitions>
-
-                        <TextBlock x:Name="PreviewHeader" Margin="8" Text="（選取檔案以預覽）"
-                                   FontWeight="SemiBold" />
-
-                        <ScrollViewer Grid.Row="1" Margin="8" VerticalScrollBarVisibility="Auto">
-                            <StackPanel>
-                                <Image x:Name="PreviewImage" MaxWidth="320" Visibility="Collapsed" Margin="0,0,0,8"/>
-                                <TextBox x:Name="PreviewText"
-                                         IsReadOnly="True"
-                                         Visibility="Collapsed"
-                                         TextWrapping="Wrap"
-                                         VerticalScrollBarVisibility="Auto"
-                                         Height="280"/>
+            <!-- 左側路徑樹 -->
+            <Border Grid.Column="0" BorderBrush="#CCC" BorderThickness="0,0,1,0" Padding="5">
+                <TreeView x:Name="PathTree" SelectedItemChanged="PathTree_SelectedItemChanged">
+                    <TreeView.ItemTemplate>
+                        <HierarchicalDataTemplate ItemsSource="{Binding Children}">
+                            <StackPanel Orientation="Horizontal">
+                                <CheckBox Content="{Binding Name}"
+                                          IsChecked="{Binding IsChecked, Mode=TwoWay}"
+                                          Checked="PathNode_Checked"
+                                          Unchecked="PathNode_Unchecked"/>
                             </StackPanel>
-                        </ScrollViewer>
-                    </Grid>
-                </GroupBox>
+                        </HierarchicalDataTemplate>
+                    </TreeView.ItemTemplate>
+                </TreeView>
+            </Border>
 
-                <GroupBox Header="統計">
-                    <StackPanel Margin="8">
-                        <TextBlock x:Name="StatSummary"
-                                   Text="本週新增：0；我的最愛：0；自整理：0"/>
+            <!-- 中間檔案清單 -->
+            <Grid Grid.Column="1">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="120"/>
+                </Grid.RowDefinitions>
+
+                <ListView x:Name="FileList" Grid.Row="0"
+                          SelectionMode="Extended"
+                          SelectionChanged="FileList_SelectionChanged">
+                    <ListView.View>
+                        <GridView>
+                            <GridViewColumn Header="檔名" Width="220" DisplayMemberBinding="{Binding Filename}"/>
+                            <GridViewColumn Header="分類" Width="100" DisplayMemberBinding="{Binding Category}"/>
+                            <GridViewColumn Header="狀態" Width="100" DisplayMemberBinding="{Binding Status}"/>
+                            <GridViewColumn Header="標籤" Width="150">
+                                <GridViewColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <ItemsControl ItemsSource="{Binding Tags, Converter={StaticResource StringSplitConverter}}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Border Background="#DDD" Margin="2,0" Padding="4,1" CornerRadius="3">
+                                                        <TextBlock Text="{Binding}" FontSize="12"/>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </DataTemplate>
+                                </GridViewColumn.CellTemplate>
+                            </GridViewColumn>
+                            <GridViewColumn Header="信心" Width="80" DisplayMemberBinding="{Binding Confidence}"/>
+                            <GridViewColumn Header="日期" Width="100">
+                                <GridViewColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding CreatedTs, Converter={StaticResource UnixToDateConverter}}"/>
+                                    </DataTemplate>
+                                </GridViewColumn.CellTemplate>
+                            </GridViewColumn>
+                        </GridView>
+                    </ListView.View>
+                </ListView>
+
+                <TextBlock x:Name="SelectionInfo"
+                           Grid.Row="1"
+                           Margin="5"
+                           VerticalAlignment="Center"/>
+            </Grid>
+
+            <!-- 右側預覽區 -->
+            <DockPanel Grid.Column="2" LastChildFill="True" Margin="5">
+                <TextBlock x:Name="PreviewHeader" FontWeight="Bold" FontSize="14" DockPanel.Dock="Top" Margin="0,0,0,6"/>
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel>
+                        <Image x:Name="PreviewImage" MaxHeight="200" Stretch="Uniform" Visibility="Collapsed"/>
+                        <TextBox x:Name="PreviewText"
+                                 IsReadOnly="True"
+                                 TextWrapping="Wrap"
+                                 AcceptsReturn="True"
+                                 Visibility="Collapsed"
+                                 VerticalScrollBarVisibility="Auto"/>
                     </StackPanel>
-                </GroupBox>
-            </DockPanel>
-
-            <!-- 底部：進度條 + 選取摘要 -->
-            <DockPanel Grid.Row="1" Grid.ColumnSpan="5" LastChildFill="True">
-                <ProgressBar x:Name="Progress" Height="18" Minimum="0" Maximum="100" Margin="0,0,8,0" Width="300"/>
-                <TextBlock x:Name="SelectionInfo" VerticalAlignment="Center"/>
+                </ScrollViewer>
             </DockPanel>
         </Grid>
 
-        <!-- 最下方：Log -->
-        <GroupBox DockPanel.Dock="Bottom" Header="記錄" Margin="0,8,0,0">
+        <!-- 下方 Log -->
+        <DockPanel DockPanel.Dock="Bottom" Height="140">
             <TextBox x:Name="TxtLog"
-                     Height="140"
                      IsReadOnly="True"
+                     AcceptsReturn="True"
                      TextWrapping="Wrap"
                      VerticalScrollBarVisibility="Auto"/>
-        </GroupBox>
+            <Button Content="清除" DockPanel.Dock="Right" Width="70" Click="BtnClearLog_Click"/>
+        </DockPanel>
     </DockPanel>
 </Window>

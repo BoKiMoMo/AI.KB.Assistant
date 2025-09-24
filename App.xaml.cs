@@ -2,5 +2,7 @@
 
 namespace AI.KB.Assistant
 {
-    public partial class App : Application { }
+    public partial class App : Application
+    {
+    }
 }

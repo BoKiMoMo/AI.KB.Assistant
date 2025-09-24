@@ -10,6 +10,7 @@ D:\GIT-DEMO\AI.KB.Assistant\bin\Debug\net8.0-windows\Microsoft.Data.Sqlite.dll
 D:\GIT-DEMO\AI.KB.Assistant\bin\Debug\net8.0-windows\Microsoft.Extensions.DependencyInjection.Abstractions.dll
 D:\GIT-DEMO\AI.KB.Assistant\bin\Debug\net8.0-windows\Microsoft.Extensions.Logging.Abstractions.dll
 D:\GIT-DEMO\AI.KB.Assistant\bin\Debug\net8.0-windows\Newtonsoft.Json.dll
+D:\GIT-DEMO\AI.KB.Assistant\bin\Debug\net8.0-windows\Ookii.Dialogs.Wpf.dll
 D:\GIT-DEMO\AI.KB.Assistant\bin\Debug\net8.0-windows\OpenAI.dll
 D:\GIT-DEMO\AI.KB.Assistant\bin\Debug\net8.0-windows\SQLitePCLRaw.batteries_v2.dll
 D:\GIT-DEMO\AI.KB.Assistant\bin\Debug\net8.0-windows\SQLitePCLRaw.core.dll

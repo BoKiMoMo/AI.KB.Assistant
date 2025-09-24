@@ -1,17 +1,19 @@
-// Models/Item.cs
 namespace AI.KB.Assistant.Models
 {
-    public sealed class Item
+    /// <summary>
+    /// 單一檔案的資料列
+    /// </summary>
+    public class Item
     {
+        public int Id { get; set; }
         public string Path { get; set; } = "";
         public string Filename { get; set; } = "";
         public string Category { get; set; } = "";
+        public string Status { get; set; } = "";
+        public string Tags { get; set; } = "";
+        public string Project { get; set; } = "";
+        public string FileType { get; set; } = "";
         public double Confidence { get; set; }
         public long CreatedTs { get; set; }
-        public string Summary { get; set; } = "";
-        public string Reasoning { get; set; } = "";
-        public string Status { get; set; } = "normal"; // normal / pending / in-progress / favorite / auto-sorted
-        public string Tags { get; set; } = "";         // 逗號分隔
-        public string Project { get; set; } = "DefaultProject";
     }
 }

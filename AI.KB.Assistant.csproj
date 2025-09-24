@@ -1,38 +1,40 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
-    <OutputType>WinExe</OutputType>
-    <TargetFramework>net8.0-windows</TargetFramework>
-    <Nullable>enable</Nullable>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <UseWPF>true</UseWPF>
-    <UseWindowsForms>false</UseWindowsForms>
-  </PropertyGroup>
+	<PropertyGroup>
+		<OutputType>WinExe</OutputType>
+		<TargetFramework>net8.0-windows</TargetFramework>
+		<Nullable>enable</Nullable>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<UseWPF>true</UseWPF>
+		<UseWindowsForms>false</UseWindowsForms>
+	</PropertyGroup>
 
-  <ItemGroup>
-    <Compile Remove="Helpers\Converters.cs" />
-    <Compile Remove="Helpers\TimePathHelper.cs" />
-    <Compile Remove="Helpers\UnixToDateConverter - 複製.cs" />
-    <Compile Remove="Models\ClassificationResult.cs" />
-    <Compile Remove="Services\ClassifierService.cs" />
-  </ItemGroup>
+	<ItemGroup>
+		<Compile Remove="Helpers\Converters.cs" />
+		<Compile Remove="Helpers\TimePathHelper.cs" />
+		<Compile Remove="Helpers\UnixToDateConverter - 複製.cs" />
+		<Compile Remove="Models\ClassificationResult.cs" />
+		<Compile Remove="Services\ClassifierService.cs" />
+	</ItemGroup>
 
-  <ItemGroup>
-    <None Remove="config.json" />
-  </ItemGroup>
+	<ItemGroup>
+		<None Remove="config.json" />
+	</ItemGroup>
 
-  <ItemGroup>
-    <Content Include="config.json">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </Content>
-  </ItemGroup>
+	<ItemGroup>
+		<Content Include="config.json">
+			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</Content>
+	</ItemGroup>
 
-  <ItemGroup>
-    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
-    <PackageReference Include="Dapper" Version="2.1.66" />
-    <PackageReference Include="Microsoft.Data.Sqlite" Version="9.0.8" />
-    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
-    <PackageReference Include="OpenAI" Version="2.3.0" />
-  </ItemGroup>
+	<ItemGroup>
+		<PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
+		<PackageReference Include="Dapper" Version="2.1.66" />
+		<PackageReference Include="Microsoft.Data.Sqlite" Version="9.0.8" />
+		<PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+		<PackageReference Include="OpenAI" Version="2.3.0" />
+		<!-- 新增：WPF 專用資料夾選擇對話框 -->
+		<PackageReference Include="Ookii.Dialogs.Wpf" Version="5.0.1" />
+	</ItemGroup>
 
 </Project>
