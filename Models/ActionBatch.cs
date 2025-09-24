@@ -1,13 +1,50 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 
 namespace AI.KB.Assistant.Models
 {
-    /// <summary>
-    /// 用於 Undo/Redo 的批次動作
-    /// </summary>
     public class ActionBatch
     {
-        public string Action { get; set; } = ""; // e.g. "MoveFiles", "UpdateTags"
-        public List<Item> Items { get; set; } = new();
+        public string Name { get; set; } = "";
+        public Action Do { get; set; } = () => { };
+        public Action Undo { get; set; } = () => { };
+    }
+
+    public class UndoStack
+    {
+        private readonly Stack<ActionBatch> _undos = new();
+        private readonly Stack<ActionBatch> _redos = new();
+
+        public void Push(ActionBatch b)
+        {
+            _undos.Push(b);
+            _redos.Clear();
+            b.Do();
+        }
+
+        public bool CanUndo => _undos.Count > 0;
+        public bool CanRedo => _redos.Count > 0;
+
+        public void Undo()
+        {
+            if (!CanUndo) return;
+            var b = _undos.Pop();
+            b.Undo();
+            _redos.Push(b);
+        }
+
+        public void Redo()
+        {
+            if (!CanRedo) return;
+            var b = _redos.Pop();
+            b.Do();
+            _undos.Push(b);
+        }
+
+        public void Clear()
+        {
+            _undos.Clear();
+            _redos.Clear();
+        }
     }
 }

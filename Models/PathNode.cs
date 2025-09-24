@@ -1,43 +1,29 @@
 ﻿using System.Collections.ObjectModel;
 using System.ComponentModel;
-using System.Runtime.CompilerServices;
 
 namespace AI.KB.Assistant.Models
 {
-    /// <summary>
-    /// 路徑樹節點（供 MainWindow 的 TreeView 使用）
-    /// </summary>
-    public sealed class PathNode : INotifyPropertyChanged
+    public class PathNode : INotifyPropertyChanged
     {
-        private string _name = "";
-        private string _fullPath = "";
+        public string Name { get; set; } = "";
+        public string FullPath { get; set; } = "";
+        public ObservableCollection<PathNode> Children { get; set; } = new();
+
         private bool _isChecked;
-
-        public string Name
-        {
-            get => _name; set { _name = value; OnPropertyChanged(); }
-        }
-
-        public string FullPath
-        {
-            get => _fullPath; set { _fullPath = value; OnPropertyChanged(); }
-        }
-
         public bool IsChecked
         {
-            get => _isChecked; set { _isChecked = value; OnPropertyChanged(); }
+            get => _isChecked;
+            set { _isChecked = value; PropertyChanged?.Invoke(this, new(nameof(IsChecked))); }
         }
 
-        public ObservableCollection<PathNode> Children { get; } = new();
-
-        public void SetChecked(bool val)
+        private bool _isExcluded;
+        public bool IsExcluded
         {
-            IsChecked = val;
-            foreach (var c in Children) c.SetChecked(val);
+            get => _isExcluded;
+            set { _isExcluded = value; PropertyChanged?.Invoke(this, new(nameof(IsExcluded))); }
         }
 
         public event PropertyChangedEventHandler? PropertyChanged;
-        private void OnPropertyChanged([CallerMemberName] string? name = null)
-            => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+        public override string ToString() => IsExcluded ? $"{Name} (排除)" : Name;
     }
 }

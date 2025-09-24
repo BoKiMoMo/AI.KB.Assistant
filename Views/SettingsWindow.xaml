@@ -1,36 +1,59 @@
 ﻿<Window x:Class="AI.KB.Assistant.Views.SettingsWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="設定" Height="420" Width="600"
-        WindowStartupLocation="CenterOwner">
-    <StackPanel Margin="12">
-        <TextBlock Text="根目錄：" Margin="0,4"/>
-        <StackPanel Orientation="Horizontal">
-            <TextBox x:Name="TxtRootDir" Width="400"/>
-            <Button Content="選擇" Width="60" Margin="6,0,0,0" Click="BtnBrowseRoot_Click"/>
+        Title="設定" Height="520" Width="640" WindowStartupLocation="CenterOwner">
+    <Grid Margin="12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto">
+            <StackPanel>
+
+                <TextBlock Text="根目錄 Root" FontWeight="Bold" Margin="0,0,0,4"/>
+                <TextBox x:Name="TxtRoot" Margin="0,0,0,8"/>
+
+                <TextBlock Text="專案名稱 Project" FontWeight="Bold" Margin="0,6,0,4"/>
+                <TextBox x:Name="TxtProject" Margin="0,0,0,8"/>
+
+                <TextBlock Text="搬檔模式（Copy / Move）" FontWeight="Bold" Margin="0,6,0,4"/>
+                <TextBox x:Name="TxtRoutingMode" Margin="0,0,0,8"/>
+
+                <CheckBox x:Name="ChkYear" Content="加入年份資料夾" Margin="0,6,0,10"/>
+
+                <Separator/>
+
+                <TextBlock Text="AI / LLM" FontWeight="Bold" Margin="0,12,0,6"/>
+                <TextBlock Text="OpenAI API Key"/>
+                <PasswordBox x:Name="TxtApiKey" Margin="0,0,0,8"/>
+                <TextBlock Text="Chat Model"/>
+                <TextBox x:Name="TxtModel" Margin="0,0,0,8"/>
+                <TextBlock Text="Embedding Model"/>
+                <TextBox x:Name="TxtEmb" Margin="0,0,0,8"/>
+
+                <TextBlock Text="溫度" />
+                <TextBox x:Name="TxtTemp" Margin="0,0,0,8"/>
+                <TextBlock Text="Max Tokens" />
+                <TextBox x:Name="TxtMaxTok" Margin="0,0,0,8"/>
+
+                <Separator/>
+
+                <CheckBox x:Name="ChkAuto" Content="自整理（Auto Classify）" Margin="0,12,0,4"/>
+                <TextBlock Text="信心門檻（0~1）"/>
+                <TextBox x:Name="TxtConf" Margin="0,0,0,8"/>
+
+                <Separator/>
+
+                <CheckBox x:Name="ChkSemantic" Content="啟用語意搜尋" Margin="0,12,0,4"/>
+                <TextBlock Text="TopK（重排候選數）"/>
+                <TextBox x:Name="TxtTopK" Margin="0,0,0,8"/>
+            </StackPanel>
+        </ScrollViewer>
+
+        <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button Content="儲存" Width="88" Margin="0,8,8,0" Click="BtnSave_Click"/>
+            <Button Content="取消" Width="88" Margin="0,8,0,0" Click="BtnCancel_Click"/>
         </StackPanel>
-
-        <TextBlock Text="資料庫：" Margin="0,8"/>
-        <TextBox x:Name="TxtDbPath" Width="400"/>
-
-        <CheckBox x:Name="ChkDryRun" Content="DryRun 模式" Margin="0,8"/>
-        <TextBlock Text="搬檔模式：" Margin="0,4"/>
-        <ComboBox x:Name="CmbMoveMode" Width="150">
-            <ComboBoxItem Content="copy"/>
-            <ComboBoxItem Content="move"/>
-        </ComboBox>
-
-        <TextBlock Text="覆寫策略：" Margin="0,8"/>
-        <ComboBox x:Name="CmbOverwrite" Width="150">
-            <ComboBoxItem Content="skip"/>
-            <ComboBoxItem Content="rename"/>
-            <ComboBoxItem Content="replace"/>
-        </ComboBox>
-
-        <CheckBox x:Name="ChkClose" Content="關閉視窗後套用" Margin="0,12"/>
-        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
-            <Button Content="確定" Width="80" Margin="6,0,0,0" Click="BtnOk_Click"/>
-            <Button Content="取消" Width="80" Margin="6,0,0,0" Click="BtnCancel_Click"/>
-        </StackPanel>
-    </StackPanel>
+    </Grid>
 </Window>

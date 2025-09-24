@@ -1,12 +1,37 @@
 {
   "Version": 1,
-  "WorkspaceRootPath": "D:\\GIT-DEMO\\AI.KB.Assistant\\",
-  "Documents": [],
+  "WorkspaceRootPath": "F:\\C\u002B\u002B \u00D7 \u6280\u8853\u82F1\u6587\u990A\u6210\u8A08\u756B\\AI.KB.Assistant\\",
+  "Documents": [
+    {
+      "AbsoluteMoniker": "D:0:0:{CC8DE200-3788-4DD6-B449-A2021897A0E8}|AI.KB.Assistant.csproj|f:\\c\u002B\u002B \u00D7 \u6280\u8853\u82F1\u6587\u990A\u6210\u8A08\u756B\\ai.kb.assistant\\helpers\\panelspacing.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{CC8DE200-3788-4DD6-B449-A2021897A0E8}|AI.KB.Assistant.csproj|solutionrelative:helpers\\panelspacing.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    }
+  ],
   "DocumentGroupContainers": [
     {
       "Orientation": 0,
       "VerticalTabListWidth": 256,
-      "DocumentGroups": []
+      "DocumentGroups": [
+        {
+          "DockedWidth": 200,
+          "SelectedChildIndex": 0,
+          "Children": [
+            {
+              "$type": "Document",
+              "DocumentIndex": 0,
+              "Title": "PanelSpacing.cs",
+              "DocumentMoniker": "F:\\C\u002B\u002B \u00D7 \u6280\u8853\u82F1\u6587\u990A\u6210\u8A08\u756B\\AI.KB.Assistant\\Helpers\\PanelSpacing.cs",
+              "RelativeDocumentMoniker": "Helpers\\PanelSpacing.cs",
+              "ToolTip": "F:\\C\u002B\u002B \u00D7 \u6280\u8853\u82F1\u6587\u990A\u6210\u8A08\u756B\\AI.KB.Assistant\\Helpers\\PanelSpacing.cs",
+              "RelativeToolTip": "Helpers\\PanelSpacing.cs",
+              "ViewState": "AgIAADkAAAAAAAAAAAAAAE0AAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-09-24T18:21:38.519Z",
+              "EditorCaption": ""
+            }
+          ]
+        }
+      ]
     }
   ]
 }

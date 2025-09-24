@@ -62,3 +62,14 @@ D:\GIT-DEMO\AI.KB.Assistant\obj\Debug\net8.0-windows\refint\AI.KB.Assistant.dll
 D:\GIT-DEMO\AI.KB.Assistant\obj\Debug\net8.0-windows\AI.KB.Assistant.pdb
 D:\GIT-DEMO\AI.KB.Assistant\obj\Debug\net8.0-windows\AI.KB.Assistant.genruntimeconfig.cache
 D:\GIT-DEMO\AI.KB.Assistant\obj\Debug\net8.0-windows\ref\AI.KB.Assistant.dll
+F:\C++ × 技術英文養成計畫\AI.KB.Assistant\obj\Debug\net8.0-windows\AI.KB.Assistant.csproj.AssemblyReference.cache
+F:\C++ × 技術英文養成計畫\AI.KB.Assistant\obj\Debug\net8.0-windows\Views\HelpWindow.baml
+F:\C++ × 技術英文養成計畫\AI.KB.Assistant\obj\Debug\net8.0-windows\Views\SettingsWindow.baml
+F:\C++ × 技術英文養成計畫\AI.KB.Assistant\obj\Debug\net8.0-windows\Views\HelpWindow.g.cs
+F:\C++ × 技術英文養成計畫\AI.KB.Assistant\obj\Debug\net8.0-windows\Views\MainWindow.g.cs
+F:\C++ × 技術英文養成計畫\AI.KB.Assistant\obj\Debug\net8.0-windows\Views\SettingsWindow.g.cs
+F:\C++ × 技術英文養成計畫\AI.KB.Assistant\obj\Debug\net8.0-windows\App.g.cs
+F:\C++ × 技術英文養成計畫\AI.KB.Assistant\obj\Debug\net8.0-windows\AI.KB.Assistant_Content.g.cs
+F:\C++ × 技術英文養成計畫\AI.KB.Assistant\obj\Debug\net8.0-windows\GeneratedInternalTypeHelper.g.cs
+F:\C++ × 技術英文養成計畫\AI.KB.Assistant\obj\Debug\net8.0-windows\AI.KB.Assistant_MarkupCompile.cache
+F:\C++ × 技術英文養成計畫\AI.KB.Assistant\obj\Debug\net8.0-windows\AI.KB.Assistant_MarkupCompile.lref

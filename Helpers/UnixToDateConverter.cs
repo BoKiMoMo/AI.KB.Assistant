@@ -4,23 +4,20 @@ using System.Windows.Data;
 
 namespace AI.KB.Assistant.Helpers
 {
-    /// <summary>Unix 秒 → yyyy-MM-dd（本地時區）</summary>
     public class UnixToDateConverter : IValueConverter
     {
         public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
         {
+            if (value == null) return "";
             try
             {
-                if (value == null) return "";
                 long ts = System.Convert.ToInt64(value);
-                return DateTimeOffset.FromUnixTimeSeconds(ts)
-                                     .ToLocalTime()
-                                     .ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+                return DateTimeOffset.FromUnixTimeSeconds(ts).ToLocalTime().ToString("yyyy-MM-dd");
             }
             catch { return ""; }
         }
 
-        public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
-            => throw new NotImplementedException();
+        public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) =>
+            throw new NotImplementedException();
     }
 }
