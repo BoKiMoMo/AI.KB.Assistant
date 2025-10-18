@@ -12,8 +12,6 @@ namespace AI.KB.Assistant.Helpers
             var s = value?.ToString() ?? "";
             return s.Split(',', StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim());
         }
-
-        public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) =>
-            throw new NotImplementedException();
+        public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) => throw new NotImplementedException();
     }
 }

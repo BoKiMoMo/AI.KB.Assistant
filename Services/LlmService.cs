@@ -1,95 +1,92 @@
 using System;
-using System.Net.Http;
-using System.Net.Http.Headers;
-using System.Text;
+using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using AI.KB.Assistant.Models;
-using Newtonsoft.Json.Linq;
 
 namespace AI.KB.Assistant.Services
 {
     /// <summary>
-    /// 封裝「分類」LLM；沒有 API Key 時會 fallback 到簡單規則（本地）。
+    /// LLM 相關服務層。此版為「設定安全」與「開關保護」版本，
+    /// 沒有 API Key 或未啟用時，所有對外方法皆回傳空集合/不進行呼叫。
     /// </summary>
-    public class LlmService
+    public sealed class LlmService : IDisposable
     {
         private readonly AppConfig _cfg;
-        private readonly HttpClient _http = new();
 
-        public LlmService(AppConfig cfg) { _cfg = cfg; }
+        private readonly bool _enabled;
+        private readonly string _apiKey;
+        private readonly string _baseUrl;
+        private readonly string _model;
 
-        public async Task<(string category, double confidence, string reason)> ClassifyAsync(string filename, string text)
+        public LlmService(AppConfig cfg)
         {
-            // 沒金鑰 → 規則 fallback
-            if (string.IsNullOrWhiteSpace(_cfg.OpenAI.ApiKey))
-                return LocalRules(filename, text);
+            _cfg = cfg ?? throw new ArgumentNullException(nameof(cfg));
 
-            try
-            {
-                var prompt = $@"
-你是一個文件歸檔助理，請依檔名與內容判斷業務分類（category）。
-只回 JSON：{{""category"":string,""confidence"":number,""reason"":string}}。
+            // OpenAI 區段可能不存在，全部以 null-safe 方式取值
+            _enabled = cfg.OpenAI?.EnableWhenLowConfidence ?? false;
+            _apiKey = cfg.OpenAI?.ApiKey ?? string.Empty;
 
-檔名: {filename}
-內容摘要: {Shorten(text, 800)}
-";
-                var body = new
-                {
-                    model = _cfg.OpenAI.Model,
-                    messages = new object[]
-                    {
-                        new { role = "system", content = "You categorize documents." },
-                        new { role = "user", content = prompt }
-                    },
-                    temperature = _cfg.OpenAI.Temperature,
-                    max_tokens = _cfg.OpenAI.MaxTokens
-                };
-
-                var req = new HttpRequestMessage(HttpMethod.Post, $"{_cfg.OpenAI.BaseUrl}/chat/completions");
-                req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _cfg.OpenAI.ApiKey);
-                req.Content = new StringContent(Newtonsoft.Json.JsonConvert.SerializeObject(body), Encoding.UTF8, "application/json");
-
-                var resp = await _http.SendAsync(req);
-                resp.EnsureSuccessStatusCode();
-                var json = JObject.Parse(await resp.Content.ReadAsStringAsync());
-                var content = json["choices"]?[0]?["message"]?["content"]?.ToString() ?? "{}";
-
-                var obj = JObject.Parse(content);
-                var cat = obj["category"]?.ToString() ?? "其他";
-                var conf = obj["confidence"]?.ToObject<double?>() ?? 0.5;
-                var reason = obj["reason"]?.ToString() ?? "";
-
-                return (cat.Trim(), Math.Clamp(conf, 0, 1), reason.Trim());
-            }
-            catch
-            {
-                return LocalRules(filename, text);
-            }
+            // 預設端點與模型
+            _baseUrl = string.IsNullOrWhiteSpace(cfg.OpenAI?.BaseUrl)
+                ? "https://api.openai.com/v1"
+                : cfg.OpenAI!.BaseUrl!;
+            _model = string.IsNullOrWhiteSpace(cfg.OpenAI?.Model)
+                ? "gpt-4o-mini"
+                : cfg.OpenAI!.Model!;
         }
 
-        private static string Shorten(string s, int max)
+        public void Dispose()
         {
-            if (string.IsNullOrEmpty(s)) return "";
-            if (s.Length <= max) return s;
-            return s.Substring(0, max);
+            // 若未來有 HttpClient 等資源，於此處釋放
         }
 
-        private static (string, double, string) LocalRules(string filename, string text)
+        /// <summary>
+        /// 依檔名清單，給出「可能的專案名稱」建議。
+        /// 未啟用或無 APIKey 時，回傳空集合。
+        /// </summary>
+        public async Task<string[]> SuggestProjectNamesAsync(string[] filenames, CancellationToken ct)
         {
-            string lower = (filename + " " + text).ToLowerInvariant();
-            string cat =
-                lower.Contains(".ppt") || lower.Contains(".pptx") ? "簡報" :
-                lower.Contains(".pdf") ? "報告" :
-                lower.Contains(".png") || lower.Contains(".jpg") || lower.Contains(".jpeg") ? "圖片" :
-                lower.Contains(".xlsx") || lower.Contains(".csv") ? "數據" :
-                lower.Contains("invoice") || lower.Contains("發票") ? "財務" :
-                "其他";
+            // 安全開關：沒啟用或沒 key 直接返回
+            if (!_enabled || string.IsNullOrWhiteSpace(_apiKey))
+                return Array.Empty<string>();
 
-            double conf =
-                cat is "簡報" or "報告" or "圖片" or "數據" or "財務" ? 0.8 : 0.5;
+            // 這裡留白：實際串接你現有的 LLM Client
+            // 下方為示意假資料，確保 UI 可運作不拋例外
+            await Task.Delay(50, ct);
 
-            string reason = $"依檔名/副檔名與關鍵字判斷為「{cat}」。";
-            return (cat, conf, reason);
+            if (filenames == null || filenames.Length == 0)
+                return Array.Empty<string>();
+
+            // 簡易的「字面規則」回傳，避免阻塞你的整體流程
+            var hint = filenames
+                .Select(n => (n ?? "").Trim())
+                .Where(n => !string.IsNullOrWhiteSpace(n))
+                .Select(n => System.IO.Path.GetFileNameWithoutExtension(n))
+                .ToArray();
+
+            // 假設把常見前綴做個聚合（你可改成真正的 LLM 結果）
+            var guess = hint.Length == 0 ? "一般專案" :
+                        hint[0].Length <= 8 ? hint[0] :
+                        hint[0].Substring(0, 8);
+
+            return new[] { guess, "一般專案", "臨時專案" };
+        }
+
+        /// <summary>
+        /// 範例：低信心時進行分類輔助（僅保留介面；若未啟用則回傳 null）。
+        /// </summary>
+        public async Task<(string? Category, double Confidence, string Reasoning)?> ClassifyAsync(
+            string filePath, CancellationToken ct)
+        {
+            if (!_enabled || string.IsNullOrWhiteSpace(_apiKey))
+                return null;
+
+            // TODO: 串接你的實際 LLM 推論程式碼
+            await Task.Delay(50, ct);
+
+            // 示意回傳
+            return ("文件", 0.65, "名稱包含 proposal/plan，推定為文件類");
         }
     }
 }

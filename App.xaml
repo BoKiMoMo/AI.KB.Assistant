@@ -3,6 +3,6 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              StartupUri="Views/MainWindow.xaml">
     <Application.Resources>
-        <!-- 全域資源（如樣式、字型等，可以在這裡擴充） -->
+
     </Application.Resources>
 </Application>

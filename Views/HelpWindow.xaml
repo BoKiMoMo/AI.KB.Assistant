@@ -1,15 +1,41 @@
 ﻿<Window x:Class="AI.KB.Assistant.Views.HelpWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="使用說明" Height="400" Width="600"
-        WindowStartupLocation="CenterOwner">
-    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="12">
-        <TextBlock TextWrapping="Wrap">
-            使用方式：
-            1. 把檔案拖曳到主視窗，即可加入清單。
-            2. 點「搬檔」可依規則移動檔案；DryRun 模式只會顯示路徑。
-            3. 設定裡可修改根目錄、資料庫、模式與策略。
-            4. 清單右鍵（未來會提供更多操作）。
-        </TextBlock>
-    </ScrollViewer>
+        Title="使用說明"
+        Height="640" Width="860"
+        WindowStartupLocation="CenterOwner"
+        Background="#F2F2F2" Foreground="#222222">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <Border Grid.Row="0" Background="White" Height="42" Padding="12" BorderBrush="#ddd" BorderThickness="0,0,0,1">
+            <TextBlock Text="AI.KB.Assistant 使用說明" FontWeight="Bold" VerticalAlignment="Center"/>
+        </Border>
+
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="12">
+            <Border Background="White" Padding="16" CornerRadius="6">
+                <StackPanel>
+                    <TextBlock Text="快速上手指南" FontSize="18" FontWeight="Bold" Margin="0,0,0,8"/>
+                    <TextBlock TextWrapping="Wrap" Margin="0,0,0,6">
+1️⃣ 點擊「📥 收件夾」可直接開啟監控資料夾。
+2️⃣ 將要整理的檔案丟入收件夾，即會自動分類（需啟用 HotFolder）。
+3️⃣ 若要手動整理整個資料夾，可使用「📂 匯入資料夾」。
+4️⃣ 若要重新掃描收件夾中既有檔案，按「🔁 重新掃描」即可。
+                    </TextBlock>
+
+                    <Separator Margin="0,12"/>
+
+                    <TextBlock Text="常見問題" FontSize="18" FontWeight="Bold" Margin="0,0,0,8"/>
+                    <TextBlock TextWrapping="Wrap">
+• 沒有反應？請確認設定中的「啟用 HotFolder」是否勾選，並檢查副檔名是否在白名單內。
+• 檔案早於程式啟動時就已存在收件夾？請使用「🔁 重新掃描」或重新複製一次檔案。
+• 想改變資料庫或收件夾的路徑？請到設定頁面使用「選擇…」按鈕進行設定。
+                    </TextBlock>
+                </StackPanel>
+            </Border>
+        </ScrollViewer>
+    </Grid>
 </Window>

@@ -1,23 +1,23 @@
 {
   "format": 1,
   "restore": {
-    "F:\\C++ × 技術英文養成計畫\\AI.KB.Assistant\\AI.KB.Assistant.csproj": {}
+    "D:\\GIT-DEMO\\AI.KB.Assistant\\AI.KB.Assistant.csproj": {}
   },
   "projects": {
-    "F:\\C++ × 技術英文養成計畫\\AI.KB.Assistant\\AI.KB.Assistant.csproj": {
+    "D:\\GIT-DEMO\\AI.KB.Assistant\\AI.KB.Assistant.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "F:\\C++ × 技術英文養成計畫\\AI.KB.Assistant\\AI.KB.Assistant.csproj",
+        "projectUniqueName": "D:\\GIT-DEMO\\AI.KB.Assistant\\AI.KB.Assistant.csproj",
         "projectName": "AI.KB.Assistant",
-        "projectPath": "F:\\C++ × 技術英文養成計畫\\AI.KB.Assistant\\AI.KB.Assistant.csproj",
-        "packagesPath": "C:\\Users\\aacd8\\.nuget\\packages\\",
-        "outputPath": "F:\\C++ × 技術英文養成計畫\\AI.KB.Assistant\\obj\\",
+        "projectPath": "D:\\GIT-DEMO\\AI.KB.Assistant\\AI.KB.Assistant.csproj",
+        "packagesPath": "C:\\Users\\石楷賢\\.nuget\\packages\\",
+        "outputPath": "D:\\GIT-DEMO\\AI.KB.Assistant\\obj\\",
         "projectStyle": "PackageReference",
         "fallbackFolders": [
           "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
         ],
         "configFilePaths": [
-          "C:\\Users\\aacd8\\AppData\\Roaming\\NuGet\\NuGet.Config",
+          "C:\\Users\\石楷賢\\AppData\\Roaming\\NuGet\\NuGet.Config",
           "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
           "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
         ],
@@ -60,7 +60,7 @@
             },
             "Microsoft.Data.Sqlite": {
               "target": "Package",
-              "version": "[9.0.8, )"
+              "version": "[9.0.10, )"
             },
             "Newtonsoft.Json": {
               "target": "Package",
@@ -73,6 +73,10 @@
             "OpenAI": {
               "target": "Package",
               "version": "[2.3.0, )"
+            },
+            "System.Data.SQLite.Core": {
+              "target": "Package",
+              "version": "[1.0.119, )"
             }
           },
           "imports": [
@@ -94,7 +98,7 @@
               "privateAssets": "none"
             }
           },
-          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\9.0.304/PortableRuntimeIdentifierGraph.json"
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\9.0.306/PortableRuntimeIdentifierGraph.json"
         }
       }
     }
