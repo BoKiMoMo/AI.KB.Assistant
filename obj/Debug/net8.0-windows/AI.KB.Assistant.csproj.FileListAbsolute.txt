@@ -12,16 +12,8 @@ F:\C++ × 技術英文養成計畫\AI.KB.Assistant\obj\Debug\net8.0-windows\AI.K
 D:\GIT-DEMO\AI.KB.Assistant\obj\Debug\net8.0-windows\AI.KB.Assistant.csproj.AssemblyReference.cache
 D:\GIT-DEMO\AI.KB.Assistant\obj\Debug\net8.0-windows\Views\HelpWindow.baml
 D:\GIT-DEMO\AI.KB.Assistant\obj\Debug\net8.0-windows\Views\MainWindow.baml
-D:\GIT-DEMO\AI.KB.Assistant\obj\Debug\net8.0-windows\Views\SettingsWindow.baml
 D:\GIT-DEMO\AI.KB.Assistant\obj\Debug\net8.0-windows\Views\HelpWindow.g.cs
 D:\GIT-DEMO\AI.KB.Assistant\obj\Debug\net8.0-windows\Views\MainWindow.g.cs
-D:\GIT-DEMO\AI.KB.Assistant\obj\Debug\net8.0-windows\Views\SettingsWindow.g.cs
 D:\GIT-DEMO\AI.KB.Assistant\obj\Debug\net8.0-windows\App.g.cs
 D:\GIT-DEMO\AI.KB.Assistant\obj\Debug\net8.0-windows\AI.KB.Assistant_Content.g.cs
 D:\GIT-DEMO\AI.KB.Assistant\obj\Debug\net8.0-windows\AI.KB.Assistant_MarkupCompile.cache
-D:\GIT-DEMO\AI.KB.Assistant\obj\Debug\net8.0-windows\AI.KB.Assistant.g.resources
-D:\GIT-DEMO\AI.KB.Assistant\obj\Debug\net8.0-windows\AI.KB.Assistant.GeneratedMSBuildEditorConfig.editorconfig
-D:\GIT-DEMO\AI.KB.Assistant\obj\Debug\net8.0-windows\AI.KB.Assistant.AssemblyInfoInputs.cache
-D:\GIT-DEMO\AI.KB.Assistant\obj\Debug\net8.0-windows\AI.KB.Assistant.AssemblyInfo.cs
-D:\GIT-DEMO\AI.KB.Assistant\obj\Debug\net8.0-windows\AI.KB.Assistant.csproj.CoreCompileInputs.cache
-D:\GIT-DEMO\AI.KB.Assistant\obj\Debug\net8.0-windows\AI.KB.Assistant.sourcelink.json
