@@ -1,105 +1,123 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
-using AI.KB.Assistant.Models;
+using AI.KB.Assistant.Models;   // 使用 Models 裡的 MoveMode / OverwritePolicy
 
 namespace AI.KB.Assistant.Services
 {
-    /// <summary>
-    /// 根據 AppConfig 的 Routing 設定，產生層級式目的路徑。
-    /// 預設建議結構：Year / Project / Category(語意) / Type(副檔名)
-    /// </summary>
     public sealed class RoutingService
     {
-        private static string SafeFolder(string name)
+        // --- enum 解析（容忍大小寫/空字串） ---
+        public static bool TryParseMoveMode(string? s, out MoveMode mode)
         {
-            if (string.IsNullOrWhiteSpace(name)) return "_";
-            foreach (var c in Path.GetInvalidFileNameChars())
-                name = name.Replace(c, '_');
-            return name.Trim();
+            if (!string.IsNullOrWhiteSpace(s) && Enum.TryParse<MoveMode>(s, true, out var m)) { mode = m; return true; }
+            mode = MoveMode.Move; return false;
+        }
+        public static bool TryParseOverwritePolicy(string? s, out OverwritePolicy p)
+        {
+            if (!string.IsNullOrWhiteSpace(s) && Enum.TryParse<OverwritePolicy>(s, true, out var v)) { p = v; return true; }
+            p = OverwritePolicy.Rename; return false;
         }
 
-        /// <summary>
-        /// 產生目的路徑（不含檔名）。會依照 RoutingSection 的開關決定層級。
-        /// </summary>
-        public string BuildDestination(AppConfig cfg, string project, string category, string fileType, DateTime dt)
+        // --- 判斷器（同時支援 enum 與 string） ---
+        public bool IsMove(MoveMode mode) => mode == MoveMode.Move;
+        public bool IsMove(string? mode) => TryParseMoveMode(mode, out var m) && IsMove(m);
+
+        public bool IsReplace(OverwritePolicy p) => p == OverwritePolicy.Replace;
+        public bool IsReplace(string? p) => TryParseOverwritePolicy(p, out var v) && IsReplace(v);
+
+        // --- 副檔名 → 家族 ---
+        public string FamilyFromExt(string ext)
         {
-            var parts = new List<string>();
+            var e = (ext ?? "").Trim('.').ToLowerInvariant();
+            if (string.IsNullOrEmpty(e)) return "其他";
 
-            // Year
-            if (cfg.Routing.EnableYear)
-                parts.Add(dt.Year.ToString());
+            string[] image = { "jpg", "jpeg", "png", "gif", "bmp", "tiff", "webp", "heic" };
+            string[] video = { "mp4", "mov", "avi", "mkv", "wmv", "m4v" };
+            string[] audio = { "mp3", "wav", "aac", "flac", "m4a", "ogg" };
+            string[] office = { "doc", "docx", "xls", "xlsx", "ppt", "pptx", "pdf" };
+            string[] adobe = { "psd", "ai", "ae", "prproj", "indd" };
+            string[] code = { "cs", "js", "ts", "py", "java", "cpp", "h", "json", "xml", "yml", "yaml", "sql", "md" };
 
-            // Project
-            if (cfg.Routing.EnableProject)
-                parts.Add(SafeFolder(string.IsNullOrWhiteSpace(project) ? "一般專案" : project));
+            if (image.Contains(e)) return "圖片";
+            if (video.Contains(e)) return "影片";
+            if (audio.Contains(e)) return "音訊";
+            if (office.Contains(e)) return "Office";
+            if (adobe.Contains(e)) return "Adobe";
+            if (code.Contains(e)) return "程式碼";
+            return "其他";
+        }
 
-            // Category (語意/業務分類)
-            if (cfg.Routing.EnableCategory)
-                parts.Add(SafeFolder(string.IsNullOrWhiteSpace(category) ? "未分類" : category));
+        // --- 由檔名猜專案（示範，可自行擴充） ---
+        public string GuessProjectByName(string? filename)
+        {
+            var name = (filename ?? "").ToLowerInvariant();
+            if (name.Contains("2025") && name.Contains("launch")) return "2025Launch";
+            if (name.Contains("spec") || name.Contains("規格")) return "產品規格";
+            return "";
+        }
 
-            // Type (副檔名族群)
-            if (cfg.Routing.EnableType)
-                parts.Add(SafeFolder(NormalizeType(fileType)));
+        // --- 類別推論：回傳 (category, reason)（和 IntakeService 對齊） ---
+        public (string category, string reason) GuessCategoryByKeyword(string filename, string family)
+        {
+            var name = (filename ?? "").ToLowerInvariant();
 
-            // Month 放最後（可選），通常 Year 已足夠
-            if (cfg.Routing.EnableMonth)
-                parts.Add(dt.Month.ToString("D2"));
+            if (name.Contains("invoice") || name.Contains("發票")) return ("財務", "檔名含 invoice/發票");
+            if (name.Contains("contract") || name.Contains("合約")) return ("合約", "檔名含 contract/合約");
+            if (name.Contains("proposal") || name.Contains("提案")) return ("提案", "檔名含 proposal/提案");
+            if (name.Contains("spec") || name.Contains("規格")) return ("規格", "檔名含 spec/規格");
 
+            return (family, $"依副檔名家族推定為 {family}");
+        }
+
+        // --- 目的地路徑（兩種多載，方便呼叫） ---
+        public string BuildDestination(AppConfig cfg, string project, string category, string ext, DateTime when)
+            => BuildDestinationInternal(cfg, project, category, ext, when);
+
+        public string BuildDestination(AppConfig cfg, string project, string category, string ext, DateTime when, MoveMode _)
+            => BuildDestinationInternal(cfg, project, category, ext, when);
+        public string BuildDestination(AppConfig cfg, string project, string category, string ext, DateTime when, string? __)
+            => BuildDestinationInternal(cfg, project, category, ext, when);
+
+        private string BuildDestinationInternal(AppConfig cfg, string project, string category, string ext, DateTime when)
+        {
             var root = string.IsNullOrWhiteSpace(cfg.App.RootDir)
                 ? Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory)
                 : cfg.App.RootDir;
 
-            var path = Path.Combine(new[] { root }.Concat(parts).ToArray());
-            return path;
+            var parts = new List<string> { root };
+            if (cfg.Routing.EnableYear) parts.Add(when.Year.ToString("0000"));
+            if (cfg.Routing.EnableMonth) parts.Add(when.ToString("MM", CultureInfo.InvariantCulture));
+            if (cfg.Routing.EnableProject)
+                parts.Add(string.IsNullOrWhiteSpace(project) ? cfg.Classification.FallbackCategory : project);
+
+            var cat = string.IsNullOrWhiteSpace(category) ? cfg.Routing.AutoFolderName : category;
+            if (cfg.Routing.EnableType) parts.Add(cat);
+
+            var filename = $"{when:yyyyMMdd_HHmmss}.{(ext ?? "dat").Trim('.')}";
+            var dir = Path.Combine(parts.ToArray());
+            return Path.Combine(dir, filename);
         }
 
-        /// <summary>
-        /// 將副檔名歸類為族群，如圖片、影音、文件、設計、程式碼…等。
-        /// </summary>
-        public static string NormalizeType(string extOrType)
+        // --- 重名策略：Replace / Rename ---
+        public string WithAutoRename(string dest, OverwritePolicy policy)
+            => policy == OverwritePolicy.Replace ? dest : NextAvailableFilename(dest);
+        public string WithAutoRename(string dest, string? policy)
+            => IsReplace(policy) ? dest : NextAvailableFilename(dest);
+
+        private static string NextAvailableFilename(string path)
         {
-            var e = (extOrType ?? "").Trim().Trim('.').ToLowerInvariant();
-
-            // 若已經是族群名，直接回傳
-            var knownGroups = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-            { "圖片", "文件", "表單", "投影片", "影音", "設計", "向量", "專案檔", "程式碼", "壓縮", "純文字", "PDF", "資料" };
-
-            if (knownGroups.Contains(e)) return e;
-
-            // 真正副檔名
-            var ext = e;
-
-            // 圖片
-            var img = new[] { "png", "jpg", "jpeg", "gif", "bmp", "tif", "tiff", "webp", "heic", "svg" };
-            if (img.Contains(ext)) return "圖片";
-
-            // 影音
-            var av = new[] { "mp4", "m4v", "mov", "avi", "mkv", "wmv", "mp3", "wav", "m4a", "flac", "aac", "ogg" };
-            if (av.Contains(ext)) return "影音";
-
-            // 文件/表單/投影片/PDF
-            if (ext is "doc" or "docx" or "rtf" or "md" or "txt") return ext == "txt" ? "純文字" : "文件";
-            if (ext is "xls" or "xlsx" or "csv" or "tsv") return "表單";
-            if (ext is "ppt" or "pptx" or "key") return "投影片";
-            if (ext is "pdf") return "PDF";
-
-            // 設計/向量/專案檔
-            if (ext is "psd" or "ai" or "xd" or "fig" or "sketch") return "設計";
-            if (ext is "svg" or "eps") return "向量";
-            if (ext is "aep" or "prproj" or "aup" or "aup3") return "專案檔";
-
-            // 程式碼
-            var code = new[]
-            { "cs","js","ts","jsx","tsx","py","rb","php","java","kt","go","rs","cpp","c","h","m","swift","dart","scala","sh","ps1","lua","sql","yml","yaml","toml","xml","json" };
-            if (code.Contains(ext)) return "程式碼";
-
-            // 壓縮/封裝
-            if (ext is "zip" or "7z" or "rar" or "gz" or "tar" or "tgz") return "壓縮";
-
-            // 其他
-            return "資料";
+            if (!File.Exists(path)) return path;
+            var dir = Path.GetDirectoryName(path)!;
+            var name = Path.GetFileNameWithoutExtension(path);
+            var ext = Path.GetExtension(path);
+            for (int i = 1; ; i++)
+            {
+                var cand = Path.Combine(dir, $"{name} ({i}){ext}");
+                if (!File.Exists(cand)) return cand;
+            }
         }
     }
 }
