@@ -1,127 +1,159 @@
 ﻿<Window x:Class="AI.KB.Assistant.Views.SettingsWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="設定" Height="560" Width="720"
-        WindowStartupLocation="CenterOwner"
-        ResizeMode="NoResize">
-    <Grid Margin="16">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="*"/>
-            <RowDefinition Height="Auto"/>
-        </Grid.RowDefinitions>
+        Title="設定"
+        Height="720" Width="960"
+        WindowStartupLocation="CenterOwner">
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Margin="16" Orientation="Vertical">
 
-        <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto">
-            <StackPanel Orientation="Vertical" Margin="0,0,0,8" Width="660">
+            <!-- 一、一般設定 -->
+            <GroupBox Header="一般" Margin="0,0,0,12">
+                <Grid Margin="8">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="140"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
 
-                <!-- 資料庫 / 根路徑 -->
-                <GroupBox Header="資料庫 / 根路徑" Margin="0,0,0,12">
-                    <Grid Margin="8">
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="8"/>
-                            <RowDefinition Height="Auto"/>
-                        </Grid.RowDefinitions>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="8"/>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="8"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Row="0" Grid.Column="0" Text="資料庫路徑：" VerticalAlignment="Center"/>
+                    <TextBox   x:Name="TxtDbPath" Grid.Row="0" Grid.Column="1" Margin="8,4"/>
+                    <Button    Grid.Row="0" Grid.Column="2" Margin="8,0" Padding="8,4"
+                               Content="瀏覽…" Click="BtnPickDbPath_Click"/>
 
-                        <TextBlock Grid.Row="0" Grid.Column="0" Text="資料庫：" VerticalAlignment="Center"/>
-                        <TextBox   Grid.Row="0" Grid.Column="2" x:Name="TxtDbPath" />
-                        <Button    Grid.Row="0" Grid.Column="4" Content="瀏覽…" Click="BtnBrowseDb_Click" MinWidth="80"/>
+                    <TextBlock Grid.Row="1" Grid.Column="0" Text="專案根目錄：" VerticalAlignment="Center"/>
+                    <TextBox   x:Name="TxtRootDir" Grid.Row="1" Grid.Column="1" Margin="8,4"/>
+                    <Button    Grid.Row="1" Grid.Column="2" Margin="8,0" Padding="8,4"
+                               Content="瀏覽…" Click="BtnPickRootDir_Click"/>
+                </Grid>
+            </GroupBox>
 
-                        <TextBlock Grid.Row="2" Grid.Column="0" Text="根路徑：" VerticalAlignment="Center"/>
-                        <TextBox   Grid.Row="2" Grid.Column="2" x:Name="TxtRoot" />
-                        <Button    Grid.Row="2" Grid.Column="4" Content="瀏覽…" Click="BtnBrowseRoot_Click" MinWidth="80"/>
-                    </Grid>
-                </GroupBox>
+            <!-- 二、匯入 / HotFolder -->
+            <GroupBox Header="匯入 / HotFolder" Margin="0,0,0,12">
+                <Grid Margin="8">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="220"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
 
-                <!-- 收件夾（Hot Folder） -->
-                <GroupBox Header="收件夾（Hot Folder）" Margin="0,0,0,12">
-                    <Grid Margin="8">
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="8"/>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="8"/>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="8"/>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="8"/>
-                            <RowDefinition Height="Auto"/>
-                        </Grid.RowDefinitions>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="8"/>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="8"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
+                    <CheckBox x:Name="CbAutoOnDrop" Grid.Row="0" Grid.Column="0"
+                              Content="拖放自動加入收件夾" Margin="0,4"/>
+                    <CheckBox x:Name="CbIncludeSubdir" Grid.Row="0" Grid.Column="1"
+                              Content="包含子資料夾" Margin="8,4"/>
 
-                        <CheckBox Grid.Row="0" Grid.ColumnSpan="5" x:Name="CbEnableHot" Content="啟用收件夾監控"/>
+                    <TextBlock Grid.Row="1" Grid.Column="0" Text="HotFolder 路徑：" VerticalAlignment="Center"/>
+                    <TextBox   x:Name="TxtHotFolder" Grid.Row="1" Grid.Column="1" Margin="8,4"/>
+                    <Button    Grid.Row="1" Grid.Column="2" Content="瀏覽…" Margin="8,0" Padding="8,4"
+                               Click="BtnPickHotFolder_Click"/>
 
-                        <TextBlock Grid.Row="2" Grid.Column="0" Text="收件夾：" VerticalAlignment="Center"/>
-                        <TextBox   Grid.Row="2" Grid.Column="2" x:Name="TxtHotPath"/>
-                        <Button    Grid.Row="2" Grid.Column="4" Content="瀏覽…" Click="BtnBrowseHot_Click" MinWidth="80"/>
-
-                        <CheckBox Grid.Row="4" Grid.ColumnSpan="5" x:Name="CbIncludeSubdir" Content="包含子資料夾"/>
-                        <CheckBox Grid.Row="6" Grid.ColumnSpan="5" x:Name="CbAutoOnDrop" Content="拖放到收件夾時自動預分類"/>
-
-                        <StackPanel Grid.Row="8" Grid.ColumnSpan="5" Orientation="Horizontal" VerticalAlignment="Center">
-                            <TextBlock Text="搬移模式：" VerticalAlignment="Center"/>
-                            <ComboBox x:Name="CmbMoveMode" Width="130" Margin="8,0,16,0">
-                                <ComboBoxItem Content="移動（Move）"   Tag="Move"/>
-                                <ComboBoxItem Content="複製（Copy）"    Tag="Copy"/>
-                            </ComboBox>
-                            <TextBlock Text="重名處理：" VerticalAlignment="Center"/>
-                            <ComboBox x:Name="CmbOverwrite" Width="160" Margin="8,0,0,0">
-                                <ComboBoxItem Content="取代（Replace）" Tag="Replace"/>
-                                <ComboBoxItem Content="重新命名（Rename）" Tag="Rename"/>
+                    <StackPanel Grid.Row="2" Grid.ColumnSpan="3" Orientation="Horizontal" Margin="0,6,0,0">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,16,0">
+                            <TextBlock Text="搬檔模式：" VerticalAlignment="Center"/>
+                            <ComboBox x:Name="CbMoveMode" Width="120" Margin="8,0,0,0">
+                                <ComboBoxItem Content="Move"/>
+                                <ComboBoxItem Content="Copy"/>
                             </ComboBox>
                         </StackPanel>
-                    </Grid>
-                </GroupBox>
 
-                <!-- 分類路由 -->
-                <GroupBox Header="分類路由" Margin="0,0,0,12">
-                    <StackPanel Margin="8,4,8,8">
-                        <WrapPanel>
-                            <CheckBox x:Name="CbYear"    Content="年份"  Margin="0,0,16,0"/>
-                            <CheckBox x:Name="CbMonth"   Content="月份"  Margin="0,0,16,0"/>
-                            <CheckBox x:Name="CbProject" Content="專案"  Margin="0,0,16,0"/>
-                            <CheckBox x:Name="CbType"    Content="型態"/>
-                        </WrapPanel>
-                        <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
-                            <TextBlock Text="信心不足時預設分類夾：" VerticalAlignment="Center"/>
-                            <TextBox x:Name="TxtAutoFolder" Width="180" Margin="8,0,0,0"/>
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="覆蓋策略：" VerticalAlignment="Center"/>
+                            <ComboBox x:Name="CbOverwritePolicy" Width="140" Margin="8,0,0,0">
+                                <ComboBoxItem Content="Replace"/>
+                                <ComboBoxItem Content="Rename"/>
+                                <ComboBoxItem Content="Skip"/>
+                            </ComboBox>
                         </StackPanel>
                     </StackPanel>
-                </GroupBox>
 
-                <!-- LLM -->
-                <GroupBox Header="LLM（低信心輔助）">
-                    <StackPanel Margin="8">
-                        <CheckBox x:Name="CbLlmLowConf" Content="信心低於門檻時啟用 LLM 協助"/>
-                        <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
-                            <TextBlock Text="API Key：" VerticalAlignment="Center"/>
-                            <PasswordBox x:Name="TxtApiKey" Width="220" Margin="8,0,16,0"/>
-                            <TextBlock Text="Base URL：" VerticalAlignment="Center"/>
-                            <TextBox x:Name="TxtBaseUrl" Width="220" Margin="8,0,16,0"/>
-                            <TextBlock Text="Model：" VerticalAlignment="Center"/>
-                            <TextBox x:Name="TxtModel" Width="160" Margin="8,0,0,0"/>
-                        </StackPanel>
+                    <!-- 黑名單（資料夾名） -->
+                    <StackPanel Grid.Row="3" Grid.ColumnSpan="3" Orientation="Vertical" Margin="0,8,0,0">
+                        <TextBlock Text="黑名單資料夾名（多個以逗號或換行分隔）"/>
+                        <TextBox x:Name="TxtBlacklistFolders" Height="80"
+                                 AcceptsReturn="True" VerticalScrollBarVisibility="Auto"/>
                     </StackPanel>
-                </GroupBox>
 
+                    <!-- 黑名單（副檔名） -->
+                    <StackPanel Grid.Row="4" Grid.ColumnSpan="3" Orientation="Vertical" Margin="0,8,0,0">
+                        <TextBlock Text="黑名單副檔名（不含點，逗號或換行分隔）"/>
+                        <TextBox x:Name="TxtBlacklistExts" Height="60"
+                                 AcceptsReturn="True" VerticalScrollBarVisibility="Auto"/>
+                    </StackPanel>
+                </Grid>
+            </GroupBox>
+
+            <!-- 三、路徑模板 -->
+            <GroupBox Header="路徑模板" Margin="0,0,0,12">
+                <StackPanel Margin="8" Orientation="Horizontal">
+                    <CheckBox x:Name="CbUseYear" Content="年份（yyyy）" Margin="0,0,16,0"/>
+                    <CheckBox x:Name="CbUseMonth" Content="月份（MM）" Margin="0,0,16,0"/>
+                    <CheckBox x:Name="CbUseProject" Content="專案" Margin="0,0,16,0"/>
+                    <CheckBox x:Name="CbUseType" Content="型態/類別"/>
+                </StackPanel>
+            </GroupBox>
+
+            <!-- 四、LLM -->
+            <GroupBox Header="LLM" Margin="0,0,0,12">
+                <Grid Margin="8">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="140"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <TextBlock Grid.Row="0" Grid.Column="0" Text="API Key：" VerticalAlignment="Center"/>
+                    <PasswordBox x:Name="TxtApiKey" Grid.Row="0" Grid.Column="1" Margin="8,4"/>
+
+                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Model：" VerticalAlignment="Center"/>
+                    <TextBox x:Name="TxtModel" Grid.Row="1" Grid.Column="1" Margin="8,4"/>
+
+                    <CheckBox x:Name="CbLmLowConf" Grid.Row="2" Grid.Column="1"
+                              Content="僅在低信心時啟用" Margin="8,4"/>
+                </Grid>
+            </GroupBox>
+
+            <!-- 五、Extension Groups 檢視 / 匯入 -->
+            <GroupBox Header="Extension Groups 檢視 / 匯入" Margin="0,0,0,12">
+                <DockPanel Margin="8">
+                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
+                        <!-- 名稱保留，暫不綁定 Click（避免缺少事件導致編譯錯誤） -->
+                        <Button x:Name="BtnLoadExtGroups" Content="從檔案匯入 JSON…" Padding="8,4" Margin="0,0,6,0"/>
+                        <Button x:Name="BtnApplyExtGroups" Content="套用到設定" Padding="8,4" Margin="0,0,6,0"/>
+                        <Button x:Name="BtnResetExtGroups" Content="重置為預設" Padding="8,4"/>
+                    </StackPanel>
+
+                    <TextBox x:Name="TxtExtGroups"
+                             AcceptsReturn="True"
+                             VerticalScrollBarVisibility="Auto"
+                             HorizontalScrollBarVisibility="Auto"
+                             FontFamily="Consolas"
+                             Height="220"
+                             TextWrapping="NoWrap"/>
+                </DockPanel>
+            </GroupBox>
+
+            <!-- 動作列 -->
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button x:Name="BtnOk" Content="確定" Width="100" Margin="0,0,8,0"
+                        Click="BtnOk_Click"/>
+                <Button Content="取消" Width="100" IsCancel="True"/>
             </StackPanel>
-        </ScrollViewer>
 
-        <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right">
-            <Button Content="儲存" Click="BtnSave_Click" Width="100" Margin="0,8,8,0"/>
-            <Button Content="取消" Click="BtnCancel_Click" Width="100" Margin="0,8,0,0"/>
         </StackPanel>
-    </Grid>
+    </ScrollViewer>
 </Window>

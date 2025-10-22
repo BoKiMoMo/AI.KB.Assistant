@@ -20,12 +20,16 @@
 		<Compile Remove="Models\OpenAIConfig.cs" />
 		<Compile Remove="Models\PathNode.cs" />
 		<Compile Remove="Services\ClassifierService.cs" />
-		<Compile Remove="Services\ConfigService.cs" />
 		<Compile Remove="Services\EmbeddingService.cs" />
+		<Compile Remove="Views\HelpWindow.xaml.cs" />
 	</ItemGroup>
 
 	<ItemGroup>
 		<None Remove="config.json" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <Page Remove="Views\HelpWindow.xaml" />
 	</ItemGroup>
 
 	<ItemGroup>

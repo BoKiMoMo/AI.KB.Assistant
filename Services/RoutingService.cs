@@ -1,123 +1,136 @@
-using System;
+ï»¿using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.IO;
 using System.Linq;
-using AI.KB.Assistant.Models;   // ¨Ï¥Î Models ¸Ìªº MoveMode / OverwritePolicy
+using AI.KB.Assistant.Models;
 
 namespace AI.KB.Assistant.Services
 {
     public sealed class RoutingService
     {
-        // --- enum ¸ÑªR¡]®e§Ô¤j¤p¼g/ªÅ¦r¦ê¡^ ---
-        public static bool TryParseMoveMode(string? s, out MoveMode mode)
+        private AppConfig _cfg;
+
+        // ç”¨ä¾†å°‡å‰¯æª”åå°æ‡‰åˆ°ç¾¤çµ„åï¼ˆTypeï¼‰
+        private Dictionary<string, string> _ext2Group = new(StringComparer.OrdinalIgnoreCase);
+
+        public RoutingService(AppConfig cfg)
         {
-            if (!string.IsNullOrWhiteSpace(s) && Enum.TryParse<MoveMode>(s, true, out var m)) { mode = m; return true; }
-            mode = MoveMode.Move; return false;
-        }
-        public static bool TryParseOverwritePolicy(string? s, out OverwritePolicy p)
-        {
-            if (!string.IsNullOrWhiteSpace(s) && Enum.TryParse<OverwritePolicy>(s, true, out var v)) { p = v; return true; }
-            p = OverwritePolicy.Rename; return false;
-        }
-
-        // --- §PÂ_¾¹¡]¦P®É¤ä´© enum »P string¡^ ---
-        public bool IsMove(MoveMode mode) => mode == MoveMode.Move;
-        public bool IsMove(string? mode) => TryParseMoveMode(mode, out var m) && IsMove(m);
-
-        public bool IsReplace(OverwritePolicy p) => p == OverwritePolicy.Replace;
-        public bool IsReplace(string? p) => TryParseOverwritePolicy(p, out var v) && IsReplace(v);
-
-        // --- °ÆÀÉ¦W ¡÷ ®a±Ú ---
-        public string FamilyFromExt(string ext)
-        {
-            var e = (ext ?? "").Trim('.').ToLowerInvariant();
-            if (string.IsNullOrEmpty(e)) return "¨ä¥L";
-
-            string[] image = { "jpg", "jpeg", "png", "gif", "bmp", "tiff", "webp", "heic" };
-            string[] video = { "mp4", "mov", "avi", "mkv", "wmv", "m4v" };
-            string[] audio = { "mp3", "wav", "aac", "flac", "m4a", "ogg" };
-            string[] office = { "doc", "docx", "xls", "xlsx", "ppt", "pptx", "pdf" };
-            string[] adobe = { "psd", "ai", "ae", "prproj", "indd" };
-            string[] code = { "cs", "js", "ts", "py", "java", "cpp", "h", "json", "xml", "yml", "yaml", "sql", "md" };
-
-            if (image.Contains(e)) return "¹Ï¤ù";
-            if (video.Contains(e)) return "¼v¤ù";
-            if (audio.Contains(e)) return "­µ°T";
-            if (office.Contains(e)) return "Office";
-            if (adobe.Contains(e)) return "Adobe";
-            if (code.Contains(e)) return "µ{¦¡½X";
-            return "¨ä¥L";
+            _cfg = cfg;
+            RebuildExtMap();
         }
 
-        // --- ¥ÑÀÉ¦W²q±M®×¡]¥Ü½d¡A¥i¦Û¦æÂX¥R¡^ ---
-        public string GuessProjectByName(string? filename)
+        public void ApplyConfig(AppConfig cfg)
         {
-            var name = (filename ?? "").ToLowerInvariant();
-            if (name.Contains("2025") && name.Contains("launch")) return "2025Launch";
-            if (name.Contains("spec") || name.Contains("³W®æ")) return "²£«~³W®æ";
-            return "";
+            _cfg = cfg;
+            RebuildExtMap();
         }
 
-        // --- Ãş§O±À½×¡G¦^¶Ç (category, reason)¡]©M IntakeService ¹ï»ô¡^ ---
-        public (string category, string reason) GuessCategoryByKeyword(string filename, string family)
+        private void RebuildExtMap()
         {
-            var name = (filename ?? "").ToLowerInvariant();
-
-            if (name.Contains("invoice") || name.Contains("µo²¼")) return ("°]°È", "ÀÉ¦W§t invoice/µo²¼");
-            if (name.Contains("contract") || name.Contains("¦X¬ù")) return ("¦X¬ù", "ÀÉ¦W§t contract/¦X¬ù");
-            if (name.Contains("proposal") || name.Contains("´£®×")) return ("´£®×", "ÀÉ¦W§t proposal/´£®×");
-            if (name.Contains("spec") || name.Contains("³W®æ")) return ("³W®æ", "ÀÉ¦W§t spec/³W®æ");
-
-            return (family, $"¨Ì°ÆÀÉ¦W®a±Ú±À©w¬° {family}");
-        }
-
-        // --- ¥Øªº¦a¸ô®|¡]¨âºØ¦h¸ü¡A¤è«K©I¥s¡^ ---
-        public string BuildDestination(AppConfig cfg, string project, string category, string ext, DateTime when)
-            => BuildDestinationInternal(cfg, project, category, ext, when);
-
-        public string BuildDestination(AppConfig cfg, string project, string category, string ext, DateTime when, MoveMode _)
-            => BuildDestinationInternal(cfg, project, category, ext, when);
-        public string BuildDestination(AppConfig cfg, string project, string category, string ext, DateTime when, string? __)
-            => BuildDestinationInternal(cfg, project, category, ext, when);
-
-        private string BuildDestinationInternal(AppConfig cfg, string project, string category, string ext, DateTime when)
-        {
-            var root = string.IsNullOrWhiteSpace(cfg.App.RootDir)
-                ? Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory)
-                : cfg.App.RootDir;
-
-            var parts = new List<string> { root };
-            if (cfg.Routing.EnableYear) parts.Add(when.Year.ToString("0000"));
-            if (cfg.Routing.EnableMonth) parts.Add(when.ToString("MM", CultureInfo.InvariantCulture));
-            if (cfg.Routing.EnableProject)
-                parts.Add(string.IsNullOrWhiteSpace(project) ? cfg.Classification.FallbackCategory : project);
-
-            var cat = string.IsNullOrWhiteSpace(category) ? cfg.Routing.AutoFolderName : category;
-            if (cfg.Routing.EnableType) parts.Add(cat);
-
-            var filename = $"{when:yyyyMMdd_HHmmss}.{(ext ?? "dat").Trim('.')}";
-            var dir = Path.Combine(parts.ToArray());
-            return Path.Combine(dir, filename);
-        }
-
-        // --- ­«¦Wµ¦²¤¡GReplace / Rename ---
-        public string WithAutoRename(string dest, OverwritePolicy policy)
-            => policy == OverwritePolicy.Replace ? dest : NextAvailableFilename(dest);
-        public string WithAutoRename(string dest, string? policy)
-            => IsReplace(policy) ? dest : NextAvailableFilename(dest);
-
-        private static string NextAvailableFilename(string path)
-        {
-            if (!File.Exists(path)) return path;
-            var dir = Path.GetDirectoryName(path)!;
-            var name = Path.GetFileNameWithoutExtension(path);
-            var ext = Path.GetExtension(path);
-            for (int i = 1; ; i++)
+            _ext2Group.Clear();
+            var groups = _cfg.Routing.ExtensionGroups ?? new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
+            foreach (var kv in groups)
             {
-                var cand = Path.Combine(dir, $"{name} ({i}){ext}");
-                if (!File.Exists(cand)) return cand;
+                var groupName = kv.Key; // e.g. Images / Documents / Code...
+                var exts = kv.Value ?? Array.Empty<string>();
+                foreach (var ext in exts)
+                {
+                    var ex = (ext ?? "").Trim('.').ToLowerInvariant();
+                    if (!string.IsNullOrWhiteSpace(ex))
+                        _ext2Group[ex] = groupName;
+                }
             }
+        }
+
+        public string GetTypeGroupByExt(string ext)
+        {
+            var ex = (ext ?? "").Trim('.').ToLowerInvariant();
+            if (_ext2Group.TryGetValue(ex, out var group))
+                return group;
+            return "Others";
+        }
+
+        /// <summary>
+        /// ç”¢ç”Ÿç›®çš„åœ°å®Œæ•´è·¯å¾‘ï¼ˆä¸å«åŒåè™•ç†ï¼‰ï¼Œæ”¯æ´é»‘åå–®èˆ‡ä½ä¿¡å¿ƒå›ºå®šè½åœ¨ ROOTã€‚
+        /// </summary>
+        public string BuildDestination(string fileName, string project, string category, string ext, DateTime ts,
+                                       bool isBlacklist, bool isLowConfidence)
+        {
+            var root = _cfg.App.RootDir;
+            if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root))
+                root = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
+
+            var pureExt = (ext ?? "").Trim('.').ToLowerInvariant();
+            var typeGroup = GetTypeGroupByExt(pureExt);
+
+            // âœ… é»‘åå–®ï¼šROOT/_blacklist/<file>
+            if (isBlacklist)
+            {
+                var blackRoot = Path.Combine(root, "_blacklist");
+                Directory.CreateDirectory(blackRoot);
+                return Path.Combine(blackRoot, fileName);
+            }
+
+            // âœ… ä½ä¿¡å¿ƒï¼šROOT/è‡ªæ•´ç†/<file>
+            if (isLowConfidence)
+            {
+                var autoRoot = Path.Combine(root, _cfg.Routing.AutoFolderName ?? "è‡ªæ•´ç†");
+                Directory.CreateDirectory(autoRoot);
+                return Path.Combine(autoRoot, fileName);
+            }
+
+            // â¬‡ ä¸€èˆ¬æ¨¡æ¿è·¯å¾‘ï¼ˆä¾å‹¾é¸ç‰‡æ®µï¼‰
+            var parts = new List<string> { root };
+
+            if (_cfg.Routing.UseYear)
+                parts.Add(ts.Year.ToString("0000"));
+            if (_cfg.Routing.UseMonth)
+                parts.Add(ts.Month.ToString("00"));
+
+            if (_cfg.Routing.UseProject && !string.IsNullOrWhiteSpace(project))
+                parts.Add(Sanitize(project));
+
+            if (_cfg.Routing.UseType && !string.IsNullOrWhiteSpace(typeGroup))
+                parts.Add(Sanitize(typeGroup));
+
+            if (!string.IsNullOrWhiteSpace(category))
+                parts.Add(Sanitize(category));
+
+            var dir = Path.Combine(parts.ToArray());
+            Directory.CreateDirectory(dir);
+
+            return Path.Combine(dir, fileName);
+        }
+
+        /// <summary>
+        /// çµ¦ Intake/å¤–éƒ¨ä½¿ç”¨çš„ä¾¿åˆ©ä»‹é¢ï¼šç”± Item ç›´æ¥ç”¢ç”Ÿç›®çš„åœ°ã€‚
+        /// </summary>
+        public string BuildDestination(Item item, bool isBlacklist, bool isLowConfidence)
+        {
+            var name = item.Filename ?? "noname";
+            var ext = item.Ext ?? Path.GetExtension(name).Trim('.');
+            var ts = FromUnix(item.CreatedTs);
+            return BuildDestination(name, item.Project ?? "", item.Category ?? "", ext, ts, isBlacklist, isLowConfidence);
+        }
+
+        private static DateTime FromUnix(long sec)
+        {
+            try
+            {
+                return DateTimeOffset.FromUnixTimeSeconds(sec <= 0 ? DateTimeOffset.UtcNow.ToUnixTimeSeconds() : sec)
+                                      .LocalDateTime;
+            }
+            catch
+            {
+                return DateTime.Now;
+            }
+        }
+
+        private static string Sanitize(string s)
+        {
+            var invalid = Path.GetInvalidFileNameChars();
+            var safe = new string(s.Select(ch => invalid.Contains(ch) ? '_' : ch).ToArray());
+            return safe.Trim();
         }
     }
 }

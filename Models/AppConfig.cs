@@ -2,120 +2,153 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
+using AI.KB.Assistant.Models;
+using System.Text.Json.Serialization;
 
 namespace AI.KB.Assistant.Models
 {
-    // === 全域列舉：搬移模式/重名處理策略 ===
-    public enum MoveMode
-    {
-        Move = 0,   // 移動
-        Copy = 1    // 複製
-    }
-
-    public enum OverwritePolicy
-    {
-        Replace = 0,  // 取代
-        Rename = 1,   // 重新命名 (自動加序號)
-        Skip = 2      // 跳過
-    }
-
     public sealed class AppConfig
     {
+        [JsonPropertyName("app")]
         public AppSection App { get; set; } = new();
+
+        [JsonPropertyName("import")]
         public ImportSection Import { get; set; } = new();
+
+        [JsonPropertyName("routing")]
         public RoutingSection Routing { get; set; } = new();
-        public ClassificationSection Classification { get; set; } = new();
+
+        [JsonPropertyName("openAI")]
         public OpenAISection OpenAI { get; set; } = new();
-    }
 
-    public sealed class AppSection
-    {
-        public string DbPath { get; set; } =
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                         "AI.KB.Assistant", "data", "kb.db");
+        [JsonPropertyName("classification")]
+        public ClassificationSection Classification { get; set; } = new();
 
-        public string RootDir { get; set; } =
-            Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
+        // ---------------- Sections ----------------
 
-        public string Theme { get; set; } = "Light";   // Light / Dark
-        public string ProjectLock { get; set; } = "";   // 空字串 = 未鎖定
-    }
-
-    public sealed class ImportSection
-    {
-        public bool EnableHotFolder { get; set; } = true;
-        public string HotFolderPath { get; set; } = ""; // 空字串時用 RootDir\_Inbox
-        public string BlacklistFolderName { get; set; } = "_blacklist";
-        public bool IncludeSubdirectories { get; set; } = false;
-        public bool AutoClassifyOnDrop { get; set; } = true; // 丟進收件夾時自動做「預分類」
-
-        // ✅ 新增：搬移/複製、重名處理策略（供 Settings 與 Intake/HotFolder 使用）
-        public MoveMode MoveMode { get; set; } = MoveMode.Move;
-        public OverwritePolicy OverwritePolicy { get; set; } = OverwritePolicy.Rename;
-    }
-
-    public sealed class RoutingSection
-    {
-        public bool EnableYear { get; set; } = true;       // 建立 年 資料夾
-        public bool EnableMonth { get; set; } = true;      // 建立 月 資料夾
-        public bool EnableProject { get; set; } = true;    // 建立 專案 資料夾
-        public bool EnableType { get; set; } = true;       // 建立 型態
-        public bool EnableCategory { get; set; } = true;   // 建立 類別（語意/業務分類）
-        public string AutoFolderName { get; set; } = "自整理"; // 信心不足/未分類時的預設夾名
-    }
-
-    public sealed class ClassificationSection
-    {
-        public double ConfidenceThreshold { get; set; } = 0.72;      // 低於此門檻可啟用 LLM
-        public string FallbackCategory { get; set; } = "一般專案";    // 缺省分類
-        public Dictionary<string, string> KeywordMap { get; set; } = new()
+        public sealed class AppSection
         {
-            ["invoice"] = "財務",
-            ["contract"] = "合約",
-            ["spec"] = "規格",
-            ["proposal"] = "提案"
-        };
-    }
+            [JsonPropertyName("dbPath")] public string DbPath { get; set; } = "data.db";
+            [JsonPropertyName("rootDir")] public string RootDir { get; set; } = "";
+            [JsonPropertyName("projectLock")] public string ProjectLock { get; set; } = "";
+            [JsonPropertyName("theme")] public string? Theme { get; set; }
+        }
 
-    public sealed class OpenAISection
-    {
-        public bool EnableWhenLowConfidence { get; set; } = true;
-        public string ApiKey { get; set; } = "";
-        public string BaseUrl { get; set; } = "";    // 可留空
-        public string Model { get; set; } = "gpt-4o-mini";
-    }
-
-    public static class ConfigService
-    {
-        public static AppConfig TryLoad(string path)
+        public sealed class ImportSection
         {
-            try
+            [JsonPropertyName("autoOnDrop")] public bool AutoOnDrop { get; set; } = true;
+            [JsonPropertyName("includeSubdirectories")] public bool IncludeSubdirectories { get; set; } = true;
+
+            [JsonPropertyName("hotFolderPath")] public string HotFolderPath { get; set; } = "";
+            [JsonPropertyName("enableHotFolder")] public bool EnableHotFolder { get; set; } = false;
+
+            [JsonPropertyName("blacklistFolderNames")] public string[] BlacklistFolderNames { get; set; } = Array.Empty<string>();
+            [JsonPropertyName("blacklistExts")] public string[] BlacklistExts { get; set; } = Array.Empty<string>();
+
+            [JsonPropertyName("moveMode")]
+            [JsonConverter(typeof(LowercaseEnumConverter<MoveMode>))]
+            public MoveMode MoveMode { get; set; } = MoveMode.Move;
+
+            [JsonPropertyName("overwritePolicy")]
+            [JsonConverter(typeof(LowercaseEnumConverter<OverwritePolicy>))]
+            public OverwritePolicy OverwritePolicy { get; set; } = OverwritePolicy.Rename;
+
+            [JsonPropertyName("blacklistFolderName")] public string? _compatSingleFolderName { get; set; }
+        }
+
+        public sealed class RoutingSection
+        {
+            [JsonPropertyName("useYear")] public bool UseYear { get; set; } = true;
+            [JsonPropertyName("useMonth")] public bool UseMonth { get; set; } = true;
+            [JsonPropertyName("useType")] public bool UseType { get; set; } = true;
+            [JsonPropertyName("useProject")] public bool UseProject { get; set; } = true;
+
+            [JsonPropertyName("autoFolderName")] public string AutoFolderName { get; set; } = "自整理";
+
+            [JsonPropertyName("extensionGroups")]
+            public Dictionary<string, string[]> ExtensionGroups { get; set; } = DefaultExtensionGroups();
+
+            private static Dictionary<string, string[]> DefaultExtensionGroups()
             {
-                if (File.Exists(path))
+                return new(StringComparer.OrdinalIgnoreCase)
                 {
-                    var json = File.ReadAllText(path);
-                    var cfg = JsonSerializer.Deserialize<AppConfig>(json, new JsonSerializerOptions
-                    {
-                        PropertyNameCaseInsensitive = true
-                    });
-                    if (cfg != null) return cfg;
-                }
+                    ["Images"] = new[] { "png", "jpg", "jpeg", "gif", "bmp", "tiff", "heic", "webp", "avif", "raw", "cr2", "nef", "dng" },
+                    ["Vector"] = new[] { "ai", "eps", "svg", "pdf" },
+                    ["Design"] = new[] { "psd", "psb", "xd", "fig", "sketch", "ind", "indd", "idml", "afphoto", "afdesign" },
+                    ["Documents"] = new[] { "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "odt", "ods", "odp", "rtf", "txt", "md" },
+                    ["Videos"] = new[] { "mp4", "mov", "avi", "mkv", "webm", "m4v", "wmv", "flv", "mpg", "mpeg", "3gp", "prores" },
+                    ["Audio"] = new[] { "mp3", "wav", "aac", "m4a", "flac", "ogg", "wma", "aiff", "opus" },
+                    ["Projects"] = new[] { "prproj", "aep", "aepx", "mogrt", "drp", "drproj", "veg", "imovieproj", "resolve" },
+                    ["Subtitles"] = new[] { "srt", "ass", "vtt", "sub" },
+                    ["3DModels"] = new[] { "obj", "fbx", "blend", "stl", "dae", "3ds", "max", "c4d", "glb", "gltf" },
+                    ["Fonts"] = new[] { "ttf", "otf", "woff", "woff2", "eot", "font" },
+                    ["Data"] = new[] { "csv", "json", "xml", "yaml", "yml", "parquet", "feather", "npy", "h5", "sav", "mat", "db", "sqlite", "sql", "xmind" },
+                    ["BuildFiles"] = new[] { "dockerfile", "makefile", "gradle", "cmake", "sln", "csproj", "vcxproj", "xcodeproj", "pbxproj" },
+                    ["Package"] = new[] { "npmrc", "package.json", "package-lock.json", "yarn.lock", "pnpm-lock.yaml", "requirements.txt", "pipfile", "poetry.lock", "gemfile", "go.mod", "go.sum" },
+                    ["Code"] = new[] { "cs", "py", "js", "ts", "jsx", "tsx", "vue", "java", "kt", "go", "rs", "cpp", "c", "h", "swift", "php", "rb", "dart", "r", "lua", "pl", "sh", "ps1", "bat", "cmd", "html", "css", "scss", "toml", "ini", "jsonc" },
+                    ["Config"] = new[] { "env", "config", "cfg", "ini", "toml", "jsonc", "yml", "yaml", "xml", "plist" },
+                    ["Archives"] = new[] { "zip", "rar", "7z", "tar", "gz", "bz2" },
+                    ["Executables"] = new[] { "exe", "dll", "app", "pkg", "deb", "rpm", "bin", "run" },
+                    ["Notes"] = new[] { "md", "markdown", "txt" },
+                    ["Others"] = new[] { "log", "old", "unknown" }
+                };
             }
-            catch { /* ignore */ }
+        }
 
-            var def = new AppConfig();
-            try { Save(path, def); } catch { }
-            return def;
+        public sealed class OpenAISection
+        {
+            [JsonPropertyName("apiKey")] public string ApiKey { get; set; } = "";
+            [JsonPropertyName("model")] public string Model { get; set; } = "gpt-4o-mini";
+            [JsonPropertyName("baseUrl")] public string BaseUrl { get; set; } = "";
+            [JsonPropertyName("enableWhenLowConfidence")] public bool EnableWhenLowConfidence { get; set; } = true;
+            [JsonPropertyName("enable")] public bool? _compatEnable { get; set; }
+        }
+
+        public sealed class ClassificationSection
+        {
+            [JsonPropertyName("confidenceThreshold")] public double ConfidenceThreshold { get; set; } = 0.65;
+            [JsonPropertyName("useLLM")] public bool? _compatUseLlm { get; set; }
+        }
+
+        // ---------------- Load / Save ----------------
+
+        public static AppConfig Load(string path)
+        {
+            if (!File.Exists(path))
+                return new AppConfig();
+
+            var json = File.ReadAllText(path);
+            var cfg = JsonSerializer.Deserialize<AppConfig>(json, JsonOptions()) ?? new AppConfig();
+
+            if (!string.IsNullOrWhiteSpace(cfg.Import._compatSingleFolderName) &&
+                (cfg.Import.BlacklistFolderNames == null || cfg.Import.BlacklistFolderNames.Length == 0))
+            {
+                cfg.Import.BlacklistFolderNames = new[] { cfg.Import._compatSingleFolderName! };
+            }
+
+            if (cfg.Classification._compatUseLlm.HasValue && cfg.Classification._compatUseLlm.Value == false)
+                cfg.OpenAI.EnableWhenLowConfidence = false;
+
+            if (cfg.OpenAI._compatEnable.HasValue)
+                cfg.OpenAI.EnableWhenLowConfidence = cfg.OpenAI._compatEnable.Value;
+
+            return cfg;
         }
 
         public static void Save(string path, AppConfig cfg)
         {
-            var dir = Path.GetDirectoryName(path);
-            if (!string.IsNullOrWhiteSpace(dir) && !Directory.Exists(dir))
-                Directory.CreateDirectory(dir);
-
-            var json = JsonSerializer.Serialize(cfg, new JsonSerializerOptions { WriteIndented = true });
+            var json = JsonSerializer.Serialize(cfg, JsonOptions(true));
+            Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path)) ?? ".");
             File.WriteAllText(path, json);
         }
+
+        private static JsonSerializerOptions JsonOptions(bool indented = false) => new()
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+            ReadCommentHandling = JsonCommentHandling.Skip,
+            AllowTrailingCommas = true,
+            WriteIndented = indented,
+            Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) }
+        };
     }
 }

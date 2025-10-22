@@ -1,9 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Data.SQLite;
+using System.Data;
 using System.IO;
 using System.Linq;
 using Dapper;
+using Microsoft.Data.Sqlite;
 using AI.KB.Assistant.Models;
 
 namespace AI.KB.Assistant.Services
@@ -11,233 +12,140 @@ namespace AI.KB.Assistant.Services
     public sealed class DbService : IDisposable
     {
         private readonly string _dbPath;
-        private readonly SQLiteConnection _conn;
+        private readonly string _connStr;
 
         public DbService(string dbPath)
         {
-            _dbPath = dbPath;
-
-            var dir = Path.GetDirectoryName(_dbPath);
-            if (!string.IsNullOrWhiteSpace(dir) && !Directory.Exists(dir))
-                Directory.CreateDirectory(dir);
-
-            var firstCreate = !File.Exists(_dbPath);
-
-            _conn = new SQLiteConnection(new SQLiteConnectionStringBuilder
-            {
-                DataSource = _dbPath,
-                JournalMode = SQLiteJournalModeEnum.Wal,
-                SyncMode = SynchronizationModes.Normal,
-                ForeignKeys = true
-            }.ToString());
-            _conn.Open();
-
-            EnablePragmas();
-
-            // 1) 確保有 table (舊版也會存在)
-            EnsureTable();
-
-            // 2) 先做欄位遷移（補 CreatedTs）
-            MigrateColumnsIfNeeded();
-
-            // 3) 最後再建索引（避免欄位不存在時出錯）
-            EnsureIndexes();
+            _dbPath = string.IsNullOrWhiteSpace(dbPath) ? "data.db" : dbPath;
+            Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(_dbPath)) ?? ".");
+            _connStr = $"Data Source={_dbPath};Cache=Shared";
+            EnsureSchema();
         }
 
-        private void EnablePragmas()
+        public void Dispose() { }
+
+        private IDbConnection Open()
         {
-            _conn.Execute("PRAGMA journal_mode=WAL;");
-            _conn.Execute("PRAGMA synchronous=NORMAL;");
-            _conn.Execute("PRAGMA foreign_keys=ON;");
+            var c = new SqliteConnection(_connStr);
+            c.Open();
+            return c;
         }
 
-        private void EnsureTable()
+        private void EnsureSchema()
         {
-            const string sql = @"
-CREATE TABLE IF NOT EXISTS Items
-(
-    Id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    Filename    TEXT,
-    Ext         TEXT,
-    Project     TEXT,
-    Category    TEXT,
-    Confidence  REAL,
-    CreatedTs   INTEGER NOT NULL DEFAULT 0,
-    Status      TEXT,
-    Path        TEXT UNIQUE,
-    Tags        TEXT,
-    Reasoning   TEXT
+            using var c = Open();
+            c.Execute(@"
+CREATE TABLE IF NOT EXISTS Items(
+    Id INTEGER PRIMARY KEY AUTOINCREMENT,
+    Filename   TEXT,
+    Ext        TEXT,
+    Project    TEXT,
+    Category   TEXT,
+    Confidence REAL,
+    CreatedTs  INTEGER,
+    Status     TEXT,
+    Path       TEXT,
+    Tags       TEXT
 );
-";
-            _conn.Execute(sql);
+CREATE INDEX IF NOT EXISTS IX_Items_Status     ON Items(Status);
+CREATE INDEX IF NOT EXISTS IX_Items_CreatedTs  ON Items(CreatedTs);
+CREATE INDEX IF NOT EXISTS IX_Items_Project    ON Items(Project);
+CREATE INDEX IF NOT EXISTS IX_Items_Path       ON Items(Path);
+");
         }
 
-        private HashSet<string> GetColumnNames(string table)
+        // ---------- 基礎包裝 ----------
+        public IEnumerable<T> Query<T>(string sql, object? args = null)
         {
-            // PRAGMA table_info 回傳：cid | name | type | notnull | dflt_value | pk
-            var rows = _conn.Query("PRAGMA table_info(" + table + ");");
-            var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var r in rows)
-            {
-                try
-                {
-                    var name = (string)r.name;
-                    if (!string.IsNullOrWhiteSpace(name)) set.Add(name);
-                }
-                catch { }
-            }
-            return set;
+            using var c = Open();
+            return c.Query<T>(sql, args);
         }
 
-        private void MigrateColumnsIfNeeded()
+        public int Execute(string sql, object? args = null)
         {
-            var cols = GetColumnNames("Items");
-
-            // 補 CreatedTs 欄位
-            if (!cols.Contains("CreatedTs"))
-            {
-                _conn.Execute("ALTER TABLE Items ADD COLUMN CreatedTs INTEGER NOT NULL DEFAULT 0;");
-                cols.Add("CreatedTs");
-            }
-
-            // 補 Reasoning 欄位（如果你在 UI 會用到說明）
-            if (!cols.Contains("Reasoning"))
-            {
-                _conn.Execute("ALTER TABLE Items ADD COLUMN Reasoning TEXT;");
-                cols.Add("Reasoning");
-            }
-
-            // 把還是 0 的 CreatedTs 補值（用檔案建立時間，不到就用現在）
-            var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-            try
-            {
-                // 用 Path 讀取檔案時間
-                var rows = _conn.Query<(long Id, string Path, long CreatedTs)>(
-                    "SELECT Id, Path, IFNULL(CreatedTs,0) as CreatedTs FROM Items WHERE IFNULL(CreatedTs,0)=0;");
-
-                foreach (var r in rows)
-                {
-                    long ts = 0;
-                    try
-                    {
-                        if (!string.IsNullOrWhiteSpace(r.Path) && File.Exists(r.Path))
-                            ts = new DateTimeOffset(File.GetCreationTimeUtc(r.Path)).ToUnixTimeSeconds();
-                    }
-                    catch { /* ignore file errors */ }
-
-                    if (ts == 0) ts = now;
-                    _conn.Execute("UPDATE Items SET CreatedTs=@ts WHERE Id=@id;", new { ts, id = r.Id });
-                }
-            }
-            catch
-            {
-                // 萬一上面 fail，至少把 0 補現在時間
-                _conn.Execute("UPDATE Items SET CreatedTs=@now WHERE IFNULL(CreatedTs,0)=0;", new { now });
-            }
+            using var c = Open();
+            return c.Execute(sql, args);
         }
 
-        private void EnsureIndexes()
+        public T ExecuteScalar<T>(string sql, object? args = null)
         {
-            // 只有欄位存在才建索引
-            var cols = GetColumnNames("Items");
-
-            _conn.Execute("CREATE INDEX IF NOT EXISTS IX_Items_Status   ON Items(Status);");
-            _conn.Execute("CREATE INDEX IF NOT EXISTS IX_Items_Project  ON Items(Project);");
-
-            if (cols.Contains("CreatedTs"))
-                _conn.Execute("CREATE INDEX IF NOT EXISTS IX_Items_CreatedTs ON Items(CreatedTs);");
+            using var c = Open();
+            return c.ExecuteScalar<T>(sql, args);
         }
 
-        // ---------------- CRUD / Query ----------------
+        // ---------- Upsert / Update ----------
+        public void Upsert(Item item) => UpsertItem(item);
 
-        public bool TryGetByPath(string path, out Item? item)
+        public void UpsertItem(Item item)
         {
-            item = _conn.QueryFirstOrDefault<Item>(
-                "SELECT * FROM Items WHERE Path=@P LIMIT 1;", new { P = path });
-            return item != null;
-        }
-
-        public Item Insert(Item it)
-        {
-            if (it.CreatedTs <= 0)
-                it.CreatedTs = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-
-            const string sql = @"
-INSERT INTO Items(Filename, Ext, Project, Category, Confidence, CreatedTs, Status, Path, Tags, Reasoning)
-VALUES(@Filename, @Ext, @Project, @Category, @Confidence, @CreatedTs, @Status, @Path, @Tags, @Reasoning);
-SELECT last_insert_rowid();";
-            it.Id = _conn.ExecuteScalar<long>(sql, it);
-            return it;
-        }
-
-        /// <summary>存在就更新，否則插入（以 Path 為唯一鍵）。</summary>
-        public Item UpsertItem(Item it)
-        {
-            if (TryGetByPath(it.Path!, out var exist) && exist != null)
+            using var c = Open();
+            if (item.Id > 0)
             {
-                // 沒給值就沿用舊值
-                it.Id = exist.Id;
-                it.Filename = string.IsNullOrWhiteSpace(it.Filename) ? exist.Filename : it.Filename;
-                it.Ext = string.IsNullOrWhiteSpace(it.Ext) ? exist.Ext : it.Ext;
-                it.Project = string.IsNullOrWhiteSpace(it.Project) ? exist.Project : it.Project;
-                it.Category = string.IsNullOrWhiteSpace(it.Category) ? exist.Category : it.Category;
-                it.Tags = string.IsNullOrWhiteSpace(it.Tags) ? exist.Tags : it.Tags;
-                it.Status = string.IsNullOrWhiteSpace(it.Status) ? exist.Status : it.Status;
-                it.Reasoning = string.IsNullOrWhiteSpace(it.Reasoning) ? exist.Reasoning : it.Reasoning;
-                if (it.Confidence <= 0) it.Confidence = exist.Confidence;
-                if (it.CreatedTs <= 0) it.CreatedTs = exist.CreatedTs;
-
-                const string upd = @"
-UPDATE Items
-SET Filename=@Filename, Ext=@Ext, Project=@Project, Category=@Category,
-    Confidence=@Confidence, CreatedTs=@CreatedTs, Status=@Status, Tags=@Tags, Reasoning=@Reasoning
-WHERE Id=@Id;";
-                _conn.Execute(upd, it);
-                return it;
+                c.Execute(@"UPDATE Items SET
+                    Filename=@Filename, Ext=@Ext, Project=@Project, Category=@Category,
+                    Confidence=@Confidence, CreatedTs=@CreatedTs, Status=@Status, Path=@Path, Tags=@Tags
+                    WHERE Id=@Id", item);
             }
             else
             {
-                return Insert(it);
+                var id = c.ExecuteScalar<long>(@"
+INSERT INTO Items(Filename,Ext,Project,Category,Confidence,CreatedTs,Status,Path,Tags)
+VALUES (@Filename,@Ext,@Project,@Category,@Confidence,@CreatedTs,@Status,@Path,@Tags);
+SELECT last_insert_rowid();", item);
+                item.Id = id;
             }
         }
 
-        public void UpdateStatus(long id, string status)
-            => _conn.Execute("UPDATE Items SET Status=@s WHERE Id=@id;", new { s = status, id });
-
         public void UpdateProject(long id, string project)
-            => _conn.Execute("UPDATE Items SET Project=@p WHERE Id=@id;", new { p = project, id });
+        {
+            using var c = Open();
+            c.Execute("UPDATE Items SET Project=@project WHERE Id=@id", new { id, project });
+        }
 
         public void UpdateTags(long id, string tags)
-            => _conn.Execute("UPDATE Items SET Tags=@t WHERE Id=@id;", new { t = tags, id });
+        {
+            using var c = Open();
+            c.Execute("UPDATE Items SET Tags=@tags WHERE Id=@id", new { id, tags });
+        }
 
+        // ---------- 查詢 ----------
         public IEnumerable<Item> QueryByStatus(string status)
-        {
-            return _conn.Query<Item>(
-                "SELECT * FROM Items WHERE Status=@S ORDER BY IFNULL(CreatedTs,0) DESC;",
-                new { S = status });
-        }
+            => Query<Item>("SELECT * FROM Items WHERE Status=@s ORDER BY CreatedTs DESC", new { s = status });
 
-        public IEnumerable<Item> QuerySince(long sinceEpochSeconds)
-        {
-            return _conn.Query<Item>(
-                "SELECT * FROM Items WHERE IFNULL(CreatedTs,0) >= @S ORDER BY IFNULL(CreatedTs,0) DESC;",
-                new { S = sinceEpochSeconds });
-        }
+        public IEnumerable<Item> QueryByStatuses(IEnumerable<string> statuses)
+            => Query<Item>("SELECT * FROM Items WHERE Status IN @st ORDER BY CreatedTs DESC", new { st = statuses });
+
+        public IEnumerable<Item> QuerySince(long since)
+            => Query<Item>("SELECT * FROM Items WHERE CreatedTs>=@since ORDER BY CreatedTs DESC", new { since });
 
         public IEnumerable<string> QueryDistinctProjects(string? keyword = null)
         {
             if (string.IsNullOrWhiteSpace(keyword))
-                return _conn.Query<string>("SELECT DISTINCT Project FROM Items WHERE IFNULL(Project,'')<>'' ORDER BY Project COLLATE NOCASE;");
-
-            return _conn.Query<string>(
-                "SELECT DISTINCT Project FROM Items WHERE IFNULL(Project,'')<>'' AND Project LIKE @K ORDER BY Project COLLATE NOCASE;",
-                new { K = $"%{keyword}%" });
+                return Query<string>("SELECT DISTINCT Project FROM Items WHERE ifnull(Project,'')<>'' ORDER BY Project COLLATE NOCASE");
+            var kw = $"%{keyword}%";
+            return Query<string>("SELECT DISTINCT Project FROM Items WHERE ifnull(Project,'')<>'' AND Project LIKE @kw ORDER BY Project COLLATE NOCASE", new { kw });
         }
 
-        public void Dispose()
+        public IEnumerable<Item> QueryByPath(string path)
+            => Query<Item>("SELECT * FROM Items WHERE Path=@path", new { path });
+
+        // ---------- 清理不存在的實體檔案 ----------
+        public int PurgeMissing()
         {
-            try { _conn?.Close(); } catch { }
-            try { _conn?.Dispose(); } catch { }
+            using var c = Open();
+            // 只抓必要欄位以提速
+            var rows = c.Query<(long Id, string Path)>("SELECT Id, Path FROM Items").ToList();
+            var toDelete = rows.Where(r =>
+            {
+                try { return string.IsNullOrWhiteSpace(r.Path) || !File.Exists(r.Path); }
+                catch { return true; }
+            }).Select(r => r.Id).ToList();
+
+            if (toDelete.Count == 0) return 0;
+
+            // Dapper IN 支援
+            c.Execute("DELETE FROM Items WHERE Id IN @ids", new { ids = toDelete });
+            return toDelete.Count;
         }
     }
 }

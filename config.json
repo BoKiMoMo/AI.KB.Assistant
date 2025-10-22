@@ -1,7 +1,7 @@
 {
 	"app": {
-		"rootDir": "",
 		"dbPath": "data.db",
+		"rootDir": "",
 		"projectLock": "",
 		"theme": "Light"
 	},
@@ -9,38 +9,24 @@
 		"apiKey": "",
 		"baseUrl": "",
 		"model": "gpt-4o-mini",
-		"enable": false
+		"enableWhenLowConfidence": false
 	},
 	"import": {
-		"hotFolderPath": "",
+		"autoOnDrop": true,
 		"includeSubdirectories": true,
+		"hotFolderPath": "",
+		"enableHotFolder": false,
+		"blacklistFolderNames": [ "_DoNotMove", "_blacklist" ],
 		"blacklistExts": [ "tmp", "bak", "dmg", "iso" ],
-		"blacklistFolderPath": "",
-		"moveBlacklistedToFolder": true
+		"moveMode": "copy",
+		"overwritePolicy": "rename"
 	},
-	"classification": {
-		"useLLM": false,
-		"confidenceThreshold": 0.6,
-		"order": [
-			{
-				"dimension": "Year",
-				"enabled": true
-			},
-			{
-				"dimension": "Project",
-				"enabled": true
-			},
-			{
-				"dimension": "Semantic",
-				"enabled": true
-			},
-			{
-				"dimension": "FileType",
-				"enabled": true
-			}
-		],
-		"fallbackProjectMode": "Month",
-		"dateSource": "CreatedTime",
+	"routing": {
+		"useYear": true,
+		"useMonth": true,
+		"useType": true,
+		"useProject": true,
+		"autoFolderName": "自整理",
 		"extensionGroups": {
 			"Images": [ "png", "jpg", "jpeg", "gif", "bmp", "tiff", "heic", "webp", "avif", "raw", "cr2", "nef", "dng" ],
 			"Vector": [ "ai", "eps", "svg", "pdf" ],
@@ -63,13 +49,7 @@
 			"Others": [ "log", "old", "unknown" ]
 		}
 	},
-	"routing": {
-		"autoFolderName": "自整理",
-		"overwritePolicy": "rename",
-		"moveMode": "copy"
-	},
-	"views": {
-		"defaultTab": "auto-sorted",
-		"showBlacklistedTab": false
+	"classification": {
+		"confidenceThreshold": 0.65
 	}
 }

@@ -1,4 +1,4 @@
-using System;
+ï»¿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -7,131 +7,49 @@ using AI.KB.Assistant.Models;
 
 namespace AI.KB.Assistant.Services
 {
-    /// <summary>
-    /// LLM ªA°È¡G¥Ø«e¤º«Ø¥»¦a±Òµo¦¡ + «D¦P¨B¤¶­±¡C
-    /// ­Y±N¨Ó­n¦ê±µ OpenAI¡A¥u­n¦b¥»Ãş¤º³¡´À´«µ¦²¤§Y¥i¡]¤¶­±¤£ÅÜ¡^¡C
-    /// </summary>
     public sealed class LlmService : IDisposable
     {
-        private readonly AppConfig _cfg;
+        private AppConfig _cfg;
 
-        public LlmService(AppConfig cfg)
+        public LlmService(AppConfig cfg) => _cfg = cfg ?? new AppConfig();
+        public void UpdateConfig(AppConfig cfg) { if (cfg != null) _cfg = cfg; }
+
+        public static string GuessProjectFromName(string? filename)
         {
-            _cfg = cfg ?? new AppConfig();
+            if (string.IsNullOrWhiteSpace(filename)) return string.Empty;
+            var seps = new[] { '_', '-', ' ' };
+            return (filename.Trim().Split(seps, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? "").Trim();
         }
 
-        /// <summary>¬O§_¨ã³Æ¶³ºİ API Key¡]µ¹ UI Åã¥Üª¬ºA¥Î¡^¡C</summary>
-        public bool IsReady => !string.IsNullOrWhiteSpace(_cfg.OpenAI?.ApiKey);
-
-        /// <summary>
-        /// ¨Ì¦h­ÓÀÉ¦W´£¥X¡u¥i¯àªº±M®×¡v«ØÄ³²M³æ¡]¨ÌÃöÁä¦r»P¦@¦P token ±À¦ô¡^¡C
-        /// </summary>
-        public Task<List<string>> SuggestProjectNamesAsync(IEnumerable<string> filenames, CancellationToken ct)
+        public async Task<string[]> SuggestProjectNamesAsync(IEnumerable<string?> filenames, CancellationToken ct)
         {
-            var list = (filenames ?? Array.Empty<string>()).Where(s => !string.IsNullOrWhiteSpace(s)).ToList();
-            if (list.Count == 0) return Task.FromResult(new List<string>());
+            if (!(_cfg?.OpenAI?.EnableWhenLowConfidence ?? false)) return Array.Empty<string>();
 
-            // ¨ú±`¨£ token
-            var tokens = list
-                .SelectMany(name =>
-                    (name ?? "")
-                        .ToLowerInvariant()
-                        .Split(new[] { ' ', '_', '-', '.', '[', ']', '(', ')' }, StringSplitOptions.RemoveEmptyEntries))
-                .Where(t => t.Length >= 2 && t.Length <= 24)
-                .GroupBy(t => t)
-                .OrderByDescending(g => g.Count())
-                .Take(6)
-                .Select(g => g.Key)
-                .ToList();
-
-            // ¤@¨Ç±`¨£±M®×«ØÄ³
-            var commons = new[] { "AI±M®×", "³]­p½Z", "·|Ä³°O¿ı", "´£®×¤å¥ó", "¤º³¡¸ê®Æ", "­Ó¤Hµ§°O" };
-
-            var result = new List<string>();
-            result.AddRange(tokens.Select(ToTitle));
-            result.AddRange(commons);
-
-            // ¥h­«¡B«O¯d¶¶§Ç
-            var dedup = result.Where(s => !string.IsNullOrWhiteSpace(s))
-                              .Distinct(StringComparer.OrdinalIgnoreCase)
-                              .Take(10)
-                              .ToList();
-
-            return Task.FromResult(dedup);
+            var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var fn in filenames ?? Array.Empty<string?>())
+            {
+                ct.ThrowIfCancellationRequested();
+                var p = GuessProjectFromName(fn);
+                if (!string.IsNullOrWhiteSpace(p)) set.Add(p);
+            }
+            if (set.Count == 0) set.Add("General");
+            await Task.Yield();
+            return set.ToArray();
         }
 
-        /// <summary>
-        /// ºë·Ò¤ÀÃş¡G¿é¤J¥Ø«e±M®×/¤ÀÃş¡A¦^¶Ç (project, category, reasoning)¡C
-        /// </summary>
-        public async Task<(string project, string category, string reasoning)> RefineAsync(
-            string filename, string currentProject, string currentCategory, CancellationToken ct)
+        // ğŸ”§ ä¾› IntakeService å‘¼å«çš„æš«å­˜å¯¦ä½œ
+        public Task<string> RefineAsync(string prompt, CancellationToken ct) => Task.FromResult(prompt);
+
+        internal static IEnumerable<string> SplitTokens(string? s)
         {
-            // ¼ÒÀÀ«D¦P¨B¡]­Y±N¨Ó¦ê¶³ºİ API¡A«O¯d await ¤¶­±§Y¥i¡^
-            await Task.Delay(50, ct);
-
-            // ¾A«×ªº±Òµo¦¡·L½Õ
-            var proj = string.IsNullOrWhiteSpace(currentProject)
-                ? GuessProjectFromName(filename)
-                : currentProject;
-
-            var cat = string.IsNullOrWhiteSpace(currentCategory)
-                ? GuessCategoryFromName(filename)
-                : currentCategory;
-
-            var reason = $"¨ÌÀÉ¦W¡u{filename}¡v»P¬J¦³³]©w¡A±À¦ô±M®×¡G{proj}¡B¤ÀÃş¡G{cat}¡C";
-            return (proj, cat, reason);
+            if (string.IsNullOrWhiteSpace(s)) yield break;
+            foreach (var t in s.Split(new[] { ' ', '_', '-', '.', ',' }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                var v = t.Trim();
+                if (!string.IsNullOrWhiteSpace(v)) yield return v;
+            }
         }
 
-        /// <summary>
-        /// ¹Á¸Õ¿é¥X§¹¾ã¤ÀÃş¡]­Y¤§«á­n¥Î¦b¦Û°Ê¹w¤ÀÃş¥iªu¥Î¡^¡Aªş«H¤ß¤À¼Æ»P²z¥Ñ¡C
-        /// </summary>
-        public Task<(string Project, string Category, double Confidence, string Reason)> TryClassifyAsync(
-            string filename, CancellationToken ct)
-        {
-            var project = GuessProjectFromName(filename);
-            var category = GuessCategoryFromName(filename);
-            var reason = $"¨ÌÃöÁä¦r»P±`¨£¼Ò¦¡±À¦ô¡FÀÉ¦W¡G{filename}";
-            const double confidence = 0.72; // »P AppConfig ¹w³]ªùÂe¹ï»ô
-            return Task.FromResult((project, category, confidence, reason));
-        }
-
-        // === helpers ===
-
-        private static string GuessProjectFromName(string filename)
-        {
-            var f = (filename ?? "").ToLowerInvariant();
-            if (f.Contains("ai")) return "AI±M®×";
-            if (f.Contains("design") || f.Contains("ui") || f.Contains("ux")) return "³]­p½Z";
-            if (f.Contains("meeting") || f.Contains("minutes")) return "·|Ä³°O¿ı";
-            if (f.Contains("proposal") || f.Contains("pitch")) return "´£®×¤å¥ó";
-
-            var token = f.Split(new[] { ' ', '_', '-', '.', '[', ']' }, StringSplitOptions.RemoveEmptyEntries)
-                         .FirstOrDefault();
-            return string.IsNullOrWhiteSpace(token) ? "¥¼¤ÀÃş" : ToTitle(token);
-        }
-
-        private static string GuessCategoryFromName(string filename)
-        {
-            var f = (filename ?? "").ToLowerInvariant();
-            if (f.Contains("invoice") || f.Contains("µo²¼")) return "°]°È";
-            if (f.Contains("contract") || f.Contains("¦X¬ù")) return "¦X¬ù";
-            if (f.Contains("resume") || f.Contains("¼i¾ú")) return "¼i¾ú";
-            if (f.Contains("report") || f.Contains("³ø§i")) return "³ø§i";
-            if (f.Contains("proposal") || f.Contains("´£®×")) return "´£®×";
-            if (f.Contains("spec") || f.Contains("³W®æ")) return "³W®æ";
-            return "¤@¯ë";
-        }
-
-        private static string ToTitle(string token)
-        {
-            if (string.IsNullOrWhiteSpace(token)) return token;
-            if (token.Length == 1) return token.ToUpperInvariant();
-            return char.ToUpperInvariant(token[0]) + token.Substring(1);
-        }
-
-        public void Dispose()
-        {
-            // ¥Ø«eµL»İÄÀ©ñ¸ê·½¡F­Y¦ê OpenAI HttpClient ¥i¦b¦¹³B²z
-        }
+        public void Dispose() { }
     }
 }
