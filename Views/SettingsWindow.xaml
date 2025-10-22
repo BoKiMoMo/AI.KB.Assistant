@@ -1,320 +1,278 @@
 ﻿<Window x:Class="AI.KB.Assistant.Views.SettingsWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="設定" Height="840" Width="980"
+        Title="設定"
+        Height="780" Width="1000"
         WindowStartupLocation="CenterOwner"
         Background="{DynamicResource App.BackgroundBrush}"
         Foreground="{DynamicResource App.TextBrush}">
 
-    <Window.Resources>
-        <!-- 左標籤/右內容用的表單欄寬 -->
-        <Style x:Key="FormGrid" TargetType="Grid">
-            <Setter Property="Margin" Value="12"/>
-            <Setter Property="ColumnDefinitions">
-                <Setter.Value>
-                    <ColumnDefinitionCollection>
-                        <ColumnDefinition Width="170"/>
-                        <ColumnDefinition Width="*"/>
-                    </ColumnDefinitionCollection>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
-        <!-- 灰色說明文字：自動換行、不會被擋住 -->
-        <Style x:Key="HintText" TargetType="TextBlock">
-            <Setter Property="Foreground" Value="{DynamicResource App.TextMutedBrush}"/>
-            <Setter Property="FontSize"   Value="12"/>
-            <Setter Property="TextWrapping" Value="Wrap"/>
-            <Setter Property="Margin" Value="0,6,0,0"/>
-        </Style>
-
-        <!-- 欄位之間的垂直空距 -->
-        <Thickness x:Key="FieldMargin">8,4</Thickness>
-    </Window.Resources>
-
-    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="12">
-        <StackPanel Orientation="Vertical" >
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Margin="16" Orientation="Vertical" >
 
             <!-- 一、一般 -->
             <GroupBox Header="一般" Margin="0,0,0,12">
-                <Grid Style="{StaticResource FormGrid}">
-                    <!-- 0: DB 路徑 -->
-                    <TextBlock Grid.Row="0" Grid.Column="0" Text="資料庫路徑：" VerticalAlignment="Center"/>
-                    <DockPanel Grid.Row="0" Grid.Column="1" Margin="{StaticResource FieldMargin}">
-                        <TextBox x:Name="TxtDbPath" Margin="0,0,8,0"/>
-                        <Button Content="瀏覽…" Click="BtnPickDbPath_Click" Style="{StaticResource TonedBtn}" MinWidth="76"/>
-                    </DockPanel>
-                    <TextBlock Grid.Row="1" Grid.ColumnSpan="2"
-                               Text="SQLite 檔案位置，預設 data.db。建議放在程式可寫入的位置。"
-                               Style="{StaticResource HintText}"/>
+                <Grid Margin="10">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="160"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <!-- 資料庫路徑 -->
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <!-- 專案根目錄 -->
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
 
-                    <!-- 2: 根目錄 -->
+                    <!-- 資料庫路徑 -->
+                    <TextBlock Grid.Row="0" Grid.Column="0" Text="資料庫路徑：" VerticalAlignment="Center"/>
+                    <TextBox   Grid.Row="0" Grid.Column="1" x:Name="TxtDbPath" Margin="0,0,8,0"/>
+                    <Button    Grid.Row="0" Grid.Column="2" MinWidth="80" Content="瀏覽…" Click="BtnPickDbPath_Click" Style="{StaticResource TonedBtn}"/>
+                    <TextBlock Grid.Row="1" Grid.ColumnSpan="3"
+               Text="SQLite 檔案位置（預設 data.db）。"
+               Foreground="{DynamicResource App.TextMutedBrush}" FontSize="12" TextWrapping="Wrap" Margin="0,6,0,12"/>
+
+                    <!-- 專案根目錄 -->
                     <TextBlock Grid.Row="2" Grid.Column="0" Text="專案根目錄：" VerticalAlignment="Center"/>
-                    <DockPanel Grid.Row="2" Grid.Column="1" Margin="{StaticResource FieldMargin}">
-                        <TextBox x:Name="TxtRootDir" Margin="0,0,8,0"/>
-                        <Button Content="瀏覽…" Click="BtnPickRootDir_Click" Style="{StaticResource TonedBtn}" MinWidth="76"/>
-                    </DockPanel>
-                    <TextBlock Grid.Row="3" Grid.ColumnSpan="2"
-                               Text="自動整理與專案資料夾的根位置。未設定時會以桌面作為起點。"
-                               Style="{StaticResource HintText}"/>
+                    <TextBox   Grid.Row="2" Grid.Column="1" x:Name="TxtRootDir" Margin="0,0,8,0"/>
+                    <Button    Grid.Row="2" Grid.Column="2" MinWidth="80" Content="瀏覽…" Click="BtnPickRootDir_Click" Style="{StaticResource TonedBtn}"/>
+                    <TextBlock Grid.Row="3" Grid.ColumnSpan="3"
+               Text="作業檔的主要根目錄；自動整理路徑索引會以此為優先。"
+               Foreground="{DynamicResource App.TextMutedBrush}" FontSize="12" TextWrapping="Wrap" Margin="0,6,0,0"/>
                 </Grid>
             </GroupBox>
+
 
             <!-- 二、匯入 / HotFolder -->
             <GroupBox Header="匯入 / HotFolder" Margin="0,0,0,12">
-                <Grid Style="{StaticResource FormGrid}">
-                    <!-- 0: 拖放 / 子資料夾 -->
-                    <TextBlock Grid.Row="0" Grid.Column="0" Text="拖放加入 / 子資料夾：" VerticalAlignment="Center"/>
-                    <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal" Margin="{StaticResource FieldMargin}">
-                        <CheckBox x:Name="CbAutoOnDrop" Content="拖放自動加入收件夾" Margin="0,0,16,0"/>
-                        <CheckBox x:Name="CbIncludeSubdir" Content="包含子資料夾"/>
+                <Grid Margin="10">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="160"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <Grid.RowDefinitions>
+                        <!-- 拖放自動加入 + 包含子資料夾 -->
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <!-- HotFolder 路徑 -->
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <!-- 搬檔模式 / 覆蓋策略 -->
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <!-- 黑名單（資料夾名） -->
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <!-- 黑名單（副檔名） -->
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- 拖放自動加入 -->
+                    <TextBlock Grid.Row="0" Grid.Column="0" Text="拖放自動加入收件夾：" VerticalAlignment="Center"/>
+                    <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal">
+                        <CheckBox x:Name="CbAutoOnDrop" Content="啟用"/>
+                        <CheckBox x:Name="CbIncludeSubdir" Content="包含子資料夾" Margin="16,0,0,0"/>
                     </StackPanel>
-                    <TextBlock Grid.Row="1" Grid.ColumnSpan="2"
-                               Text="拖放檔案是否自動加入 Inbox；加入資料夾時是否遞迴處理子資料夾。"
-                               Style="{StaticResource HintText}"/>
+                    <TextBlock Grid.Row="1" Grid.ColumnSpan="3"
+               Text="勾選後，在主畫面將檔案/資料夾拖進視窗會直接加入 Inbox；可選擇是否遞迴子資料夾。"
+               Foreground="{DynamicResource App.TextMutedBrush}" FontSize="12" TextWrapping="Wrap" Margin="0,6,0,12"/>
 
-                    <!-- 2: HotFolder -->
+                    <!-- HotFolder 路徑 -->
                     <TextBlock Grid.Row="2" Grid.Column="0" Text="HotFolder 路徑：" VerticalAlignment="Center"/>
-                    <DockPanel Grid.Row="2" Grid.Column="1" Margin="{StaticResource FieldMargin}">
-                        <TextBox x:Name="TxtHotFolder" Margin="0,0,8,0"/>
-                        <Button Content="瀏覽…" Click="BtnPickHotFolder_Click" Style="{StaticResource TonedBtn}" MinWidth="76"/>
-                    </DockPanel>
-                    <TextBlock Grid.Row="3" Grid.ColumnSpan="2"
-                               Text="監控資料夾：檔案放進此資料夾即視為收件夾（Inbox）。"
-                               Style="{StaticResource HintText}"/>
+                    <TextBox   Grid.Row="2" Grid.Column="1" x:Name="TxtHotFolder" Margin="0,0,8,0"/>
+                    <Button    Grid.Row="2" Grid.Column="2" MinWidth="80" Content="瀏覽…" Click="BtnPickHotFolder_Click" Style="{StaticResource TonedBtn}"/>
+                    <TextBlock Grid.Row="3" Grid.ColumnSpan="3"
+               Text="選用：監控此資料夾以自動匯入檔案（未啟用監控服務時不會自動搬檔）。"
+               Foreground="{DynamicResource App.TextMutedBrush}" FontSize="12" TextWrapping="Wrap" Margin="0,6,0,12"/>
 
-                    <!-- 4: 搬檔/覆蓋策略 -->
+                    <!-- 搬檔模式 / 覆蓋策略 -->
                     <TextBlock Grid.Row="4" Grid.Column="0" Text="搬檔模式：" VerticalAlignment="Center"/>
-                    <ComboBox x:Name="CbMoveMode" Grid.Row="4" Grid.Column="1" Margin="{StaticResource FieldMargin}"
-                              ToolTip="移動：檔案搬到目的地；複製：保留原檔並複製到目的地。"
-                              Width="180">
-                        <!-- 0=Move, 1=Copy -->
-                        <ComboBoxItem Content="移動（Move）"/>
-                        <ComboBoxItem Content="複製（Copy）"/>
-                    </ComboBox>
-                    <TextBlock Grid.Row="5" Grid.ColumnSpan="2"
-                               Text="選擇將檔案『移動』或『複製』到目的地。"
-                               Style="{StaticResource HintText}"/>
+                    <StackPanel Grid.Row="4" Grid.Column="1" Orientation="Horizontal">
+                        <ComboBox x:Name="CbMoveMode" Width="180" Margin="0,0,12,0">
+                            <ComboBoxItem Content="移動 (Move)"/>
+                            <ComboBoxItem Content="複製 (Copy)"/>
+                        </ComboBox>
+                        <TextBlock Text="覆蓋策略：" VerticalAlignment="Center" Margin="12,0,6,0"/>
+                        <ComboBox x:Name="CbOverwritePolicy" Width="200">
+                            <ComboBoxItem Content="取代 (Replace)"/>
+                            <ComboBoxItem Content="重新命名 (Rename)"/>
+                            <ComboBoxItem Content="略過 (Skip)"/>
+                        </ComboBox>
+                    </StackPanel>
+                    <TextBlock Grid.Row="5" Grid.ColumnSpan="3"
+               Text="搬檔模式：選擇『移動』或『複製』；覆蓋策略：目的地已存在同名檔案時，取代 / 重新命名 / 略過。"
+               Foreground="{DynamicResource App.TextMutedBrush}" FontSize="12" TextWrapping="Wrap" Margin="0,6,0,12"/>
 
-                    <TextBlock Grid.Row="6" Grid.Column="0" Text="覆蓋策略：" VerticalAlignment="Center"/>
-                    <ComboBox x:Name="CbOverwritePolicy" Grid.Row="6" Grid.Column="1" Margin="{StaticResource FieldMargin}"
-                              ToolTip="目的地已存在同名檔案時的處理方式。" Width="180">
-                        <!-- 0=Replace,1=Rename,2=Skip -->
-                        <ComboBoxItem Content="取代（Replace）"/>
-                        <ComboBoxItem Content="重新命名（Rename）"/>
-                        <ComboBoxItem Content="略過（Skip）"/>
-                    </ComboBox>
-                    <TextBlock Grid.Row="7" Grid.ColumnSpan="2"
-                               Text="同名衝突時：取代＝覆寫、重新命名＝在檔名後加序號、略過＝不搬。"
-                               Style="{StaticResource HintText}"/>
+                    <!-- 黑名單（資料夾名） -->
+                    <TextBlock Grid.Row="6" Grid.Column="0" Text="黑名單（資料夾名）：" VerticalAlignment="Top" Margin="0,4,0,0"/>
+                    <TextBox   Grid.Row="6"
+               x:Name="TxtBlacklistFolders" AcceptsReturn="True"
+               VerticalScrollBarVisibility="Auto" Margin="12,37,0,10" Grid.ColumnSpan="2" Grid.RowSpan="2" />
+                    <TextBlock Grid.Row="6" Grid.ColumnSpan="2"
+               Text="多筆以逗號或換行分隔，例如：_DoNotMove,_blacklist。"
+               Foreground="{DynamicResource App.TextMutedBrush}" FontSize="12" TextWrapping="Wrap" Margin="2,4,-162,155" Grid.RowSpan="2" Grid.Column="1"/>
 
-                    <!-- 8: 黑名單（資料夾/副檔名） -->
-                    <TextBlock Grid.Row="8" Grid.Column="0" Text="黑名單（資料夾）：" VerticalAlignment="Top"/>
-                    <TextBox  x:Name="TxtBlacklistFolders" Grid.Row="8" Grid.Column="1" Height="70"
-                              AcceptsReturn="True" VerticalScrollBarVisibility="Auto" Margin="{StaticResource FieldMargin}"/>
-                    <TextBlock Grid.Row="9" Grid.ColumnSpan="2"
-                               Text="要忽略的資料夾名稱；多筆以逗號或換行分隔。"
-                               Style="{StaticResource HintText}"/>
-
-                    <TextBlock Grid.Row="10" Grid.Column="0" Text="黑名單（副檔名）：" VerticalAlignment="Top"/>
-                    <TextBox  x:Name="TxtBlacklistExts" Grid.Row="10" Grid.Column="1" Height="60"
-                              AcceptsReturn="True" VerticalScrollBarVisibility="Auto" Margin="{StaticResource FieldMargin}"/>
-                    <TextBlock Grid.Row="11" Grid.ColumnSpan="2"
-                               Text="要忽略的副檔名，不含點；多筆以逗號或換行分隔。"
-                               Style="{StaticResource HintText}"/>
+                    <!-- 黑名單（副檔名） -->
+                    <TextBlock Grid.Row="8" Grid.Column="0" Text="黑名單（副檔名）：" VerticalAlignment="Center"/>
+                    <TextBox   Grid.Row="8" Grid.Column="1" x:Name="TxtBlacklistExts"/>
+                    <TextBlock Grid.Row="9" Grid.ColumnSpan="3"
+               Text="不含點，例：tmp, bak, dmg, iso。加入後將不會被整理。"
+               Foreground="{DynamicResource App.TextMutedBrush}" FontSize="12" TextWrapping="Wrap" Margin="0,6,0,0"/>
                 </Grid>
             </GroupBox>
 
+
             <!-- 三、路徑模板 -->
-            <GroupBox Header="路徑模板（自動整理的資料夾階層）" Margin="0,0,0,12">
-                <Grid Style="{StaticResource FormGrid}">
-                    <TextBlock Grid.Row="0" Grid.ColumnSpan="2"
-                               Text="勾選後會在目的地分層建立資料夾（例如：Root\2025\01\專案\類型）。"
-                               Style="{StaticResource HintText}" Margin="0,0,0,6"/>
-                    <StackPanel Grid.Row="1" Grid.ColumnSpan="2" Orientation="Horizontal">
-                        <CheckBox x:Name="CbUseYear"    Content="年份（yyyy）" Margin="0,0,16,0"/>
-                        <CheckBox x:Name="CbUseMonth"   Content="月份（MM）"  Margin="0,0,16,0"/>
-                        <CheckBox x:Name="CbUseProject" Content="專案"        Margin="0,0,16,0"/>
-                        <CheckBox x:Name="CbUseType"    Content="型態/類別"/>
+            <GroupBox Header="路徑模板" Margin="0,0,0,12">
+                <Grid Margin="10">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="160"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Grid.Row="0" Grid.Column="0" Text="使用項目：" VerticalAlignment="Center"/>
+                    <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal">
+                        <CheckBox x:Name="CbUseYear" Content="年份（yyyy）" Margin="0,0,12,0"/>
+                        <CheckBox x:Name="CbUseMonth" Content="月份（MM）" Margin="0,0,12,0"/>
+                        <CheckBox x:Name="CbUseProject" Content="專案" Margin="0,0,12,0"/>
+                        <CheckBox x:Name="CbUseType" Content="型態/類別"/>
                     </StackPanel>
+                    <TextBlock Grid.Row="1" Grid.ColumnSpan="2"
+                               Text="勾選後在目的地建立對應層級，例如：Root\2025\01\專案\類別。"
+                               Foreground="{DynamicResource App.TextMutedBrush}" FontSize="12" TextWrapping="Wrap" Margin="0,4,0,0"/>
                 </Grid>
             </GroupBox>
 
             <!-- 四、LLM -->
             <GroupBox Header="LLM" Margin="0,0,0,12">
-                <Grid Style="{StaticResource FormGrid}">
+                <Grid Margin="10">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="160"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <!-- API Key -->
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <!-- Model -->
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <!-- 低信心啟用 -->
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
                     <TextBlock Grid.Row="0" Grid.Column="0" Text="API Key：" VerticalAlignment="Center"/>
-                    <PasswordBox x:Name="TxtApiKey" Grid.Row="0" Grid.Column="1" Margin="{StaticResource FieldMargin}"/>
+                    <PasswordBox Grid.Row="0" Grid.Column="1" x:Name="TxtApiKey" />
                     <TextBlock Grid.Row="1" Grid.ColumnSpan="2"
-                               Text="OpenAI 之類的服務金鑰。留空則不啟用。"
-                               Style="{StaticResource HintText}"/>
+                               Text="AI 相關設定；僅在信心不足時才會使用（可在右側面板調整閾值）。"
+                               Foreground="{DynamicResource App.TextMutedBrush}" FontSize="12" TextWrapping="Wrap" Margin="0,4,0,12"/>
 
                     <TextBlock Grid.Row="2" Grid.Column="0" Text="Model：" VerticalAlignment="Center"/>
-                    <TextBox x:Name="TxtModel" Grid.Row="2" Grid.Column="1" Margin="{StaticResource FieldMargin}"/>
+                    <TextBox Grid.Row="2" Grid.Column="1" x:Name="TxtModel" />
                     <TextBlock Grid.Row="3" Grid.ColumnSpan="2"
-                               Text="模型名稱，例如 gpt-4o-mini。"
-                               Style="{StaticResource HintText}"/>
+                               Text="例如：gpt-4o-mini。"
+                               Foreground="{DynamicResource App.TextMutedBrush}" FontSize="12" TextWrapping="Wrap" Margin="0,4,0,12"/>
 
-                    <TextBlock Grid.Row="4" Grid.Column="0" Text="觸發條件：" VerticalAlignment="Center"/>
-                    <CheckBox x:Name="CbLmLowConf" Grid.Row="4" Grid.Column="1" Margin="{StaticResource FieldMargin}"
-                              Content="僅在低信心時啟用"/>
-                    <TextBlock Grid.Row="5" Grid.ColumnSpan="2"
-                               Text="打開後僅在分類信心不足時才呼叫 LLM。"
-                               Style="{StaticResource HintText}"/>
+                    <TextBlock Grid.Row="4" Grid.Column="0" Text="啟用條件：" VerticalAlignment="Center"/>
+                    <CheckBox Grid.Row="4" Grid.Column="1" x:Name="CbLmLowConf" Content="僅在低信心時啟用"/>
                 </Grid>
             </GroupBox>
 
-            <!-- 五、主題 / 顏色 -->
+            <!-- 五、主題 / 顏色（與 Theme.xaml 同步） -->
             <GroupBox Header="主題 / 顏色（與 Theme.xaml 同步）" Margin="0,0,0,12">
-                <Grid Margin="12">
+                <Grid Margin="10">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="24"/>
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
 
-                    <!-- 左列：背景/文字 -->
-                    <StackPanel Grid.Column="0" Margin="0,0,8,0">
-                        <TextBlock Text="介面背景 / 邊框 / 文字" FontWeight="Bold"/>
-                        <UniformGrid Columns="3" Margin="0,6,0,10">
-                            <StackPanel>
-                                <TextBlock Text="背景 Bg"/>
-                                <DockPanel>
-                                    <TextBox x:Name="TbBg" Width="110" Margin="0,0,6,0" TextChanged="ThemeTextBox_TextChanged"/>
-                                    <Button Content="…" Width="32" Click="PickBg_Click" Style="{StaticResource TonedBtn}"/>
-                                </DockPanel>
-                                <Border x:Name="PrevBg" Height="22" BorderBrush="{DynamicResource App.BorderBrush}" BorderThickness="1"/>
-                            </StackPanel>
+                    <!-- 左半：介面背景/邊框/文字 -->
+                    <StackPanel Grid.Column="0" Orientation="Vertical">
+                        <TextBlock Text="介面背景 / 邊框 / 文字" FontWeight="Bold" Margin="0,0,0,8"/>
+                        <!-- 每個列：色碼輸入 + 小色塊預覽（命名使用你現有的 TbBg/TbPanel...） -->
+                        <UniformGrid Columns="3" Rows="5" Margin="0,0,0,8">
+                            <TextBlock Text="背景 Bg"/>
+                            <TextBox x:Name="TbBg" Margin="4,0"/>
+                            <Border x:Name="PrevBg" Height="24" Background="Transparent" BorderBrush="{DynamicResource App.BorderBrush}" BorderThickness="1"/>
 
-                            <StackPanel>
-                                <TextBlock Text="面板 Panel"/>
-                                <DockPanel>
-                                    <TextBox x:Name="TbPanel" Width="110" Margin="0,0,6,0" TextChanged="ThemeTextBox_TextChanged"/>
-                                    <Button Content="…" Width="32" Click="PickPanel_Click" Style="{StaticResource TonedBtn}"/>
-                                </DockPanel>
-                                <Border x:Name="PrevPanel" Height="22" BorderBrush="{DynamicResource App.BorderBrush}" BorderThickness="1"/>
-                            </StackPanel>
+                            <TextBlock Text="面板 Panel"/>
+                            <TextBox x:Name="TbPanel" Margin="4,0"/>
+                            <Border x:Name="PrevPanel" Height="24" Background="Transparent" BorderBrush="{DynamicResource App.BorderBrush}" BorderThickness="1"/>
 
-                            <StackPanel>
-                                <TextBlock Text="邊框 Border"/>
-                                <DockPanel>
-                                    <TextBox x:Name="TbBorder" Width="110" Margin="0,0,6,0" TextChanged="ThemeTextBox_TextChanged"/>
-                                    <Button Content="…" Width="32" Click="PickBorder_Click" Style="{StaticResource TonedBtn}"/>
-                                </DockPanel>
-                                <Border x:Name="PrevBorder" Height="22" BorderBrush="{DynamicResource App.BorderBrush}" BorderThickness="1"/>
-                            </StackPanel>
-                        </UniformGrid>
+                            <TextBlock Text="邊框 Border"/>
+                            <TextBox x:Name="TbBorder" Margin="4,0"/>
+                            <Border x:Name="PrevBorder" Height="24" Background="Transparent" BorderBrush="{DynamicResource App.BorderBrush}" BorderThickness="1"/>
 
-                        <TextBlock Text="文字 / 次色" FontWeight="Bold"/>
-                        <UniformGrid Columns="3" Margin="0,6,0,0">
-                            <StackPanel>
-                                <TextBlock Text="文字 Text"/>
-                                <DockPanel>
-                                    <TextBox x:Name="TbText" Width="110" Margin="0,0,6,0" TextChanged="ThemeTextBox_TextChanged"/>
-                                    <Button Content="…" Width="32" Click="PickText_Click" Style="{StaticResource TonedBtn}"/>
-                                </DockPanel>
-                                <Border x:Name="PrevText" Height="22" BorderBrush="{DynamicResource App.BorderBrush}" BorderThickness="1"/>
-                            </StackPanel>
+                            <TextBlock Text="文字 Text"/>
+                            <TextBox x:Name="TbText" Margin="4,0"/>
+                            <Border x:Name="PrevText" Height="24" Background="Transparent" BorderBrush="{DynamicResource App.BorderBrush}" BorderThickness="1"/>
 
-                            <StackPanel>
-                                <TextBlock Text="文字（次）TextMuted"/>
-                                <DockPanel>
-                                    <TextBox x:Name="TbTextMuted" Width="110" Margin="0,0,6,0" TextChanged="ThemeTextBox_TextChanged"/>
-                                    <Button Content="…" Width="32" Click="PickTextMuted_Click" Style="{StaticResource TonedBtn}"/>
-                                </DockPanel>
-                                <Border x:Name="PrevTextMuted" Height="22" BorderBrush="{DynamicResource App.BorderBrush}" BorderThickness="1"/>
-                            </StackPanel>
-
-                            <StackPanel>
-                                <TextBlock Text="次色 Secondary"/>
-                                <DockPanel>
-                                    <TextBox x:Name="TbSecondary" Width="110" Margin="0,0,6,0" TextChanged="ThemeTextBox_TextChanged"/>
-                                    <Button Content="…" Width="32" Click="PickSecondary_Click" Style="{StaticResource TonedBtn}"/>
-                                </DockPanel>
-                                <Border x:Name="PrevSecondary" Height="22" BorderBrush="{DynamicResource App.BorderBrush}" BorderThickness="1"/>
-                            </StackPanel>
+                            <TextBlock Text="文字（次）TextMute"/>
+                            <TextBox x:Name="TbTextMuted" Margin="4,0"/>
+                            <Border x:Name="PrevTextMuted" Height="24" Background="Transparent" BorderBrush="{DynamicResource App.BorderBrush}" BorderThickness="1"/>
                         </UniformGrid>
                     </StackPanel>
 
-                    <!-- 右列：主色/Banner/狀態 -->
-                    <StackPanel Grid.Column="1" Margin="8,0,0,0">
-                        <TextBlock Text="主要色 / Banner / 狀態色" FontWeight="Bold"/>
-                        <UniformGrid Columns="3" Margin="0,6,0,10">
-                            <StackPanel>
-                                <TextBlock Text="主色 Primary"/>
-                                <DockPanel>
-                                    <TextBox x:Name="TbPrimary" Width="110" Margin="0,0,6,0" TextChanged="ThemeTextBox_TextChanged"/>
-                                    <Button Content="…" Width="32" Click="PickPrimary_Click" Style="{StaticResource TonedBtn}"/>
-                                </DockPanel>
-                                <Border x:Name="PrevPrimary" Height="22" BorderBrush="{DynamicResource App.BorderBrush}" BorderThickness="1"/>
-                            </StackPanel>
+                    <Separator Grid.Column="1" Margin="12,0"/>
 
-                            <StackPanel>
-                                <TextBlock Text="主色 Hover"/>
-                                <DockPanel>
-                                    <TextBox x:Name="TbPrimaryHover" Width="110" Margin="0,0,6,0" TextChanged="ThemeTextBox_TextChanged"/>
-                                    <Button Content="…" Width="32" Click="PickPrimaryHover_Click" Style="{StaticResource TonedBtn}"/>
-                                </DockPanel>
-                                <Border x:Name="PrevPrimaryHover" Height="22" BorderBrush="{DynamicResource App.BorderBrush}" BorderThickness="1"/>
-                            </StackPanel>
+                    <!-- 右半：主要色 / Banner / 狀態 -->
+                    <StackPanel Grid.Column="2" Orientation="Vertical">
+                        <TextBlock Text="主要色 / Banner / 狀態色" FontWeight="Bold" Margin="0,0,0,8"/>
 
-                            <StackPanel>
-                                <TextBlock Text="Banner Info"/>
-                                <DockPanel>
-                                    <TextBox x:Name="TbBannerInfo" Width="110" Margin="0,0,6,0" TextChanged="ThemeTextBox_TextChanged"/>
-                                    <Button Content="…" Width="32" Click="PickBannerInfo_Click" Style="{StaticResource TonedBtn}"/>
-                                </DockPanel>
-                                <Border x:Name="PrevBannerInfo" Height="22" BorderBrush="{DynamicResource App.BorderBrush}" BorderThickness="1"/>
-                            </StackPanel>
+                        <UniformGrid Columns="3" Rows="6" Margin="0,0,0,8">
+                            <TextBlock Text="主色 Primary"/>
+                            <TextBox x:Name="TbPrimary" Margin="4,0"/>
+                            <Border x:Name="PrevPrimary" Height="24" Background="Transparent" BorderBrush="{DynamicResource App.BorderBrush}" BorderThickness="1"/>
 
-                            <StackPanel>
-                                <TextBlock Text="Banner Warn"/>
-                                <DockPanel>
-                                    <TextBox x:Name="TbBannerWarn" Width="110" Margin="0,0,6,0" TextChanged="ThemeTextBox_TextChanged"/>
-                                    <Button Content="…" Width="32" Click="PickBannerWarn_Click" Style="{StaticResource TonedBtn}"/>
-                                </DockPanel>
-                                <Border x:Name="PrevBannerWarn" Height="22" BorderBrush="{DynamicResource App.BorderBrush}" BorderThickness="1"/>
-                            </StackPanel>
+                            <TextBlock Text="主色 Hover"/>
+                            <TextBox x:Name="TbPrimaryHover" Margin="4,0"/>
+                            <Border x:Name="PrevPrimaryHover" Height="24" Background="Transparent" BorderBrush="{DynamicResource App.BorderBrush}" BorderThickness="1"/>
 
-                            <StackPanel>
-                                <TextBlock Text="Banner Error"/>
-                                <DockPanel>
-                                    <TextBox x:Name="TbBannerError" Width="110" Margin="0,0,6,0" TextChanged="ThemeTextBox_TextChanged"/>
-                                    <Button Content="…" Width="32" Click="PickBannerError_Click" Style="{StaticResource TonedBtn}"/>
-                                </DockPanel>
-                                <Border x:Name="PrevBannerError" Height="22" BorderBrush="{DynamicResource App.BorderBrush}" BorderThickness="1"/>
-                            </StackPanel>
+                            <TextBlock Text="Secondary"/>
+                            <TextBox x:Name="TbSecondary" Margin="4,0"/>
+                            <Border x:Name="PrevSecondary" Height="24" Background="Transparent" BorderBrush="{DynamicResource App.BorderBrush}" BorderThickness="1"/>
 
-                            <StackPanel>
-                                <TextBlock Text="Success"/>
-                                <DockPanel>
-                                    <TextBox x:Name="TbSuccess" Width="110" Margin="0,0,6,0" TextChanged="ThemeTextBox_TextChanged"/>
-                                    <Button Content="…" Width="32" Click="PickSuccess_Click" Style="{StaticResource TonedBtn}"/>
-                                </DockPanel>
-                                <Border x:Name="PrevSuccess" Height="22" BorderBrush="{DynamicResource App.BorderBrush}" BorderThickness="1"/>
-                            </StackPanel>
+                            <TextBlock Text="Banner Info"/>
+                            <TextBox x:Name="TbBannerInfo" Margin="4,0"/>
+                            <Border x:Name="PrevBannerInfo" Height="24" Background="Transparent" BorderBrush="{DynamicResource App.BorderBrush}" BorderThickness="1"/>
 
-                            <StackPanel>
-                                <TextBlock Text="Warning"/>
-                                <DockPanel>
-                                    <TextBox x:Name="TbWarning" Width="110" Margin="0,0,6,0" TextChanged="ThemeTextBox_TextChanged"/>
-                                    <Button Content="…" Width="32" Click="PickWarning_Click" Style="{StaticResource TonedBtn}"/>
-                                </DockPanel>
-                                <Border x:Name="PrevWarning" Height="22" BorderBrush="{DynamicResource App.BorderBrush}" BorderThickness="1"/>
-                            </StackPanel>
+                            <TextBlock Text="Banner Warn"/>
+                            <TextBox x:Name="TbBannerWarn" Margin="4,0"/>
+                            <Border x:Name="PrevBannerWarn" Height="24" Background="Transparent" BorderBrush="{DynamicResource App.BorderBrush}" BorderThickness="1"/>
 
-                            <StackPanel>
-                                <TextBlock Text="Error"/>
-                                <DockPanel>
-                                    <TextBox x:Name="TbError" Width="110" Margin="0,0,6,0" TextChanged="ThemeTextBox_TextChanged"/>
-                                    <Button Content="…" Width="32" Click="PickError_Click" Style="{StaticResource TonedBtn}"/>
-                                </DockPanel>
-                                <Border x:Name="PrevError" Height="22" BorderBrush="{DynamicResource App.BorderBrush}" BorderThickness="1"/>
-                            </StackPanel>
+                            <TextBlock Text="Banner Error"/>
+                            <TextBox x:Name="TbBannerError" Margin="4,0"/>
+                            <Border x:Name="PrevBannerError" Height="24" Background="Transparent" BorderBrush="{DynamicResource App.BorderBrush}" BorderThickness="1"/>
                         </UniformGrid>
 
-                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                            <Button Content="還原預設" Width="110" Margin="0,0,8,0" Click="ResetTheme_Click" Style="{StaticResource TonedBtn}"/>
-                            <Button Content="套用並儲存" Width="120" Click="SaveTheme_Click" Style="{StaticResource PrimaryBtn}"/>
+                        <UniformGrid Columns="3" Rows="3">
+                            <TextBlock Text="Success"/>
+                            <TextBox x:Name="TbSuccess" Margin="4,0"/>
+                            <Border x:Name="PrevSuccess" Height="24" Background="Transparent" BorderBrush="{DynamicResource App.BorderBrush}" BorderThickness="1"/>
+
+                            <TextBlock Text="Warning"/>
+                            <TextBox x:Name="TbWarning" Margin="4,0"/>
+                            <Border x:Name="PrevWarning" Height="24" Background="Transparent" BorderBrush="{DynamicResource App.BorderBrush}" BorderThickness="1"/>
+
+                            <TextBlock Text="Error"/>
+                            <TextBox x:Name="TbError" Margin="4,0"/>
+                            <Border x:Name="PrevError" Height="24" Background="Transparent" BorderBrush="{DynamicResource App.BorderBrush}" BorderThickness="1"/>
+                        </UniformGrid>
+
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,4,0,0">
+                            <Button Content="還原預設" Click="ResetTheme_Click" Style="{StaticResource TonedBtn}" Margin="0,0,8,0"/>
+                            <Button Content="套用並儲存" Click="SaveTheme_Click" Style="{StaticResource TonedBtn}"/>
                         </StackPanel>
                     </StackPanel>
                 </Grid>
@@ -322,33 +280,32 @@
 
             <!-- 六、Extension Groups 檢視 / 匯入 -->
             <GroupBox Header="Extension Groups 檢視 / 匯入" Margin="0,0,0,12">
-                <Grid Margin="12">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="*"/>
-                    </Grid.RowDefinitions>
+                <DockPanel Margin="10">
+                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
+                        <Button x:Name="BtnLoadExtGroups" Content="從檔案匯入 JSON…" Padding="8,4" Margin="0,0,6,0" Style="{StaticResource TonedBtn}"/>
+                        <Button x:Name="BtnApplyExtGroups" Content="套用到設定" Padding="8,4" Margin="0,0,6,0" Style="{StaticResource TonedBtn}"/>
+                        <Button x:Name="BtnResetExtGroups" Content="重置為預設" Padding="8,4" Style="{StaticResource TonedBtn}"/>
+                    </StackPanel>
 
-                    <DockPanel Grid.Row="0" LastChildFill="False">
-                        <TextBlock Text="每組為『副檔名群組 → 列表』。按「整理為單行陣列」可把每個陣列壓成單行，方便閱讀/編輯。"
-                                   Style="{StaticResource HintText}" Margin="0,0,12,0}"/>
-                        <Button x:Name="BtnCompactExtGroups" Content="整理為單行陣列"
-                                Click="BtnCompactExtGroups_Click" Style="{StaticResource TonedBtn}" Padding="8,4"/>
-                    </DockPanel>
+                    <TextBlock DockPanel.Dock="Top" Margin="0,0,0,8"
+                               Foreground="{DynamicResource App.TextMutedBrush}" FontSize="12" TextWrapping="Wrap">
+                        建議格式：每類別的副檔名可壓成單行，例：
+                        <Run Text="&quot;Images&quot;: [ &quot;png&quot;, &quot;jpg&quot;, &quot;jpeg&quot;, &quot;gif&quot;, &quot;bmp&quot;, &quot;tiff&quot;, &quot;heic&quot;, &quot;webp&quot;, &quot;avif&quot;, &quot;raw&quot;, &quot;cr2&quot;, &quot;nef&quot;, &quot;dng&quot; ]"/>
+                    </TextBlock>
 
-                    <TextBox x:Name="TxtExtGroups" Grid.Row="1"
+                    <TextBox x:Name="TxtExtGroups"
                              AcceptsReturn="True"
                              VerticalScrollBarVisibility="Auto"
                              HorizontalScrollBarVisibility="Auto"
                              FontFamily="Consolas"
-                             Height="220"
+                             Height="240"
                              TextWrapping="NoWrap"/>
-                </Grid>
+                </DockPanel>
             </GroupBox>
 
             <!-- 動作列 -->
-            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,0,8">
-                <Button x:Name="BtnOk" Content="確定" Width="100" Margin="0,0,8,0"
-                        Click="BtnOk_Click" Style="{StaticResource PrimaryBtn}"/>
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button x:Name="BtnOk" Content="確定" Width="100" Margin="0,0,8,0" Click="BtnOk_Click" Style="{StaticResource TonedBtn}"/>
                 <Button Content="取消" Width="100" IsCancel="True" Style="{StaticResource TonedBtn}"/>
             </StackPanel>
 
