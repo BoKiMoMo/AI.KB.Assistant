@@ -17,6 +17,7 @@
 		<Compile Remove="Helpers\UnixToDateConverter - 複製.cs" />
 		<Compile Remove="Models\ActionBatch.cs" />
 		<Compile Remove="Models\ClassificationResult.cs" />
+		<Compile Remove="Models\Enums.cs" />
 		<Compile Remove="Models\OpenAIConfig.cs" />
 		<Compile Remove="Models\PathNode.cs" />
 		<Compile Remove="Services\ClassifierService.cs" />

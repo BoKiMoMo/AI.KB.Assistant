@@ -2,7 +2,6 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
-using AI.KB.Assistant.Models;
 using System.Text.Json.Serialization;
 
 namespace AI.KB.Assistant.Models
@@ -24,14 +23,23 @@ namespace AI.KB.Assistant.Models
         [JsonPropertyName("classification")]
         public ClassificationSection Classification { get; set; } = new();
 
-        // ---------------- Sections ----------------
+        // ★ 新增：完整主題色彩設定（供 ThemeService / SettingsWindow 使用）
+        [JsonPropertyName("theme")]
+        public ThemeSection Theme { get; set; } = ThemeSection.Default();
+
+        [JsonPropertyName("themeColors")]
+        public ThemeColors ThemeColors { get; set; } = new ThemeColors();
+
+
+        // ============== Sections ==============
 
         public sealed class AppSection
         {
             [JsonPropertyName("dbPath")] public string DbPath { get; set; } = "data.db";
             [JsonPropertyName("rootDir")] public string RootDir { get; set; } = "";
             [JsonPropertyName("projectLock")] public string ProjectLock { get; set; } = "";
-            [JsonPropertyName("theme")] public string? Theme { get; set; }
+            // 舊版曾在這裡放 theme 名稱，保留以維持相容（僅當作字串標記，不參與 ThemeService）
+            [JsonPropertyName("theme")] public string? ThemeName { get; set; }
         }
 
         public sealed class ImportSection
@@ -53,6 +61,7 @@ namespace AI.KB.Assistant.Models
             [JsonConverter(typeof(LowercaseEnumConverter<OverwritePolicy>))]
             public OverwritePolicy OverwritePolicy { get; set; } = OverwritePolicy.Rename;
 
+            // 舊版相容：單一黑名單欄位
             [JsonPropertyName("blacklistFolderName")] public string? _compatSingleFolderName { get; set; }
         }
 
@@ -101,16 +110,47 @@ namespace AI.KB.Assistant.Models
             [JsonPropertyName("model")] public string Model { get; set; } = "gpt-4o-mini";
             [JsonPropertyName("baseUrl")] public string BaseUrl { get; set; } = "";
             [JsonPropertyName("enableWhenLowConfidence")] public bool EnableWhenLowConfidence { get; set; } = true;
+
+            // 舊版相容
             [JsonPropertyName("enable")] public bool? _compatEnable { get; set; }
         }
 
         public sealed class ClassificationSection
         {
             [JsonPropertyName("confidenceThreshold")] public double ConfidenceThreshold { get; set; } = 0.65;
+
+            // 舊版相容
             [JsonPropertyName("useLLM")] public bool? _compatUseLlm { get; set; }
         }
 
-        // ---------------- Load / Save ----------------
+        // ★ 新增：主題顏色區段（字串用 #RRGGBB 或 #AARRGGBB）
+        public sealed class ThemeSection
+        {
+            // 基礎
+            [JsonPropertyName("background")] public string Background { get; set; } = "#111319";
+            [JsonPropertyName("panel")] public string Panel { get; set; } = "#1B1F2A";
+            [JsonPropertyName("border")] public string Border { get; set; } = "#2A3140";
+            [JsonPropertyName("text")] public string Text { get; set; } = "#E7EAF0";
+            [JsonPropertyName("textMuted")] public string TextMuted { get; set; } = "#A9B1C1";
+
+            // 主色
+            [JsonPropertyName("primary")] public string Primary { get; set; } = "#3B82F6";
+            [JsonPropertyName("primaryHover")] public string PrimaryHover { get; set; } = "#60A5FA";
+            [JsonPropertyName("secondary")] public string Secondary { get; set; } = "#64748B";
+
+            // Banner / 狀態
+            [JsonPropertyName("bannerInfo")] public string BannerInfo { get; set; } = "#FFF8D6";
+            [JsonPropertyName("bannerWarn")] public string BannerWarn { get; set; } = "#FFE7E7";
+            [JsonPropertyName("bannerError")] public string BannerError { get; set; } = "#FFE1E1";
+
+            [JsonPropertyName("success")] public string Success { get; set; } = "#22C55E";
+            [JsonPropertyName("warning")] public string Warning { get; set; } = "#F59E0B";
+            [JsonPropertyName("error")] public string Error { get; set; } = "#EF4444";
+
+            public static ThemeSection Default() => new ThemeSection();
+        }
+
+        // ============== Load / Save ==============
 
         public static AppConfig Load(string path)
         {
@@ -120,24 +160,30 @@ namespace AI.KB.Assistant.Models
             var json = File.ReadAllText(path);
             var cfg = JsonSerializer.Deserialize<AppConfig>(json, JsonOptions()) ?? new AppConfig();
 
+            // 舊版相容：單一黑名單欄位 → 陣列
             if (!string.IsNullOrWhiteSpace(cfg.Import._compatSingleFolderName) &&
                 (cfg.Import.BlacklistFolderNames == null || cfg.Import.BlacklistFolderNames.Length == 0))
             {
                 cfg.Import.BlacklistFolderNames = new[] { cfg.Import._compatSingleFolderName! };
             }
 
+            // 舊版相容：分類是否使用 LLM → OpenAI.EnableWhenLowConfidence
             if (cfg.Classification._compatUseLlm.HasValue && cfg.Classification._compatUseLlm.Value == false)
                 cfg.OpenAI.EnableWhenLowConfidence = false;
 
+            // 舊版相容：OpenAI.enable → EnableWhenLowConfidence
             if (cfg.OpenAI._compatEnable.HasValue)
                 cfg.OpenAI.EnableWhenLowConfidence = cfg.OpenAI._compatEnable.Value;
+
+            // 保險：Theme 區段不存在時補預設
+            cfg.Theme ??= ThemeSection.Default();
 
             return cfg;
         }
 
         public static void Save(string path, AppConfig cfg)
         {
-            var json = JsonSerializer.Serialize(cfg, JsonOptions(true));
+            var json = JsonSerializer.Serialize(cfg, JsonOptions(indented: true));
             Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path)) ?? ".");
             File.WriteAllText(path, json);
         }
@@ -151,4 +197,26 @@ namespace AI.KB.Assistant.Models
             Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) }
         };
     }
+
+    // ====== 相依型別（沿用你專案裡的定義） ======
+    public enum MoveMode { Move = 0, Copy = 1 }
+    public enum OverwritePolicy { Replace = 0, Rename = 1, Skip = 2 }
+
+    /// <summary>把 enum 以小寫寫入/讀取 JSON 的 converter（沿用你的專案習慣）</summary>
+    public sealed class LowercaseEnumConverter<T> : JsonConverter<T> where T : struct, Enum
+    {
+        public override T Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+        {
+            var s = reader.GetString();
+            if (string.IsNullOrWhiteSpace(s)) return default;
+            if (Enum.TryParse<T>(s, ignoreCase: true, out var v)) return v;
+            return default;
+        }
+
+        public override void Write(Utf8JsonWriter writer, T value, JsonSerializerOptions options)
+        {
+            writer.WriteStringValue(value.ToString().ToLowerInvariant());
+        }
+    }
+
 }

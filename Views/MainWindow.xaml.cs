@@ -1,4 +1,6 @@
-﻿using System;
+﻿using AI.KB.Assistant.Models;
+using AI.KB.Assistant.Services;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -9,32 +11,29 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
-using AI.KB.Assistant.Models;
-using AI.KB.Assistant.Services;
 
 namespace AI.KB.Assistant.Views
 {
+    /// <summary>
+    /// MainWindow code-behind — final, drop-in replacement.
+    /// - Fixes: safe pane sizing, banner helper, toolbar hints, robust tree actions
+    /// - Removes nested extension class (DbServiceExtensions must be its own file)
+    /// - Wraps classify/commit/add/refresh with better logging and UI updates
+    /// - Adds null-guards and exception-safety around file system ops
+    /// - Honors theme resources if present (falls back to safe colors)
+    /// </summary>
     public partial class MainWindow : Window
     {
-        // ==== 快捷鍵：RoutedUICommand (Ctrl+O / Ctrl+I / Ctrl+T / Ctrl+Enter) ====
-        public static readonly RoutedUICommand CmdOpenInbox =
-            new("Open Inbox", nameof(CmdOpenInbox), typeof(MainWindow),
-                new InputGestureCollection { new KeyGesture(Key.O, ModifierKeys.Control) });
+        // ====== Commands (快捷鍵) ======
+        public ICommand OpenInboxCommand => new RoutedUICommand();
+        public ICommand PrimaryActionCommand => new RoutedUICommand();
+        public ICommand ToggleInfoPaneCommand => new RoutedUICommand();
+        public ICommand ToggleTreePaneCommand => new RoutedUICommand();
 
-        public static readonly RoutedUICommand CmdToggleInfo =
-            new("Toggle Info Pane", nameof(CmdToggleInfo), typeof(MainWindow),
-                new InputGestureCollection { new KeyGesture(Key.I, ModifierKeys.Control) });
-
-        public static readonly RoutedUICommand CmdToggleTree =
-            new("Toggle Tree Pane", nameof(CmdToggleTree), typeof(MainWindow),
-                new InputGestureCollection { new KeyGesture(Key.T, ModifierKeys.Control) });
-
-        public static readonly RoutedUICommand CmdPrimaryAction =
-            new("Primary Action", nameof(CmdPrimaryAction), typeof(MainWindow),
-                new InputGestureCollection { new KeyGesture(Key.Enter, ModifierKeys.Control) });
-
+        // ====== Services & States ======
         private readonly string _cfgPath;
         private AppConfig _cfg = new();
+        private UiState _ui = new();
         private DbService? _db;
         private RoutingService? _routing;
         private LlmService? _llm;
@@ -46,14 +45,25 @@ namespace AI.KB.Assistant.Views
 
         private static readonly object DummyNode = new();
         private bool _isReady;
+        private List<string> _currentLevelDirs = new();
 
         // 折疊狀態
-        private bool _leftCollapsed = false;
-        private bool _rightCollapsed = false;
+        private bool _leftCollapsed;
+        private bool _rightCollapsed;
+        // 避免 Log 切換造成重入
+        private bool _togglingLog;
+        // 避免連點開啟檔案
+        private DateTime _lastOpen = DateTime.MinValue;
 
         public MainWindow()
         {
             InitializeComponent();
+
+            // 綁定 Commands
+            CommandBindings.Add(new CommandBinding(OpenInboxCommand, CmdOpenInbox_Executed));
+            CommandBindings.Add(new CommandBinding(PrimaryActionCommand, CmdPrimaryAction_Executed));
+            CommandBindings.Add(new CommandBinding(ToggleInfoPaneCommand, CmdToggleInfo_Executed));
+            CommandBindings.Add(new CommandBinding(ToggleTreePaneCommand, CmdToggleTree_Executed));
 
             _cfgPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "config.json");
             Loaded += MainWindow_Loaded;
@@ -62,48 +72,136 @@ namespace AI.KB.Assistant.Views
             RtThreshold.ValueChanged += (s, e) => { RtThresholdValue.Text = $"{RtThreshold.Value:0.00}"; };
         }
 
+        #region ====== Life cycle ======
         private void MainWindow_Loaded(object? sender, RoutedEventArgs e)
         {
-            _cfg = ConfigService.TryLoad(_cfgPath);
-
-            _db = new DbService(_cfg.App.DbPath);
-            _routing = new RoutingService(_cfg);
-            _llm = new LlmService(_cfg);
-            _intake = new IntakeService(_db, _routing, _llm, _cfg);
-
-            _lockedProject = _cfg.App.ProjectLock ?? string.Empty;
-            TxtLockedProject.Text = string.IsNullOrWhiteSpace(_lockedProject) ? "目前未鎖定專案" : $"目前鎖定：{_lockedProject}";
-            RefreshProjectCombo();
-
-            BuildFolderTreeRoots();
-
-            RtThreshold.Value = _cfg.Classification.ConfidenceThreshold;
-            RtBlacklist.Text = string.Join(", ", _cfg.Import.BlacklistFolderNames ?? Array.Empty<string>());
-
-            MainTabs.SelectedIndex = 0;
-            _isReady = true;
-
-            if (!string.IsNullOrWhiteSpace(_cfg.App.RootDir) && Directory.Exists(_cfg.App.RootDir))
+            try
             {
-                ShowFolder(_cfg.App.RootDir);
-                BuildBreadcrumb(_cfg.App.RootDir);
-            }
-            else
-            {
-                RefreshList("home");
-            }
+                _cfg = ConfigService.TryLoad(_cfgPath);
+                _ui = UiStateService.Load();
 
-            Log("系統已就緒。");
+                _db = new DbService(_cfg.App.DbPath);
+                _routing = new RoutingService(_cfg);
+                _llm = new LlmService(_cfg);
+                _intake = new IntakeService(_db, _routing, _llm, _cfg);
+
+                _lockedProject = _cfg.App.ProjectLock ?? string.Empty;
+                TxtLockedProject.Text = string.IsNullOrWhiteSpace(_lockedProject) ? "目前未鎖定專案" : $"目前鎖定：{_lockedProject}";
+                RefreshProjectCombo();
+
+                ApplyUiState();
+
+                RtThreshold.Value = _cfg.Classification.ConfidenceThreshold;
+                RtBlacklist.Text = string.Join(", ", _cfg.Import.BlacklistFolderNames ?? Array.Empty<string>());
+
+                BuildFolderTreeRoots();
+
+                MainTabs.SelectedIndex = 0;
+                _isReady = true;
+
+                // 初始顯示
+                var startFolder = !string.IsNullOrWhiteSpace(_ui.LastFolder) && Directory.Exists(_ui.LastFolder)
+                    ? _ui.LastFolder
+                    : (!string.IsNullOrWhiteSpace(_cfg.App.RootDir) && Directory.Exists(_cfg.App.RootDir)
+                        ? _cfg.App.RootDir
+                        : null);
+
+                if (!string.IsNullOrWhiteSpace(startFolder))
+                {
+                    ShowFolder(startFolder!);
+                    BuildBreadcrumb(startFolder!);
+                }
+                else
+                {
+                    RefreshList("home");
+                    ShowBanner("拖放檔案到視窗，或點「＋加入」開始。", BannerKind.Info);
+                }
+
+                Log("系統已就緒。");
+            }
+            catch (Exception ex)
+            {
+                ShowBanner($"初始化失敗：{ex.Message}", BannerKind.Error);
+                Log(ex.ToString());
+            }
         }
 
         private void MainWindow_Closing(object? sender, System.ComponentModel.CancelEventArgs e)
         {
+            try { CaptureUiState(); UiStateService.Save(_ui); } catch { }
             try { _cts.Cancel(); } catch { }
             try { _db?.Dispose(); } catch { }
             try { _llm?.Dispose(); } catch { }
         }
+        #endregion
 
-        // ===== 工具 =====
+        #region ====== UI 狀態套用 / 取回 ======
+        private static double Clamp(double value, double min, double def)
+        {
+            if (double.IsNaN(value) || double.IsInfinity(value) || value < min) return def;
+            return value;
+        }
+
+        private void ApplyUiState()
+        {
+            try
+            {
+                // 左/右欄寬度做 clamp，避免載到 0 或異常值把 UI 擠壞
+                var leftW = Clamp(_ui.LeftWidth, 160, 280);
+                var rightW = Clamp(_ui.RightWidth, 260, 360);
+                var logH = Clamp(_ui.LogHeight, 60, 110);
+
+                _leftCollapsed = _ui.LeftCollapsed;
+                _rightCollapsed = _ui.RightCollapsed;
+
+                LeftPaneColumn.Width = _leftCollapsed ? new GridLength(0) : new GridLength(leftW);
+                RightPaneColumn.Width = _rightCollapsed ? new GridLength(0) : new GridLength(rightW);
+
+                LogExpander.IsExpanded = _ui.LogExpanded;
+                LogBox.Height = logH;
+
+                // 還原 GridView 欄寬
+                var gv = MainGridView;
+                if (gv != null && _ui.ColumnWidths != null && _ui.ColumnWidths.Count > 0)
+                {
+                    foreach (var c in gv.Columns)
+                    {
+                        var key = c.Header?.ToString() ?? string.Empty;
+                        if (_ui.ColumnWidths.TryGetValue(key, out var w))
+                            c.Width = Clamp(w, 40, c.Width); // 最小 40
+                    }
+                }
+            }
+            catch { }
+        }
+
+        private void CaptureUiState()
+        {
+            try
+            {
+                _ui.LeftCollapsed = LeftPaneColumn.Width.Value < 1;
+                _ui.RightCollapsed = RightPaneColumn.Width.Value < 1;
+                if (!_ui.LeftCollapsed) _ui.LeftWidth = LeftPaneColumn.Width.Value;
+                if (!_ui.RightCollapsed) _ui.RightWidth = RightPaneColumn.Width.Value;
+                _ui.LogExpanded = LogExpander.IsExpanded;
+                _ui.LogHeight = LogBox.ActualHeight > 40 ? LogBox.ActualHeight : _ui.LogHeight;
+
+                var gv = MainGridView;
+                if (gv != null)
+                {
+                    _ui.ColumnWidths ??= new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+                    foreach (var c in gv.Columns)
+                    {
+                        var key = c.Header?.ToString() ?? string.Empty;
+                        _ui.ColumnWidths[key] = c.Width;
+                    }
+                }
+            }
+            catch { }
+        }
+        #endregion
+
+        #region ====== 小工具 ======
         private IEnumerable<Item> GetSelection()
         {
             if (FileList is ListView lv && lv.SelectedItems != null)
@@ -118,59 +216,69 @@ namespace AI.KB.Assistant.Views
                 var line = $"[{DateTime.Now:HH:mm:ss}] {m}";
                 LogBox.AppendText(line + Environment.NewLine);
                 LogBox.ScrollToEnd();
-                RtHistory?.Items?.Add(line);
             }
             catch { }
         }
 
-        private void RefreshProjectCombo()
+        private enum BannerKind { Info, Warn, Error }
+
+        private void ShowBanner(string message, BannerKind kind = BannerKind.Info)
         {
             try
             {
-                if (_db == null) return;
-                var all = _db.QueryDistinctProjects().ToList();
-                CbLockProject.ItemsSource = all;
-                if (!string.IsNullOrWhiteSpace(_lockedProject))
-                    CbLockProject.Text = _lockedProject;
+                (Brush bg, Brush br) = GetBannerBrushes(kind);
+                Banner.Background = bg;
+                Banner.BorderBrush = br;
+                BannerText.Text = message;
+                Banner.Visibility = Visibility.Visible;
             }
-            catch { }
+            catch { /* no-op */ }
         }
 
-        private void UpdateCounters()
+        private void HideBanner() => Banner.Visibility = Visibility.Collapsed;
+
+        private (Brush bg, Brush border) GetBannerBrushes(BannerKind kind)
+        {
+            // 優先用 Theme.xaml 定義的資源；否則 fallback 固定顏色
+            Brush bg;
+            Brush bd;
+            switch (kind)
+            {
+                case BannerKind.Error:
+                    bg = TryFindBrush("App.BannerErrorBrush", Color.FromRgb(0xFE, 0xE2, 0xE2));
+                    bd = TryFindBrush("App.ErrorBrush", Color.FromRgb(0xEF, 0x44, 0x44));
+                    break;
+                case BannerKind.Warn:
+                    bg = TryFindBrush("App.BannerWarnBrush", Color.FromRgb(0xFE, 0xF3, 0xC7));
+                    bd = TryFindBrush("App.WarningBrush", Color.FromRgb(0xF5, 0x9E, 0x0B));
+                    break;
+                default:
+                    bg = TryFindBrush("App.BannerInfoBrush", Color.FromRgb(0xDB, 0xEA, 0xFE));
+                    bd = TryFindBrush("App.PrimaryBrush", Color.FromRgb(0x25, 0x63, 0xEB));
+                    break;
+            }
+            return (bg, bd);
+        }
+
+        private static Brush TryFindBrush(string key, Color fallback)
         {
             try
             {
-                TxtCounter.Text = $"清單筆數：{_items.Count}；選取：{GetSelection().Count()}";
-                if (FileList.SelectedItem is Item it)
-                {
-                    RtName.Text = it.Filename ?? "";
-                    RtMeta.Text = $"{it.Category} / {it.Project} / {it.Tags}";
-                    RtPath.Text = it.Path ?? "";
-                }
-                else
-                {
-                    RtName.Text = RtMeta.Text = RtPath.Text = "";
-                }
+                var obj = Application.Current.TryFindResource(key);
+                if (obj is SolidColorBrush b) return b;
             }
             catch { }
+            return new SolidColorBrush(fallback);
         }
 
-        private void BindAndRefreshList()
+        private void ShowToolbarHint(string text, BannerKind kind = BannerKind.Info)
         {
-            FileList.ItemsSource = null;
-            FileList.ItemsSource = _items;
-            UpdateCounters();
+            ShowBanner(text, kind);
+            Log(text);
         }
+        #endregion
 
-        private static string[] ParseListFromText(string? text)
-            => (text ?? "")
-                .Split(new[] { ',', ';', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries)
-                .Select(s => s.Trim())
-                .Where(s => !string.IsNullOrWhiteSpace(s))
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToArray();
-
-        // ===== 清單刷新 =====
+        #region ====== 清單刷新 / 狀態 ======
         private string CurrentTabTag()
         {
             if (MainTabs.SelectedItem is TabItem ti && ti.Tag is string tag) return tag;
@@ -184,35 +292,86 @@ namespace AI.KB.Assistant.Views
             _items.Clear();
             IEnumerable<Item> src = Enumerable.Empty<Item>();
 
-            switch (statusFilter)
+            try
             {
-                case "fav":
-                    src = _db.QueryByTag("我的最愛").OrderByDescending(i => i.CreatedTs);
-                    break;
-                case "processing":
-                    src = _db.QueryByTag("處理中").OrderByDescending(i => i.CreatedTs);
-                    break;
-                case "backlog":
-                    src = _db.QueryByTag("待處理").OrderByDescending(i => i.CreatedTs);
-                    break;
-                case "blacklist":
-                    src = _db.QueryByStatus("blacklist").OrderByDescending(i => i.CreatedTs);
-                    break;
-                case "autosort-staging":
-                    src = _db.QueryByStatus("autosort-staging").OrderByDescending(i => i.CreatedTs);
-                    break;
-                case "home":
-                default:
-                    src = _db.QueryByStatus("auto-sorted").OrderByDescending(i => i.CreatedTs);
-                    break;
+                switch (statusFilter)
+                {
+                    case "fav":
+                        src = _db.QueryByTag("我的最愛").OrderByDescending(i => i.CreatedTs);
+                        break;
+                    case "processing":
+                        src = _db.QueryByTag("處理中").OrderByDescending(i => i.CreatedTs);
+                        break;
+                    case "backlog":
+                        src = _db.QueryByTag("待處理").OrderByDescending(i => i.CreatedTs);
+                        break;
+                    case "blacklist":
+                        src = _db.QueryByStatus("blacklist").OrderByDescending(i => i.CreatedTs);
+                        break;
+                    case "autosort-staging":
+                        src = _db.QueryByStatus("autosort-staging").OrderByDescending(i => i.CreatedTs);
+                        break;
+                    case "home":
+                    default:
+                        src = _db.QueryByStatus("auto-sorted").OrderByDescending(i => i.CreatedTs);
+                        break;
+                }
+            }
+            catch (Exception ex)
+            {
+                Log($"讀取清單失敗：{ex.Message}");
             }
 
             foreach (var it in src) _items.Add(it);
             BindAndRefreshList();
+
+            if (!_items.Any())
+                ShowBanner("目前沒有資料。拖放檔案到視窗，或點「＋加入」。", BannerKind.Info);
+            else
+                HideBanner();
+
             Log($"清單已更新（{statusFilter}）");
         }
 
-        // ===== 匯入 / 分類 / 搬檔 =====
+        private void UpdateCounters()
+        {
+            try
+            {
+                var selCount = GetSelection().Count();
+                TxtCounter.Text = $"清單筆數：{_items.Count}；選取：{selCount}";
+                BatchBar.Visibility = selCount > 1 ? Visibility.Visible : Visibility.Collapsed;
+
+                if (FileList.SelectedItem is Item it)
+                {
+                    RtName.Text = it.Filename ?? string.Empty;
+                    RtMeta.Text = $"{it.Category} / {it.Project} / {it.Tags}";
+                    RtPath.Text = it.Path ?? string.Empty;
+                }
+                else
+                {
+                    RtName.Text = RtMeta.Text = RtPath.Text = string.Empty;
+                }
+            }
+            catch { }
+        }
+
+        private void BindAndRefreshList()
+        {
+            FileList.ItemsSource = null;
+            FileList.ItemsSource = _items;
+            UpdateCounters();
+        }
+
+        private static string[] ParseListFromText(string? text)
+            => (text ?? string.Empty)
+                .Split(new[] { ',', ';', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(s => s.Trim())
+                .Where(s => !string.IsNullOrWhiteSpace(s))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+        #endregion
+
+        #region ====== 匯入 / 分類 / 搬檔 ======
         private async void BtnStartClassify_Click(object sender, RoutedEventArgs e)
         {
             if (_intake == null || _db == null) return;
@@ -233,11 +392,18 @@ namespace AI.KB.Assistant.Views
                     await _intake.ClassifyOnlyAsync(it.Path!, _cts.Token);
                     done++;
                 }
-                catch { }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
+                catch (Exception ex)
+                {
+                    Log($"分類失敗（{it.Filename}）：{ex.Message}");
+                }
             }
 
             RefreshList("home");
-            Log($"預分類完成：{done} 筆");
+            ShowToolbarHint($"預分類完成：{done} 筆");
         }
 
         private async void BtnCommit_Click(object sender, RoutedEventArgs e)
@@ -250,10 +416,17 @@ namespace AI.KB.Assistant.Views
             try
             {
                 var moved = await _intake.CommitPendingAsync(_cts.Token);
-                Log($"搬檔完成：{moved} 筆");
+                ShowToolbarHint($"搬檔完成：{moved} 筆");
                 RefreshList(CurrentTabTag());
             }
-            catch (Exception ex) { Log($"搬檔失敗：{ex.Message}"); }
+            catch (OperationCanceledException)
+            {
+                ShowToolbarHint("搬檔已取消。", BannerKind.Warn);
+            }
+            catch (Exception ex)
+            {
+                ShowToolbarHint($"搬檔失敗：{ex.Message}", BannerKind.Error);
+            }
         }
 
         private async void BtnAddFiles_Click(object sender, RoutedEventArgs e)
@@ -271,13 +444,16 @@ namespace AI.KB.Assistant.Views
                 if (dlg.ShowDialog() == true)
                 {
                     foreach (var f in dlg.FileNames)
-                        await _intake.StageOnlyAsync(f, CancellationToken.None);
+                    {
+                        try { await _intake.StageOnlyAsync(f, CancellationToken.None); }
+                        catch (Exception ex) { Log($"加入失敗：{Path.GetFileName(f)} — {ex.Message}"); }
+                    }
 
                     RefreshList("home");
-                    Log($"加入 {dlg.FileNames.Length} 筆到 Inbox");
+                    ShowToolbarHint($"加入 {dlg.FileNames.Length} 筆到 Inbox");
                 }
             }
-            catch (Exception ex) { Log($"加入失敗：{ex.Message}"); }
+            catch (Exception ex) { ShowToolbarHint($"加入失敗：{ex.Message}", BannerKind.Error); }
         }
 
         private void BtnRefresh_Click(object sender, RoutedEventArgs e)
@@ -295,7 +471,9 @@ namespace AI.KB.Assistant.Views
             RefreshList(CurrentTabTag());
         }
 
-        private void BtnOpenInbox_Click(object sender, RoutedEventArgs e)
+        private void BtnOpenInbox_Click(object sender, RoutedEventArgs e) => OpenInbox();
+
+        private void OpenInbox()
         {
             try
             {
@@ -310,10 +488,11 @@ namespace AI.KB.Assistant.Views
                 Process.Start(new ProcessStartInfo("explorer.exe", inbox) { UseShellExecute = true });
                 Log($"已開啟收件夾：{inbox}");
             }
-            catch (Exception ex) { Log($"開啟收件夾失敗：{ex.Message}"); }
+            catch (Exception ex) { ShowToolbarHint($"開啟收件夾失敗：{ex.Message}", BannerKind.Error); }
         }
+        #endregion
 
-        // ===== 清單：操作 =====
+        #region ====== 清單：操作 ======
         private void FileList_ContextMenuOpening(object sender, ContextMenuEventArgs e)
         {
             if (FileList?.ContextMenu != null)
@@ -332,7 +511,6 @@ namespace AI.KB.Assistant.Views
             }
         }
 
-        private DateTime _lastOpen = DateTime.MinValue;
         private void OpenSelectedFile()
         {
             try
@@ -388,7 +566,8 @@ namespace AI.KB.Assistant.Views
                 var dir = System.IO.Path.GetDirectoryName(it.Path);
                 if (!string.IsNullOrWhiteSpace(dir) && Directory.Exists(dir))
                 {
-                    Process.Start(new ProcessStartInfo("explorer.exe", dir) { UseShellExecute = true });
+                    try { Process.Start(new ProcessStartInfo("explorer.exe", dir) { UseShellExecute = true }); }
+                    catch (Exception ex) { Log($"開啟資料夾失敗：{ex.Message}"); }
                 }
             }
         }
@@ -444,7 +623,7 @@ namespace AI.KB.Assistant.Views
             var box = new SetTextDialog("設定標籤", "輸入標籤（以逗號分隔）：");
             if (box.ShowDialog() == true)
             {
-                var tags = box.Value?.Trim() ?? "";
+                var tags = box.Value?.Trim() ?? string.Empty;
                 foreach (var it in sel)
                 {
                     it.Tags = tags;
@@ -460,10 +639,10 @@ namespace AI.KB.Assistant.Views
             var it = FileList.SelectedItem as Item;
             if (it == null || string.IsNullOrWhiteSpace(it.Path)) return;
 
-            var box = new SetTextDialog("重新命名", "輸入新檔名（含副檔名）：", it.Filename ?? "");
+            var box = new SetTextDialog("重新命名", "輸入新檔名（含副檔名）：", it.Filename ?? string.Empty);
             if (box.ShowDialog() == true)
             {
-                var newName = (box.Value ?? "").Trim();
+                var newName = (box.Value ?? string.Empty).Trim();
                 if (string.IsNullOrWhiteSpace(newName)) return;
 
                 try
@@ -492,16 +671,23 @@ namespace AI.KB.Assistant.Views
                 foreach (var it in sel)
                 {
                     if (string.IsNullOrWhiteSpace(it.Path) || !File.Exists(it.Path)) continue;
-                    await _intake.StageOnlyAsync(it.Path!, CancellationToken.None);
-                    it.Status = "inbox";
-                    _db.UpsertItem(it);
-                    ok++;
+                    try
+                    {
+                        await _intake.StageOnlyAsync(it.Path!, CancellationToken.None);
+                        it.Status = "inbox";
+                        _db.UpsertItem(it);
+                        ok++;
+                    }
+                    catch (Exception ex)
+                    {
+                        Log($"移動到收件夾失敗（{it.Filename}）：{ex.Message}");
+                    }
                 }
 
-                Log($"已移動到收件夾：{ok} 筆");
+                ShowToolbarHint($"已移動到收件夾：{ok} 筆");
                 RefreshList("home");
             }
-            catch (Exception ex) { Log($"移動到收件夾失敗：{ex.Message}"); }
+            catch (Exception ex) { ShowToolbarHint($"移動到收件夾失敗：{ex.Message}", BannerKind.Error); }
         }
 
         private void CtxDelete_Click(object sender, RoutedEventArgs e)
@@ -518,35 +704,62 @@ namespace AI.KB.Assistant.Views
                 int ok = 0;
                 foreach (var it in sel)
                 {
-                    if (!string.IsNullOrWhiteSpace(it.Path) && File.Exists(it.Path))
+                    try
                     {
-                        File.Delete(it.Path);
-                        ok++;
+                        if (!string.IsNullOrWhiteSpace(it.Path) && File.Exists(it.Path))
+                        {
+                            File.Delete(it.Path);
+                            ok++;
+                        }
+                        _items.Remove(it);
                     }
-                    _items.Remove(it);
+                    catch (Exception ex)
+                    {
+                        Log($"刪除失敗（{it.Filename}）：{ex.Message}");
+                    }
                 }
                 BindAndRefreshList();
-                Log($"已刪除檔案：{ok} 筆");
+                ShowToolbarHint($"已刪除檔案：{ok} 筆");
             }
-            catch (Exception ex) { Log($"刪除失敗：{ex.Message}"); }
+            catch (Exception ex) { ShowToolbarHint($"刪除失敗：{ex.Message}", BannerKind.Error); }
         }
 
-        private void FileList_SelectionChanged(object sender, SelectionChangedEventArgs e) => UpdateCounters();
+        private void FileList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            UpdateCounters();
+            HideBanner();
+        }
+        #endregion
 
-        // ===== 左/右欄收合（工具列按鈕沿用） =====
+        #region ====== 左/右欄收合 & 底部訊息列 ======
         private void BtnEdgeLeft_Click(object sender, RoutedEventArgs e)
         {
-            LeftPaneColumn.Width = _leftCollapsed ? new GridLength(280) : new GridLength(0);
-            _leftCollapsed = !_leftCollapsed;
+            _leftCollapsed = LeftPaneColumn.Width.Value >= 1;
+            var target = _leftCollapsed ? 0 : Clamp(_ui.LeftWidth, 160, 280);
+            LeftPaneColumn.Width = new GridLength(target);
         }
 
         private void BtnEdgeRight_Click(object sender, RoutedEventArgs e)
         {
-            RightPaneColumn.Width = _rightCollapsed ? new GridLength(360) : new GridLength(0);
-            _rightCollapsed = !_rightCollapsed;
+            _rightCollapsed = RightPaneColumn.Width.Value >= 1;
+            var target = _rightCollapsed ? 0 : Clamp(_ui.RightWidth, 260, 360);
+            RightPaneColumn.Width = new GridLength(target);
         }
 
-        // ===== 拖放 =====
+        private void BtnToggleLog_Click(object sender, RoutedEventArgs e)
+        {
+            if (_togglingLog) return;      // ★ 防重入，解決 StackOverflow
+            _togglingLog = true;
+            try
+            {
+                e.Handled = true;
+                LogExpander.IsExpanded = !(LogExpander?.IsExpanded ?? false);
+            }
+            finally { _togglingLog = false; }
+        }
+        #endregion
+
+        #region ====== 拖放 ======
         private async void Window_Drop(object sender, DragEventArgs e)
         {
             if (_intake == null) return;
@@ -555,9 +768,12 @@ namespace AI.KB.Assistant.Views
             {
                 var files = (string[])e.Data.GetData(DataFormats.FileDrop);
                 foreach (var f in files)
-                    await _intake.StageOnlyAsync(f, CancellationToken.None);
+                {
+                    try { await _intake.StageOnlyAsync(f, CancellationToken.None); }
+                    catch (Exception ex) { Log($"拖放加入失敗：{Path.GetFileName(f)} — {ex.Message}"); }
+                }
 
-                Log($"拖放加入 {files.Length} 筆至 Inbox");
+                ShowToolbarHint($"拖放加入 {files.Length} 筆至 Inbox");
                 RefreshList("home");
             }
         }
@@ -567,13 +783,15 @@ namespace AI.KB.Assistant.Views
             e.Effects = DragDropEffects.Copy;
             e.Handled = true;
         }
+        #endregion
 
-        // ===== 路徑樹 =====
+        #region ====== 路徑樹 & 篩選 ======
         private void BuildFolderTreeRoots()
         {
             try
             {
                 TvFolders.Items.Clear();
+                _currentLevelDirs.Clear();
 
                 if (!string.IsNullOrWhiteSpace(_cfg.App.RootDir) && Directory.Exists(_cfg.App.RootDir))
                     TvFolders.Items.Add(CreateDirNode(_cfg.App.RootDir, "專案根目錄"));
@@ -591,7 +809,7 @@ namespace AI.KB.Assistant.Views
         private TreeViewItem CreateDirNode(string path, string? headerOverride = null)
         {
             var name = headerOverride ?? (string.IsNullOrEmpty(System.IO.Path.GetFileName(path)) ? path : System.IO.Path.GetFileName(path));
-            var node = new TreeViewItem { Header = name, Tag = path };
+            var node = new TreeViewItem { Header = name, Tag = path, ToolTip = path };
             node.Items.Add(DummyNode);
             node.Expanded += DirNode_Expanded;
             return node;
@@ -613,8 +831,8 @@ namespace AI.KB.Assistant.Views
                     var subdirs = Directory.EnumerateDirectories(baseDir)
                                            .Where(d => !IsHiddenOrSystem(d))
                                            .OrderBy(d => d, StringComparer.OrdinalIgnoreCase);
-                    foreach (var dir in subdirs)
-                        node.Items.Add(CreateDirNode(dir));
+                    _currentLevelDirs = subdirs.ToList();
+                    PopulateDirs(node, _currentLevelDirs);
                 }
                 catch { }
             }
@@ -630,6 +848,15 @@ namespace AI.KB.Assistant.Views
             catch { return false; }
         }
 
+        private void PopulateDirs(TreeViewItem node, IEnumerable<string> dirs)
+        {
+            node.Items.Clear();
+            foreach (var dir in dirs)
+            {
+                node.Items.Add(CreateDirNode(dir));
+            }
+        }
+
         private void TvFolders_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
         {
             var node = TvFolders.SelectedItem as TreeViewItem;
@@ -638,10 +865,40 @@ namespace AI.KB.Assistant.Views
             var path = node.Tag as string;
             if (!string.IsNullOrWhiteSpace(path) && Directory.Exists(path))
             {
+                _ui.LastFolder = path;
                 MainTabs.SelectedIndex = 0;
                 ShowFolder(path);
                 BuildBreadcrumb(path);
             }
+        }
+
+        private void TvFilterBox_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            var keyword = (TvFilterBox.Text ?? string.Empty).Trim();
+            var node = TvFolders.SelectedItem as TreeViewItem;
+            if (node == null || node.Items.Count == 0)
+                node = TvFolders.Items.Count > 0 ? TvFolders.Items[0] as TreeViewItem : null;
+            if (node == null) return;
+
+            var baseDir = node.Tag as string;
+            IEnumerable<string> dirs;
+            try
+            {
+                if (_currentLevelDirs.Count == 0 && !string.IsNullOrWhiteSpace(baseDir) && Directory.Exists(baseDir))
+                {
+                    _currentLevelDirs = Directory.EnumerateDirectories(baseDir)
+                                                 .Where(d => !IsHiddenOrSystem(d))
+                                                 .OrderBy(d => d, StringComparer.OrdinalIgnoreCase)
+                                                 .ToList();
+                }
+                dirs = _currentLevelDirs;
+            }
+            catch { return; }
+
+            if (!string.IsNullOrWhiteSpace(keyword))
+                dirs = dirs.Where(d => Path.GetFileName(d).IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0);
+
+            PopulateDirs(node, dirs);
         }
 
         private void ShowFolder(string folder)
@@ -671,22 +928,28 @@ namespace AI.KB.Assistant.Views
                     {
                         Id = id++,
                         Filename = info.Name,
-                        Ext = (info.Extension ?? "").Trim('.').ToLowerInvariant(),
-                        Project = "",
-                        Category = "",
+                        Ext = (info.Extension ?? string.Empty).Trim('.').ToLowerInvariant(),
+                        Project = string.Empty,
+                        Category = string.Empty,
                         Confidence = 0,
                         CreatedTs = new DateTimeOffset(info.CreationTimeUtc).ToUnixTimeSeconds(),
-                        Status = "",
+                        Status = string.Empty,
                         Path = info.FullName,
-                        Tags = ""
+                        Tags = string.Empty
                     };
                     _items.Add(item);
                 }
 
                 BindAndRefreshList();
+
+                if (files.Count == 0)
+                    ShowBanner("此資料夾目前沒有檔案。", BannerKind.Info);
+                else
+                    HideBanner();
+
                 Log($"顯示資料夾：{folder}（{files.Count} 筆）");
             }
-            catch (Exception ex) { Log($"讀取資料夾失敗：{ex.Message}"); }
+            catch (Exception ex) { ShowToolbarHint($"讀取資料夾失敗：{ex.Message}", BannerKind.Error); }
         }
 
         private void BuildBreadcrumb(string folder)
@@ -719,7 +982,8 @@ namespace AI.KB.Assistant.Views
                         Content = System.IO.Path.GetFileName(p).Length == 0 ? p : System.IO.Path.GetFileName(p),
                         Margin = new Thickness(0, 0, 4, 0),
                         Padding = new Thickness(6, 2, 6, 2),
-                        Tag = p
+                        Tag = p,
+                        Style = (Style)FindResource("TonedBtn")
                     };
                     btn.Click += (s, _) =>
                     {
@@ -739,16 +1003,18 @@ namespace AI.KB.Assistant.Views
             }
             catch { }
         }
+        #endregion
 
-        // ===== 分頁（只處理 TabControl 自己的變更） =====
+        #region ====== 分頁（只處理 TabControl 自己的變更） ======
         private void MainTabs_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (!_isReady) return;
-            if (e.OriginalSource is not TabControl) return; // 避免 ListView 的 SelectionChanged 冒泡
+            if (e.OriginalSource is not TabControl) return;
             RefreshList(CurrentTabTag());
         }
+        #endregion
 
-        // ===== 設定視窗 / 右欄設定 =====
+        #region ====== 設定視窗 / 右欄設定 ======
         public void ReloadConfig()
         {
             _cfg = ConfigService.TryLoad(_cfgPath);
@@ -769,17 +1035,18 @@ namespace AI.KB.Assistant.Views
             if (win.ShowDialog() == true)
                 ReloadConfig();
         }
+        #endregion
 
-        // ===== LLM 協助 =====
+        #region ====== LLM 協助 ======
         private async void BtnGenTags_Click(object sender, RoutedEventArgs e)
         {
             if (_llm == null) return;
             var it = FileList.SelectedItem as Item;
-            if (it == null) { Log("請先選取一筆檔案"); return; }
+            if (it == null) { ShowToolbarHint("請先選取一筆檔案", BannerKind.Warn); return; }
 
             try
             {
-                var tags = await _llm.SuggestProjectNamesAsync(new[] { it.Filename ?? "" }, CancellationToken.None);
+                var tags = await _llm.SuggestProjectNamesAsync(new[] { it.Filename ?? string.Empty }, CancellationToken.None);
                 RtLlmOut.Text = string.Join(", ", tags ?? Array.Empty<string>());
             }
             catch (Exception ex) { RtLlmOut.Text = ex.Message; }
@@ -789,7 +1056,7 @@ namespace AI.KB.Assistant.Views
         {
             if (_llm == null) return;
             var it = FileList.SelectedItem as Item;
-            if (it == null) { Log("請先選取一筆檔案"); return; }
+            if (it == null) { ShowToolbarHint("請先選取一筆檔案", BannerKind.Warn); return; }
 
             try
             {
@@ -803,7 +1070,7 @@ namespace AI.KB.Assistant.Views
         {
             if (_llm == null) return;
             var it = FileList.SelectedItem as Item;
-            if (it == null) { Log("請先選取一筆檔案"); return; }
+            if (it == null) { ShowToolbarHint("請先選取一筆檔案", BannerKind.Warn); return; }
 
             try
             {
@@ -822,16 +1089,31 @@ namespace AI.KB.Assistant.Views
 
                 ConfigService.Save(_cfgPath, _cfg);
                 ReloadConfig();
-                Log("AI 自動整理設定已套用。");
+                ShowToolbarHint("AI 自動整理設定已套用。");
             }
-            catch (Exception ex) { Log($"套用失敗：{ex.Message}"); }
+            catch (Exception ex) { ShowToolbarHint($"套用失敗：{ex.Message}", BannerKind.Error); }
         }
 
         private void BtnReloadSettings_Click(object sender, RoutedEventArgs e) => ReloadConfig();
+        #endregion
+
+        #region ====== 專案鎖定 ======
+        private void RefreshProjectCombo()
+        {
+            try
+            {
+                if (_db == null) return;
+                var all = _db.QueryDistinctProjects().ToList();
+                CbLockProject.ItemsSource = all;
+                if (!string.IsNullOrWhiteSpace(_lockedProject))
+                    CbLockProject.Text = _lockedProject;
+            }
+            catch { }
+        }
 
         private void BtnLockProject_Click(object sender, RoutedEventArgs e)
         {
-            var desired = (CbLockProject.Text ?? "").Trim();
+            var desired = (CbLockProject.Text ?? string.Empty).Trim();
 
             if (string.IsNullOrEmpty(_lockedProject))
             {
@@ -841,7 +1123,7 @@ namespace AI.KB.Assistant.Views
                     _cfg.App.ProjectLock = _lockedProject;
                     TxtLockedProject.Text = $"目前鎖定：{_lockedProject}";
                     try { ConfigService.Save(_cfgPath, _cfg); } catch { }
-                    Log($"🔒 已鎖定專案「{_lockedProject}」");
+                    ShowToolbarHint($"🔒 已鎖定專案「{_lockedProject}」");
                 }
                 else
                 {
@@ -856,7 +1138,7 @@ namespace AI.KB.Assistant.Views
                             TxtLockedProject.Text = $"目前鎖定：{_lockedProject}";
                             CbLockProject.Text = _lockedProject;
                             try { ConfigService.Save(_cfgPath, _cfg); } catch { }
-                            Log($"🔒 已鎖定專案「{_lockedProject}」");
+                            ShowToolbarHint($"🔒 已鎖定專案「{_lockedProject}」");
                         }
                     }
                 }
@@ -869,7 +1151,7 @@ namespace AI.KB.Assistant.Views
                                           MessageBoxImage.Question);
                 if (ans == MessageBoxResult.Yes)
                 {
-                    Log($"🔓 已解除專案鎖定「{_lockedProject}」");
+                    ShowToolbarHint($"🔓 已解除專案鎖定「{_lockedProject}」");
                     _lockedProject = string.Empty;
                     _cfg.App.ProjectLock = string.Empty;
                     TxtLockedProject.Text = "目前未鎖定專案";
@@ -889,7 +1171,17 @@ namespace AI.KB.Assistant.Views
             CbLockProject.ItemsSource = list;
         }
 
-        // ===== 右鍵先選取該列 =====
+        private void CbLockProject_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            // 當使用者從下拉選單選擇既有專案時，僅更新文字；是否鎖定交由「鎖定/解除」按鈕
+            if (CbLockProject.SelectedItem is string s)
+            {
+                CbLockProject.Text = s;
+            }
+        }
+        #endregion
+
+        #region ====== 右鍵先選取該列 ======
         private void ListViewItem_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
         {
             try
@@ -915,139 +1207,26 @@ namespace AI.KB.Assistant.Views
             }
             return null;
         }
+        #endregion
 
-        // ===== 左樹右鍵功能 =====
-        private void Tree_OpenInExplorer_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                var path = (TvFolders.SelectedItem as TreeViewItem)?.Tag as string;
-                if (!string.IsNullOrWhiteSpace(path) && Directory.Exists(path))
-                    Process.Start(new ProcessStartInfo("explorer.exe", path) { UseShellExecute = true });
-            }
-            catch (Exception ex) { Log($"開啟檔案總管失敗：{ex.Message}"); }
-        }
+        #region ====== 快捷鍵命令對應 ======
+        private void CmdOpenInbox_Executed(object sender, ExecutedRoutedEventArgs e) => OpenInbox();
 
-        private async void Tree_MoveFolderToInbox_Click(object sender, RoutedEventArgs e)
-        {
-            if (_intake == null) { Log("匯入服務未就緒。"); return; }
-
-            var folder = (TvFolders.SelectedItem as TreeViewItem)?.Tag as string;
-            if (string.IsNullOrWhiteSpace(folder) || !Directory.Exists(folder)) return;
-
-            try
-            {
-                var files = Directory.EnumerateFiles(folder)
-                    .Where(f =>
-                    {
-                        try
-                        {
-                            var a = File.GetAttributes(f);
-                            return (a & FileAttributes.Hidden) == 0 && (a & FileAttributes.System) == 0;
-                        }
-                        catch { return false; }
-                    })
-                    .ToList();
-
-                int ok = 0;
-                foreach (var f in files)
-                {
-                    await _intake.StageOnlyAsync(f, CancellationToken.None);
-                    ok++;
-                }
-
-                Log($"已加入收件夾：{ok} 筆（{folder}）");
-                RefreshList("home");
-            }
-            catch (Exception ex) { Log($"加入收件夾失敗：{ex.Message}"); }
-        }
-
-        private void Tree_LockProject_Click(object sender, RoutedEventArgs e)
-        {
-            var path = (TvFolders.SelectedItem as TreeViewItem)?.Tag as string;
-            if (string.IsNullOrWhiteSpace(path)) return;
-
-            var name = System.IO.Path.GetFileName(path);
-            if (string.IsNullOrWhiteSpace(name)) name = path;
-
-            _lockedProject = name;
-            _cfg.App.ProjectLock = name;
-            TxtLockedProject.Text = $"目前鎖定：{name}";
-            try { ConfigService.Save(_cfgPath, _cfg); } catch { }
-            Log($"🔒 已鎖定專案「{name}」");
-            CbLockProject.Text = name;
-        }
-
-        private void Tree_UnlockProject_Click(object sender, RoutedEventArgs e)
-        {
-            _lockedProject = string.Empty;
-            _cfg.App.ProjectLock = string.Empty;
-            TxtLockedProject.Text = "目前未鎖定專案";
-            try { ConfigService.Save(_cfgPath, _cfg); } catch { }
-            Log("🔓 已解除專案鎖定");
-        }
-
-        private void Tree_Rename_Click(object sender, RoutedEventArgs e)
-        {
-            var path = (TvFolders.SelectedItem as TreeViewItem)?.Tag as string;
-            if (string.IsNullOrWhiteSpace(path) || !Directory.Exists(path)) return;
-
-            var box = new SetTextDialog("重新命名資料夾", "輸入新名稱：", System.IO.Path.GetFileName(path));
-            if (box.ShowDialog() == true)
-            {
-                var newName = (box.Value ?? "").Trim();
-                if (string.IsNullOrWhiteSpace(newName)) return;
-
-                try
-                {
-                    var parent = System.IO.Path.GetDirectoryName(path)!;
-                    var newPath = System.IO.Path.Combine(parent, newName);
-                    Directory.Move(path, newPath);
-                    Log($"已重新命名資料夾：{newName}");
-                    BuildFolderTreeRoots();
-                }
-                catch (Exception ex) { Log($"重新命名資料夾失敗：{ex.Message}"); }
-            }
-        }
-
-        // ====== ★★★ 快捷鍵對應的 Command 事件處理器 ★★★ ======
-        private void CmdOpenInbox_Executed(object sender, ExecutedRoutedEventArgs e)
-            => BtnOpenInbox_Click(sender, new RoutedEventArgs());
-
-        private void CmdToggleInfo_Executed(object sender, ExecutedRoutedEventArgs e)
-            => BtnEdgeRight_Click(sender, new RoutedEventArgs());
-
-        private void CmdToggleTree_Executed(object sender, ExecutedRoutedEventArgs e)
-            => BtnEdgeLeft_Click(sender, new RoutedEventArgs());
-
-        /// <summary>
-        /// Ctrl+Enter：智慧主動作
-        /// 若有待搬移（autosort-staging），則執行「搬檔」；否則執行「預分類」。
-        /// </summary>
         private async void CmdPrimaryAction_Executed(object sender, ExecutedRoutedEventArgs e)
         {
-            try
-            {
-                if (_db != null && _db.QueryByStatus("autosort-staging").Any())
-                {
-                    BtnCommit_Click(sender, new RoutedEventArgs());
-                }
-                else
-                {
-                    BtnStartClassify_Click(sender, new RoutedEventArgs());
-                }
-            }
-            catch
-            {
-                // 保守 fallback：先試搬檔，不行就預分類
-                if (_intake != null)
-                    await _intake.CommitPendingAsync(CancellationToken.None);
-                else
-                    BtnStartClassify_Click(sender, new RoutedEventArgs());
-            }
+            var current = CurrentTabTag();
+            if (string.Equals(current, "autosort-staging", StringComparison.OrdinalIgnoreCase))
+                BtnCommit_Click(sender, e);
+            else
+                BtnStartClassify_Click(sender, e);
+            await Task.CompletedTask;
         }
 
-        // ====== 內嵌簡易對話框 ======
+        private void CmdToggleInfo_Executed(object sender, ExecutedRoutedEventArgs e) => BtnEdgeRight_Click(sender, e);
+        private void CmdToggleTree_Executed(object sender, ExecutedRoutedEventArgs e) => BtnEdgeLeft_Click(sender, e);
+        #endregion
+
+        #region ====== 內嵌簡易對話框 ======
         internal sealed class SetTextDialog : Window
         {
             private readonly TextBox _tb;
@@ -1079,17 +1258,108 @@ namespace AI.KB.Assistant.Views
                 Content = p;
             }
         }
-    }
+        #endregion
 
-    // ====== DbService 擴充（標籤快速查） ======
-    internal static class DbServiceExtensions
-    {
-        public static IEnumerable<Item> QueryByTag(this DbService db, string tag)
+        #region ====== TreeView 右鍵功能 ======
+        private string? GetSelectedTreePath()
         {
-            return db.QuerySince(0).Where(i => (i.Tags ?? "")
-                .Split(',', StringSplitOptions.RemoveEmptyEntries)
-                .Select(s => s.Trim())
-                .Contains(tag));
+            var node = TvFolders.SelectedItem as TreeViewItem;
+            var path = node?.Tag as string;
+            return (!string.IsNullOrWhiteSpace(path) && Directory.Exists(path)) ? path : null;
         }
+
+        private void Tree_OpenInExplorer_Click(object sender, RoutedEventArgs e)
+        {
+            var path = GetSelectedTreePath();
+            if (path == null) return;
+            try
+            {
+                Process.Start(new ProcessStartInfo("explorer.exe", path) { UseShellExecute = true });
+                Log($"已在檔案總管開啟：{path}");
+            }
+            catch (Exception ex) { Log($"開啟失敗：{ex.Message}"); }
+        }
+
+        private async void Tree_MoveFolderToInbox_Click(object sender, RoutedEventArgs e)
+        {
+            if (_intake == null) return;
+
+            var path = GetSelectedTreePath();
+            if (path == null) return;
+
+            int count = 0;
+            try
+            {
+                var files = Directory.EnumerateFiles(path)
+                    .Where(f =>
+                    {
+                        try
+                        {
+                            var attr = File.GetAttributes(f);
+                            return (attr & FileAttributes.Hidden) == 0 && (attr & FileAttributes.System) == 0;
+                        }
+                        catch { return false; }
+                    })
+                    .ToList();
+
+                foreach (var f in files)
+                {
+                    try { await _intake.StageOnlyAsync(f, CancellationToken.None); count++; }
+                    catch (Exception ex) { Log($"加入失敗：{Path.GetFileName(f)} — {ex.Message}"); }
+                }
+
+                ShowToolbarHint($"已將此資料夾檔案加入收件夾：{count} 筆");
+                RefreshList("home");
+            }
+            catch (Exception ex) { ShowToolbarHint($"加入收件夾失敗：{ex.Message}", BannerKind.Error); }
+        }
+
+        private void Tree_LockProject_Click(object sender, RoutedEventArgs e)
+        {
+            var path = GetSelectedTreePath();
+            if (path == null) return;
+
+            var name = System.IO.Path.GetFileName(path);
+            if (string.IsNullOrWhiteSpace(name)) name = path;
+
+            _lockedProject = name;
+            _cfg.App.ProjectLock = name;
+            TxtLockedProject.Text = $"目前鎖定：{name}";
+            try { ConfigService.Save(_cfgPath, _cfg); } catch { }
+            ShowToolbarHint($"🔒 已鎖定專案「{name}」");
+        }
+
+        private void Tree_UnlockProject_Click(object sender, RoutedEventArgs e)
+        {
+            _lockedProject = string.Empty;
+            _cfg.App.ProjectLock = string.Empty;
+            TxtLockedProject.Text = "目前未鎖定專案";
+            try { ConfigService.Save(_cfgPath, _cfg); } catch { }
+            ShowToolbarHint("🔓 已解除專案鎖定");
+        }
+
+        private void Tree_Rename_Click(object sender, RoutedEventArgs e)
+        {
+            var path = GetSelectedTreePath();
+            if (path == null) return;
+
+            var box = new SetTextDialog("重新命名資料夾", "輸入新名稱：", System.IO.Path.GetFileName(path));
+            if (box.ShowDialog() == true)
+            {
+                var newName = (box.Value ?? string.Empty).Trim();
+                if (string.IsNullOrWhiteSpace(newName)) return;
+
+                try
+                {
+                    var parent = System.IO.Path.GetDirectoryName(path)!;
+                    var newPath = System.IO.Path.Combine(parent, newName);
+                    Directory.Move(path, newPath);
+                    ShowToolbarHint($"已重新命名資料夾：{newName}");
+                    BuildFolderTreeRoots();
+                }
+                catch (Exception ex) { ShowToolbarHint($"重新命名資料夾失敗：{ex.Message}", BannerKind.Error); }
+            }
+        }
+        #endregion
     }
 }
