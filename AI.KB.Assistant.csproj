@@ -13,8 +13,9 @@
 		<Compile Remove="Helpers\Converters.cs" />
 		<Compile Remove="Helpers\DateResolver.cs" />
 		<Compile Remove="Helpers\PanelSpacing.cs" />
+		<Compile Remove="Helpers\StringSplitConverter.cs" />
 		<Compile Remove="Helpers\TimePathHelper.cs" />
-		<Compile Remove="Helpers\UnixToDateConverter - 複製.cs" />
+		<Compile Remove="Helpers\UnixToDateConverter.cs" />
 		<Compile Remove="Models\ActionBatch.cs" />
 		<Compile Remove="Models\ClassificationResult.cs" />
 		<Compile Remove="Models\Enums.cs" />
@@ -32,6 +33,32 @@
 	<ItemGroup>
 	  <Page Remove="Views\HelpWindow.xaml" />
 	</ItemGroup>
+
+	<ItemGroup>
+		<Compile Include="Views\MainWindow\MainWindow.xaml.cs">
+			<DependentUpon>MainWindow.xaml</DependentUpon>
+		</Compile>
+
+		<Compile Include="Views\MainWindow\MainWindow.Tree.cs">
+			<DependentUpon>MainWindow.xaml</DependentUpon>
+		</Compile>
+		<Compile Include="Views\MainWindow\MainWindow.List.cs">
+			<DependentUpon>MainWindow.xaml</DependentUpon>
+		</Compile>
+		<Compile Include="Views\MainWindow\MainWindow.Tags.cs">
+			<DependentUpon>MainWindow.xaml</DependentUpon>
+		</Compile>
+		<Compile Include="Views\MainWindow\MainWindow.Intake.cs">
+			<DependentUpon>MainWindow.xaml</DependentUpon>
+		</Compile>
+		<Compile Include="Views\MainWindow\MainWindow.State.cs">
+			<DependentUpon>MainWindow.xaml</DependentUpon>
+		</Compile>
+
+		<!-- （建議）把 DbServiceExtensions 改放到 Services/Extensions/ -->
+		<Compile Include="Services\Extensions\DbServiceExtensions.cs" />
+	</ItemGroup>
+
 
 	<ItemGroup>
 		<Content Include="config.json">

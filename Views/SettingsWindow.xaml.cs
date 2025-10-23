@@ -3,9 +3,6 @@ using Microsoft.Win32;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Text.Json;
-using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -23,14 +20,16 @@ namespace AI.KB.Assistant.Views
             InitializeComponent();
             _owner = owner;
             _cfg = cfg ?? AppConfig.Load(_configPath);
-            _cfg.ThemeColors ??= new ThemeColors(); // 安全防呆
+
+            _cfg.ThemeColors ??= new ThemeColors(); // safety
 
             LoadConfig();
-            LoadThemeToUi();
-            UpdateThemePreview();
+            // 若還有主題選項 UI，就呼叫這兩個；若沒有，保留不影響
+            TryLoadThemeToUi();
+            TryUpdateThemePreview();
         }
 
-        // ===================== 一般設定載入 =====================
+        // ---------------- App / Import / Routing / LLM / ExtGroups ----------------
 
         private void LoadConfig()
         {
@@ -43,9 +42,9 @@ namespace AI.KB.Assistant.Views
             CbIncludeSubdir.IsChecked = _cfg.Import.IncludeSubdirectories;
             TxtHotFolder.Text = _cfg.Import.HotFolderPath ?? "";
 
-            // 搬檔 / 覆蓋策略（中文顯示，但 SelectedIndex 仍對應列舉順序）
-            CbMoveMode.SelectedIndex = (int)_cfg.Import.MoveMode;                 // 0=Move,1=Copy
-            CbOverwritePolicy.SelectedIndex = (int)_cfg.Import.OverwritePolicy;   // 0=Replace,1=Rename,2=Skip
+            // 搬檔 / 覆蓋（以 index 對應）
+            CbMoveMode.SelectedIndex = (int)_cfg.Import.MoveMode;           // 0: Move, 1: Copy
+            CbOverwritePolicy.SelectedIndex = (int)_cfg.Import.OverwritePolicy;    // 0: Replace, 1: Rename, 2: Skip
 
             TxtBlacklistFolders.Text = string.Join(", ", _cfg.Import.BlacklistFolderNames ?? Array.Empty<string>());
             TxtBlacklistExts.Text = string.Join(", ", _cfg.Import.BlacklistExts ?? Array.Empty<string>());
@@ -61,18 +60,21 @@ namespace AI.KB.Assistant.Views
             TxtModel.Text = _cfg.OpenAI.Model ?? "";
             CbLmLowConf.IsChecked = _cfg.OpenAI.EnableWhenLowConfidence;
 
-            // 🧩 Extension Groups（「陣列單行」預覽）
+            // 🧩 Extension Groups JSON：輸出緊湊格式
             if (_cfg.Routing.ExtensionGroups != null && FindName("TxtExtGroups") is TextBox tb)
-                tb.Text = BuildExtGroupsPreview(_cfg.Routing.ExtensionGroups);
+            {
+                var compact = ToCompactJson(_cfg.Routing.ExtensionGroups);
+                tb.Text = compact;
+            }
         }
 
         private static string[] ParseList(string? text) =>
             (text ?? "")
-            .Split(new[] { ',', ';', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
-            .Select(s => s.Trim())
-            .Where(s => !string.IsNullOrWhiteSpace(s))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
+                .Split(new[] { ',', ';', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(s => s.Trim())
+                .Where(s => !string.IsNullOrWhiteSpace(s))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
 
         private void BtnOk_Click(object sender, RoutedEventArgs e)
         {
@@ -84,6 +86,7 @@ namespace AI.KB.Assistant.Views
             _cfg.Import.AutoOnDrop = CbAutoOnDrop.IsChecked == true;
             _cfg.Import.IncludeSubdirectories = CbIncludeSubdir.IsChecked == true;
             _cfg.Import.HotFolderPath = TxtHotFolder.Text.Trim();
+
             _cfg.Import.MoveMode = (MoveMode)CbMoveMode.SelectedIndex;
             _cfg.Import.OverwritePolicy = (OverwritePolicy)CbOverwritePolicy.SelectedIndex;
 
@@ -101,53 +104,52 @@ namespace AI.KB.Assistant.Views
             _cfg.OpenAI.Model = TxtModel.Text.Trim();
             _cfg.OpenAI.EnableWhenLowConfidence = CbLmLowConf.IsChecked == true;
 
-            // 🧩 Extension Groups（不論是「一般 JSON」或「單行陣列 JSON」，都會嘗試解析）
+            // 🧩 Extension Groups JSON 匯入（容錯）
             if (FindName("TxtExtGroups") is TextBox tb && !string.IsNullOrWhiteSpace(tb.Text))
             {
                 try
                 {
-                    var eg = JsonSerializer.Deserialize<Dictionary<string, string[]>>(
+                    var eg = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string[]>>(
                         tb.Text,
-                        new JsonSerializerOptions
+                        new System.Text.Json.JsonSerializerOptions
                         {
-                            ReadCommentHandling = JsonCommentHandling.Skip,
+                            ReadCommentHandling = System.Text.Json.JsonCommentHandling.Skip,
                             AllowTrailingCommas = true
                         }
                     ) ?? new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
 
-                    // 正規化副檔名（去掉點、小寫、去重）
                     var norm = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
                     foreach (var kv in eg)
                     {
                         var k = (kv.Key ?? "").Trim();
                         if (string.IsNullOrWhiteSpace(k)) continue;
-
                         var exts = (kv.Value ?? Array.Empty<string>())
-                           .Select(v => (v ?? "").Trim().TrimStart('.').ToLowerInvariant())
-                           .Where(v => !string.IsNullOrWhiteSpace(v))
-                           .Distinct()
-                           .ToArray();
+                            .Select(v => (v ?? "").Trim().TrimStart('.').ToLowerInvariant())
+                            .Where(v => !string.IsNullOrWhiteSpace(v))
+                            .Distinct()
+                            .ToArray();
                         norm[k] = exts;
                     }
                     _cfg.Routing.ExtensionGroups = norm;
+
+                    // 將緊湊格式回寫（使用者若貼入鬆散格式，存檔時會轉成緊湊）
+                    tb.Text = ToCompactJson(norm);
                 }
                 catch (Exception ex)
                 {
-                    MessageBox.Show($"Extension Groups 解析失敗：{ex.Message}", "格式錯誤",
-                        MessageBoxButton.OK, MessageBoxImage.Error);
+                    MessageBox.Show($"Extension Groups JSON 解析失敗：{ex.Message}", "格式錯誤", MessageBoxButton.OK, MessageBoxImage.Error);
                     return;
                 }
             }
 
-            // 💾 保存
+            // 💾 Save & 通知主視窗
             AppConfig.Save(_configPath, _cfg);
             _owner?.ReloadConfig();
             DialogResult = true;
             Close();
         }
 
-        // ===================== 檔案/資料夾選擇 =====================
-
+        // 🔧 檔案對話框
         private void BtnPickDbPath_Click(object sender, RoutedEventArgs e)
         {
             var dlg = new OpenFileDialog
@@ -172,35 +174,60 @@ namespace AI.KB.Assistant.Views
         {
             var dlg = new System.Windows.Forms.FolderBrowserDialog
             {
-                Description = "選取 HotFolder 監控資料夾"
+                Description = "選取 HotFolder（收件夾）"
             };
             if (dlg.ShowDialog() == System.Windows.Forms.DialogResult.OK)
                 TxtHotFolder.Text = dlg.SelectedPath;
         }
 
-        // ===================== Theme Colors（多組色碼＋預覽） =====================
+        // ---------------- Theme（若你保留主題色 UI 就會用到；沒有的話不影響） ----------------
 
-        private void LoadThemeToUi()
+        private void TryLoadThemeToUi()
         {
+            // 你的主題色 TextBox 名稱若存在，則載入；不存在就略過
             var t = _cfg.ThemeColors;
+            SetIfFound("TbBg", t.Background);
+            SetIfFound("TbPanel", t.Panel);
+            SetIfFound("TbBorder", t.Border);
+            SetIfFound("TbText", t.Text);
+            SetIfFound("TbTextMuted", t.TextMuted);
+            SetIfFound("TbPrimary", t.Primary);
+            SetIfFound("TbPrimaryHover", t.PrimaryHover);
+            SetIfFound("TbSecondary", t.Secondary);
+            SetIfFound("TbBannerInfo", t.BannerInfo);
+            SetIfFound("TbBannerWarn", t.BannerWarn);
+            SetIfFound("TbBannerError", t.BannerError);
+            SetIfFound("TbSuccess", t.Success);
+            SetIfFound("TbWarning", t.Warning);
+            SetIfFound("TbError", t.Error);
+        }
 
-            TbBg.Text = t.Background;
-            TbPanel.Text = t.Panel;
-            TbBorder.Text = t.Border;
-            TbText.Text = t.Text;
-            TbTextMuted.Text = t.TextMuted;
+        private void TryUpdateThemePreview()
+        {
+            // 若預覽的 Rectangle/Border 存在就套色；否則略過
+            PaintIfFound("PrevBg", _cfg.ThemeColors.Background);
+            PaintIfFound("PrevPanel", _cfg.ThemeColors.Panel);
+            PaintIfFound("PrevBorder", _cfg.ThemeColors.Border);
+            PaintIfFound("PrevText", _cfg.ThemeColors.Text);
+            PaintIfFound("PrevTextMuted", _cfg.ThemeColors.TextMuted);
+            PaintIfFound("PrevPrimary", _cfg.ThemeColors.Primary);
+            PaintIfFound("PrevPrimaryHover", _cfg.ThemeColors.PrimaryHover);
+            PaintIfFound("PrevSecondary", _cfg.ThemeColors.Secondary);
+            PaintIfFound("PrevBannerInfo", _cfg.ThemeColors.BannerInfo);
+            PaintIfFound("PrevBannerWarn", _cfg.ThemeColors.BannerWarn);
+            PaintIfFound("PrevBannerError", _cfg.ThemeColors.BannerError);
+            PaintIfFound("PrevSuccess", _cfg.ThemeColors.Success);
+            PaintIfFound("PrevWarning", _cfg.ThemeColors.Warning);
+            PaintIfFound("PrevError", _cfg.ThemeColors.Error);
+        }
 
-            TbPrimary.Text = t.Primary;
-            TbPrimaryHover.Text = t.PrimaryHover;
-            TbSecondary.Text = t.Secondary;
-
-            TbBannerInfo.Text = t.BannerInfo;
-            TbBannerWarn.Text = t.BannerWarn;
-            TbBannerError.Text = t.BannerError;
-
-            TbSuccess.Text = t.Success;
-            TbWarning.Text = t.Warning;
-            TbError.Text = t.Error;
+        private void SetIfFound(string name, string value)
+        {
+            if (FindName(name) is TextBox tb) tb.Text = value ?? "";
+        }
+        private void PaintIfFound(string name, string hex)
+        {
+            if (FindName(name) is Border b) b.Background = BrushFrom(hex);
         }
 
         private static SolidColorBrush BrushFrom(string hex)
@@ -209,179 +236,28 @@ namespace AI.KB.Assistant.Views
             catch { return new SolidColorBrush(Colors.Transparent); }
         }
 
-        private void UpdateThemePreview()
+        // ---------------- 工具：Extension Groups 緊湊 JSON ----------------
+        private static string ToCompactJson(Dictionary<string, string[]> map)
         {
-            PrevBg.Background = BrushFrom(TbBg.Text);
-            PrevPanel.Background = BrushFrom(TbPanel.Text);
-            PrevBorder.Background = BrushFrom(TbBorder.Text);
-            PrevText.Background = BrushFrom(TbText.Text);
-            PrevTextMuted.Background = BrushFrom(TbTextMuted.Text);
-
-            PrevPrimary.Background = BrushFrom(TbPrimary.Text);
-            PrevPrimaryHover.Background = BrushFrom(TbPrimaryHover.Text);
-            PrevSecondary.Background = BrushFrom(TbSecondary.Text);
-
-            PrevBannerInfo.Background = BrushFrom(TbBannerInfo.Text);
-            PrevBannerWarn.Background = BrushFrom(TbBannerWarn.Text);
-            PrevBannerError.Background = BrushFrom(TbBannerError.Text);
-
-            PrevSuccess.Background = BrushFrom(TbSuccess.Text);
-            PrevWarning.Background = BrushFrom(TbWarning.Text);
-            PrevError.Background = BrushFrom(TbError.Text);
-        }
-
-        private static bool TryPickColor(ref string hex)
-        {
-            using var dlg = new System.Windows.Forms.ColorDialog();
-            try { dlg.Color = System.Drawing.ColorTranslator.FromHtml(hex); } catch { /* ignore */ }
-            if (dlg.ShowDialog() == System.Windows.Forms.DialogResult.OK)
+            // 將陣列輸出為單行 ["a", "b", "c"] 風格
+            // 例： "Images": [ "png", "jpg", "jpeg", ... ]
+            var sb = new System.Text.StringBuilder();
+            sb.Append("{\n");
+            var i = 0;
+            foreach (var kv in map.OrderBy(k => k.Key, StringComparer.OrdinalIgnoreCase))
             {
-                var c = dlg.Color;
-                hex = $"#{c.R:X2}{c.G:X2}{c.B:X2}";
-                return true;
-            }
-            return false;
-        }
-
-        // 個別挑色（左列）
-        private void PickBg_Click(object sender, RoutedEventArgs e) { var s = TbBg.Text; if (TryPickColor(ref s)) { TbBg.Text = s; UpdateThemePreview(); } }
-        private void PickPanel_Click(object sender, RoutedEventArgs e) { var s = TbPanel.Text; if (TryPickColor(ref s)) { TbPanel.Text = s; UpdateThemePreview(); } }
-        private void PickBorder_Click(object sender, RoutedEventArgs e) { var s = TbBorder.Text; if (TryPickColor(ref s)) { TbBorder.Text = s; UpdateThemePreview(); } }
-        private void PickText_Click(object sender, RoutedEventArgs e) { var s = TbText.Text; if (TryPickColor(ref s)) { TbText.Text = s; UpdateThemePreview(); } }
-        private void PickTextMuted_Click(object sender, RoutedEventArgs e) { var s = TbTextMuted.Text; if (TryPickColor(ref s)) { TbTextMuted.Text = s; UpdateThemePreview(); } }
-        private void PickPrimary_Click(object sender, RoutedEventArgs e) { var s = TbPrimary.Text; if (TryPickColor(ref s)) { TbPrimary.Text = s; UpdateThemePreview(); } }
-        private void PickPrimaryHover_Click(object sender, RoutedEventArgs e) { var s = TbPrimaryHover.Text; if (TryPickColor(ref s)) { TbPrimaryHover.Text = s; UpdateThemePreview(); } }
-
-        // 個別挑色（右列）
-        private void PickSecondary_Click(object sender, RoutedEventArgs e) { var s = TbSecondary.Text; if (TryPickColor(ref s)) { TbSecondary.Text = s; UpdateThemePreview(); } }
-        private void PickBannerInfo_Click(object sender, RoutedEventArgs e) { var s = TbBannerInfo.Text; if (TryPickColor(ref s)) { TbBannerInfo.Text = s; UpdateThemePreview(); } }
-        private void PickBannerWarn_Click(object sender, RoutedEventArgs e) { var s = TbBannerWarn.Text; if (TryPickColor(ref s)) { TbBannerWarn.Text = s; UpdateThemePreview(); } }
-        private void PickBannerError_Click(object sender, RoutedEventArgs e) { var s = TbBannerError.Text; if (TryPickColor(ref s)) { TbBannerError.Text = s; UpdateThemePreview(); } }
-        private void PickSuccess_Click(object sender, RoutedEventArgs e) { var s = TbSuccess.Text; if (TryPickColor(ref s)) { TbSuccess.Text = s; UpdateThemePreview(); } }
-        private void PickWarning_Click(object sender, RoutedEventArgs e) { var s = TbWarning.Text; if (TryPickColor(ref s)) { TbWarning.Text = s; UpdateThemePreview(); } }
-        private void PickError_Click(object sender, RoutedEventArgs e) { var s = TbError.Text; if (TryPickColor(ref s)) { TbError.Text = s; UpdateThemePreview(); } }
-
-        private void SaveTheme_Click(object sender, RoutedEventArgs e)
-        {
-            var t = _cfg.ThemeColors ??= new ThemeColors();
-
-            t.Background = TbBg.Text;
-            t.Panel = TbPanel.Text;
-            t.Border = TbBorder.Text;
-            t.Text = TbText.Text;
-            t.TextMuted = TbTextMuted.Text;
-
-            t.Primary = TbPrimary.Text;
-            t.PrimaryHover = TbPrimaryHover.Text;
-            t.Secondary = TbSecondary.Text;
-
-            t.BannerInfo = TbBannerInfo.Text;
-            t.BannerWarn = TbBannerWarn.Text;
-            t.BannerError = TbBannerError.Text;
-
-            t.Success = TbSuccess.Text;
-            t.Warning = TbWarning.Text;
-            t.Error = TbError.Text;
-
-            ApplyThemeToResources(t);
-            AppConfig.Save(_configPath, _cfg);
-            MessageBox.Show("主題設定已套用並儲存。", "成功", MessageBoxButton.OK, MessageBoxImage.Information);
-        }
-
-        private void ResetTheme_Click(object sender, RoutedEventArgs e)
-        {
-            _cfg.ThemeColors = new ThemeColors(); // 回預設（對應你目前 Theme.xaml 的淺色主題）
-            LoadThemeToUi();
-            UpdateThemePreview();
-            ApplyThemeToResources(_cfg.ThemeColors);
-            AppConfig.Save(_configPath, _cfg);
-        }
-
-        private static void ApplyThemeToResources(ThemeColors t)
-        {
-            var dict = Application.Current?.Resources;
-            if (dict == null) return;
-
-            void Set(string key, string hex)
-            {
-                try
+                if (i++ > 0) sb.Append(",\n");
+                sb.Append("  \"").Append(kv.Key).Append("\": [ ");
+                var j = 0;
+                foreach (var v in kv.Value ?? Array.Empty<string>())
                 {
-                    var c = (Color)ColorConverter.ConvertFromString(hex);
-                    if (dict[key] is SolidColorBrush b) b.Color = c;
-                    else dict[key] = new SolidColorBrush(c);
+                    if (j++ > 0) sb.Append(", ");
+                    sb.Append("\"").Append(v).Append("\"");
                 }
-                catch { /* ignore invalid */ }
+                sb.Append(" ]");
             }
-
-            Set("App.BackgroundBrush", t.Background);
-            Set("App.PanelBrush", t.Panel);
-            Set("App.BorderBrush", t.Border);
-            Set("App.TextBrush", t.Text);
-            Set("App.TextMutedBrush", t.TextMuted);
-
-            Set("App.PrimaryBrush", t.Primary);
-            Set("App.PrimaryHover", t.PrimaryHover);
-            Set("App.SecondaryBrush", t.Secondary);
-
-            Set("App.BannerInfoBrush", t.BannerInfo);
-            Set("App.BannerWarnBrush", t.BannerWarn);
-            Set("App.BannerErrorBrush", t.BannerError);
-
-            Set("App.SuccessBrush", t.Success);
-            Set("App.WarningBrush", t.Warning);
-            Set("App.ErrorBrush", t.Error);
-        }
-
-        private void ThemeTextBox_TextChanged(object sender, TextChangedEventArgs e) => UpdateThemePreview();
-
-        // ===================== Extension Groups：陣列單行 =====================
-
-        /// <summary>
-        /// 依照「陣列單行」的可讀格式輸出。
-        /// 例：
-        ///   "Images": [ "png", "jpg", "jpeg", ... ]
-        /// 各群組之間以換行分隔；陣列元素以逗號＋空白分隔，不另外斷行。
-        /// </summary>
-        private static string BuildExtGroupsPreview(Dictionary<string, string[]> eg)
-        {
-            var sb = new StringBuilder();
-            sb.AppendLine("{");
-            var groups = eg.OrderBy(kv => kv.Key, StringComparer.OrdinalIgnoreCase).ToArray();
-            for (int i = 0; i < groups.Length; i++)
-            {
-                var (key, arr) = (groups[i].Key, groups[i].Value ?? Array.Empty<string>());
-                var items = arr.Select(v => $"\"{v}\"");
-                sb.Append("  \"").Append(key).Append("\": [ ").Append(string.Join(", ", items)).Append(" ]");
-                if (i < groups.Length - 1) sb.Append(",");
-                sb.AppendLine();
-            }
-            sb.Append("}");
+            sb.Append("\n}");
             return sb.ToString();
-        }
-
-        /// <summary>
-        /// 將目前 TextBox 內的 JSON（不論原先是否多行陣列）整理成「陣列單行」輸出。
-        /// </summary>
-        private void BtnCompactExtGroups_Click(object sender, RoutedEventArgs e)
-        {
-            if (FindName("TxtExtGroups") is not TextBox tb) return;
-            try
-            {
-                var eg = JsonSerializer.Deserialize<Dictionary<string, string[]>>(
-                    tb.Text,
-                    new JsonSerializerOptions
-                    {
-                        ReadCommentHandling = JsonCommentHandling.Skip,
-                        AllowTrailingCommas = true
-                    }
-                ) ?? new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
-
-                tb.Text = BuildExtGroupsPreview(eg);
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"整理失敗：{ex.Message}", "格式錯誤", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
         }
     }
 }

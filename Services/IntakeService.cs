@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading;
@@ -8,185 +7,258 @@ using AI.KB.Assistant.Models;
 
 namespace AI.KB.Assistant.Services
 {
-    public sealed class IntakeService : IDisposable
+    /// <summary>
+    /// 匯入 / 分類 / 搬檔流程。
+    /// </summary>
+    public sealed class IntakeService
     {
         private readonly DbService _db;
-        private readonly RoutingService _routing;
-        private readonly LlmService _llm;
+        private RoutingService _routing;
+        private LlmService? _llm;
         private AppConfig _cfg;
 
-        public IntakeService(DbService db, RoutingService routing, LlmService llm, AppConfig cfg)
+        public IntakeService(DbService db, RoutingService routing, LlmService? llm, AppConfig cfg)
         {
             _db = db;
             _routing = routing;
             _llm = llm;
-            _cfg = cfg;
+            _cfg = cfg ?? new AppConfig();
         }
 
         public void UpdateConfig(AppConfig cfg)
         {
-            _cfg = cfg;
+            _cfg = cfg ?? _cfg;
+            _routing.ApplyConfig(_cfg);
         }
 
-        public void Dispose() { }
+        // ==================== Stage ====================
 
-        // 只進入 Inbox（Stage）
-        public async Task StageOnlyAsync(string path, CancellationToken ct)
+        /// <summary>
+        /// 僅加入 Inbox，不移動檔案。
+        /// </summary>
+        public async Task StageOnlyAsync(string path, CancellationToken token)
         {
-            if (ct.IsCancellationRequested) return;
+            await Task.Yield();
             if (string.IsNullOrWhiteSpace(path) || !File.Exists(path)) return;
 
-            var fi = new FileInfo(path);
-            var item = new Item
-            {
-                Filename = fi.Name,
-                Ext = (fi.Extension ?? "").Trim('.').ToLowerInvariant(),
-                Project = _cfg.App.ProjectLock ?? "",
-                Category = "",
-                Confidence = 0,
-                CreatedTs = DateTimeOffset.FromFileTime(fi.CreationTimeUtc.ToFileTimeUtc()).ToUnixTimeSeconds(),
-                Status = "inbox",
-                Path = fi.FullName,
-                Tags = ""
-            };
+            var info = new FileInfo(path);
 
-            _db.UpsertItem(item);
-            await Task.CompletedTask;
+            var it = _db.TryGetByPath(path) ?? new Item();
+            it.Path = path;
+            it.Filename = info.Name;
+            it.Ext = (info.Extension ?? "").Trim('.').ToLowerInvariant();
+            it.Status = "inbox";
+            if (it.CreatedTs <= 0)
+                it.CreatedTs = new DateTimeOffset(info.CreationTimeUtc).ToUnixTimeSeconds();
+
+            _db.UpsertItem(it);
         }
 
-        // 只做分類（不搬檔）
-        public async Task ClassifyOnlyAsync(string path, CancellationToken ct)
-        {
-            if (ct.IsCancellationRequested) return;
-            if (string.IsNullOrWhiteSpace(path) || !File.Exists(path)) return;
+        // ==================== Classify (預分類，不搬檔) ====================
 
-            var fi = new FileInfo(path);
-            var item = _db.QueryByPath(path).FirstOrDefault() ?? new Item
+        /// <summary>
+        /// 對單筆進行預分類，將狀態從 inbox 設為 autosort-staging，寫入預估的 Project/Category/Tags/Confidence。
+        /// </summary>
+        public async Task ClassifyOnlyAsync(string filePath, CancellationToken token)
+        {
+            await Task.Yield();
+            if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath)) return;
+
+            // 找到 DB 記錄（由 MainWindow 事先可能已指定 Project）
+            var it = _db.TryGetByPath(filePath) ?? new Item
             {
-                Filename = fi.Name,
-                Ext = (fi.Extension ?? "").Trim('.').ToLowerInvariant(),
-                CreatedTs = DateTimeOffset.FromFileTime(fi.CreationTimeUtc.ToFileTimeUtc()).ToUnixTimeSeconds(),
-                Path = fi.FullName
+                Path = filePath,
+                Filename = Path.GetFileName(filePath),
+                Ext = Path.GetExtension(filePath)?.Trim('.').ToLowerInvariant(),
+                CreatedTs = new DateTimeOffset(File.GetCreationTimeUtc(filePath)).ToUnixTimeSeconds()
             };
 
-            // ↓↓↓ 你的規則判斷（範例）
-            item.Category = GuessCategory(item) ?? "";
-            item.Confidence = GuessConfidence(item);
+            // 類別：由副檔名群組推論
+            var cat = _routing.GetCategoryForExtension(it.Ext);
 
-            // NEW: 黑名單偵測（副檔名黑名單 或 路徑含黑名單資料夾名）
-            var isExtBlack = (_cfg.Import.BlacklistExts ?? Array.Empty<string>())
-                                .Any(x => string.Equals(x.Trim('.'), item.Ext, StringComparison.OrdinalIgnoreCase));
+            // 專案：若空，先走預設 yyyyMM
+            var createdUtc = DateTimeOffset.FromUnixTimeSeconds(it.CreatedTs > 0 ? it.CreatedTs : DateTimeOffset.UtcNow.ToUnixTimeSeconds()).UtcDateTime;
+            var project = string.IsNullOrWhiteSpace(it.Project)
+                ? _routing.GetDefaultProjectName(createdUtc)
+                : it.Project!.Trim();
 
-            var isPathBlack = false;
-            if ((_cfg.Import.BlacklistFolderNames?.Length ?? 0) > 0)
-            {
-                var parts = (item.Path ?? "").Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-                isPathBlack = parts.Any(p => _cfg.Import.BlacklistFolderNames.Contains(p, StringComparer.OrdinalIgnoreCase));
-            }
+            // 信心：簡單啟發式
+            // 已知群組：0.85；未知：0.55
+            var confidence = string.Equals(cat, "Others", StringComparison.OrdinalIgnoreCase) ? 0.55 : 0.85;
 
-            if (isExtBlack || isPathBlack)
-            {
-                item.Status = "blacklist"; // ✅ 標記黑名單
-            }
-            else
-            {
-                // NEW: 低信心進自整理暫存
-                if (item.Confidence < _cfg.Classification.ConfidenceThreshold)
-                    item.Status = "auto-staging";
-                else
-                    item.Status = "pending";
-            }
+            // （若未來要接 LLM，可在此覆寫 cat/project/confidence）
 
-            _db.UpsertItem(item);
-            await Task.CompletedTask;
+            it.Project = project;
+            it.Category = cat;
+            it.Confidence = confidence;
+            it.Status = "autosort-staging";
+
+            _db.UpsertItem(it);
         }
 
-        // 將 pending / auto-staging / blacklist 搬到目的地
-        public async Task<int> CommitPendingAsync(CancellationToken ct)
+        // ==================== Commit (實搬檔) ====================
+
+        /// <summary>
+        /// 將 autosort-staging 的檔案依設定搬到最終位置；回傳成功處理的數量。
+        /// </summary>
+        public async Task<int> CommitPendingAsync(CancellationToken token)
         {
-            int moved = 0;
-            var candidates = _db.QueryByStatuses(new[] { "pending", "auto-staging", "blacklist" }).ToList();
+            await Task.Yield();
 
-            foreach (var item in candidates)
+            var items = _db.QueryByStatus("autosort-staging").ToList();
+
+            int ok = 0;
+            foreach (var it in items)
             {
-                if (ct.IsCancellationRequested) break;
-                if (string.IsNullOrWhiteSpace(item.Path) || !File.Exists(item.Path)) continue;
+                if (token.IsCancellationRequested) break;
 
-                var isBlacklist = string.Equals(item.Status, "blacklist", StringComparison.OrdinalIgnoreCase);
-                var isLowConf = !isBlacklist &&
-                                (string.Equals(item.Status, "auto-staging", StringComparison.OrdinalIgnoreCase) ||
-                                 item.Confidence < _cfg.Classification.ConfidenceThreshold);
-
-                // 目的地（ROOT/_blacklist 或 ROOT/自整理 或 一般模板）
-                var dest = _routing.BuildDestination(item, isBlacklist, isLowConf);
-
-                // 同名策略
-                dest = ApplyOverwritePolicy(dest, _cfg.Import.OverwritePolicy);
-
-                // Move/Copy
                 try
                 {
-                    Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
-                    if (_cfg.Import.MoveMode == MoveMode.Move)
-                        File.Move(item.Path!, dest, overwrite: _cfg.Import.OverwritePolicy == OverwritePolicy.Replace);
-                    else
-                        File.Copy(item.Path!, dest, overwrite: _cfg.Import.OverwritePolicy == OverwritePolicy.Replace);
+                    if (string.IsNullOrWhiteSpace(it.Path) || !File.Exists(it.Path))
+                    {
+                        // 原始檔不在：直接標記為 auto-sorted 以免卡住（或也可刪除）
+                        it.Status = "auto-sorted";
+                        _db.UpsertItem(it);
+                        continue;
+                    }
 
-                    item.Path = dest;
-                    item.Status = "auto-sorted";
-                    _db.UpsertItem(item);
-                    moved++;
+                    var moveMode = NormalizeMoveMode(_cfg?.Import?.MoveMode);
+                    var policy = NormalizeOverwritePolicy(_cfg?.Import?.OverwritePolicy);
+
+                    // 判斷是否信心不足（低於門檻）
+                    var threshold = _cfg?.Classification?.ConfidenceThreshold ?? 0.65;
+                    bool low = it.Confidence < threshold;
+
+                    var (folder, fileName) = _routing.PlanTarget(it.Path!, it.Project, it.Category, low);
+                    _routing.EnsureDirectory(folder);
+
+                    var targetPath = Path.Combine(folder, fileName);
+                    targetPath = ResolveConflict(targetPath, policy);
+
+                    // 實際 Copy/Move
+                    if (moveMode == MoveMode_Copy)
+                    {
+                        SafeCopy(it.Path!, targetPath, policy);
+                    }
+                    else
+                    {
+                        // Move
+                        SafeMove(it.Path!, targetPath, policy);
+                    }
+
+                    // 更新 DB（指向新位置；狀態改成 auto-sorted）
+                    it.Path = targetPath;
+                    it.Status = "auto-sorted";
+                    _db.UpsertItem(it);
+
+                    ok++;
                 }
                 catch
                 {
-                    // 失敗可考慮記錄 item.Status = "error"
+                    // 單筆失敗忽略，避免中斷流程
                 }
             }
 
-            await Task.CompletedTask;
-            return moved;
+            return ok;
         }
 
-        // ===== 你原本的規則/信心估計：這裡留簡易版範例 =====
-        private static string? GuessCategory(Item it)
+        // ==================== 檔案操作（含覆蓋策略） ====================
+
+        private static readonly string MoveMode_Move = "move";
+        private static readonly string MoveMode_Copy = "copy";
+
+        private static string NormalizeMoveMode(object? moveMode)
         {
-            var name = (it.Filename ?? "").ToLowerInvariant();
-            if (name.Contains("invoice") || name.Contains("發票")) return "財務";
-            if (name.Contains("contract") || name.Contains("合約")) return "合約";
-            if (name.Contains("spec") || name.Contains("規格")) return "規格";
-            if (name.Contains("proposal") || name.Contains("提案")) return "提案";
-            return null;
+            if (moveMode == null) return MoveMode_Move;
+
+            // enum -> string
+            var s = moveMode.ToString()!.Trim().ToLowerInvariant();
+            return (s == "copy") ? MoveMode_Copy : MoveMode_Move;
         }
 
-        private static double GuessConfidence(Item it)
+        private enum ConflictBehavior { Replace, Rename, Skip }
+
+        private static ConflictBehavior NormalizeOverwritePolicy(object? policy)
         {
-            var cat = it.Category ?? "";
-            return string.IsNullOrWhiteSpace(cat) ? 0.4 : 0.85;
-        }
-
-        private static string ApplyOverwritePolicy(string dest, OverwritePolicy policy)
-        {
-            if (policy == OverwritePolicy.Replace) return dest;
-
-            if (!File.Exists(dest)) return dest;
-
-            var dir = Path.GetDirectoryName(dest)!;
-            var baseName = Path.GetFileNameWithoutExtension(dest);
-            var ext = Path.GetExtension(dest);
-            int i = 1;
-
-            if (policy == OverwritePolicy.Rename)
+            var s = (policy?.ToString() ?? "").Trim().ToLowerInvariant();
+            return s switch
             {
-                string candidate;
-                do
-                {
-                    candidate = Path.Combine(dir, $"{baseName} ({i++}){ext}");
-                } while (File.Exists(candidate));
-                return candidate;
-            }
+                "replace" => ConflictBehavior.Replace,
+                "skip" => ConflictBehavior.Skip,
+                _ => ConflictBehavior.Rename, // 預設 Rename
+            };
+        }
 
-            // Skip
-            return Path.Combine(dir, $"{baseName}{ext}"); // 原樣返回（外層會試著寫入，失敗就算略過）
+        private static string ResolveConflict(string targetPath, ConflictBehavior policy)
+        {
+            if (!File.Exists(targetPath)) return targetPath;
+
+            switch (policy)
+            {
+                case ConflictBehavior.Replace:
+                    // 讓後續 Copy/Move 使用覆蓋方式處理
+                    return targetPath;
+
+                case ConflictBehavior.Skip:
+                    // 保持原路徑（後續若判斷目標存在就不做）
+                    return targetPath;
+
+                case ConflictBehavior.Rename:
+                default:
+                    // 產生 "name (n).ext" 格式
+                    var dir = Path.GetDirectoryName(targetPath)!;
+                    var name = Path.GetFileNameWithoutExtension(targetPath);
+                    var ext = Path.GetExtension(targetPath);
+                    int i = 1;
+                    string candidate;
+                    do
+                    {
+                        candidate = Path.Combine(dir, $"{name} ({i}){ext}");
+                        i++;
+                    } while (File.Exists(candidate));
+                    return candidate;
+            }
+        }
+
+        private static void SafeCopy(string src, string dst, ConflictBehavior policy)
+        {
+            if (string.Equals(src, dst, StringComparison.OrdinalIgnoreCase)) return;
+
+            if (File.Exists(dst))
+            {
+                if (policy == ConflictBehavior.Skip) return;
+                // Replace or Rename（Rename 已在 ResolveConflict 處理）
+                File.Copy(src, dst, overwrite: (policy == ConflictBehavior.Replace));
+            }
+            else
+            {
+                File.Copy(src, dst, overwrite: false);
+            }
+        }
+
+        private static void SafeMove(string src, string dst, ConflictBehavior policy)
+        {
+            if (string.Equals(src, dst, StringComparison.OrdinalIgnoreCase)) return;
+
+            if (File.Exists(dst))
+            {
+                if (policy == ConflictBehavior.Skip) return;
+                if (policy == ConflictBehavior.Replace)
+                {
+                    // 先刪除再 Move
+                    try { File.Delete(dst); } catch { }
+                    File.Move(src, dst);
+                }
+                else
+                {
+                    // Rename 已在 ResolveConflict 處理：直接 Move
+                    File.Move(src, dst);
+                }
+            }
+            else
+            {
+                File.Move(src, dst);
+            }
         }
     }
 }

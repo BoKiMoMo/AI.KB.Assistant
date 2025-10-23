@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.RegularExpressions;
 using AI.KB.Assistant.Models;
 
 namespace AI.KB.Assistant.Services
@@ -10,127 +11,108 @@ namespace AI.KB.Assistant.Services
     {
         private AppConfig _cfg;
 
-        // 用來將副檔名對應到群組名（Type）
-        private Dictionary<string, string> _ext2Group = new(StringComparer.OrdinalIgnoreCase);
-
         public RoutingService(AppConfig cfg)
         {
-            _cfg = cfg;
-            RebuildExtMap();
+            _cfg = cfg ?? new AppConfig();
         }
 
         public void ApplyConfig(AppConfig cfg)
         {
-            _cfg = cfg;
-            RebuildExtMap();
+            _cfg = cfg ?? _cfg;
         }
 
-        private void RebuildExtMap()
+        /// <summary>
+        /// 預覽分類後的「完整檔案目標路徑」（不進行 IO 與搬檔；純字串組合）。
+        /// </summary>
+        /// <param name="srcPath">來源完整檔案路徑</param>
+        /// <param name="lockedProject">若 UI 有鎖定專案，傳入該名稱；否則可傳 null/空字串</param>
+        /// <returns>預計目的地完整檔案路徑（含檔名）; 若設定不完整則回傳空字串</returns>
+        public string PreviewDestPath(string srcPath, string? lockedProject)
         {
-            _ext2Group.Clear();
-            var groups = _cfg.Routing.ExtensionGroups ?? new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
+            if (string.IsNullOrWhiteSpace(srcPath) || string.IsNullOrWhiteSpace(_cfg?.App?.RootDir))
+                return string.Empty;
+
+            var root = _cfg.App.RootDir!.Trim();
+            if (!Path.IsPathRooted(root))
+                root = Path.GetFullPath(root);
+
+            var fi = SafeGetFileInfo(srcPath);
+            var fileName = fi?.Name ?? Path.GetFileName(srcPath);
+            if (string.IsNullOrWhiteSpace(fileName))
+                return string.Empty;
+
+            // 1) 年 / 月
+            var dt = fi?.Exists == true ? fi.CreationTime : DateTime.Now;
+            var year = dt.ToString("yyyy");
+            var month = dt.ToString("MM");
+
+            // 2) 類型（由副檔名對 ExtensionGroups）
+            var ext = Path.GetExtension(fileName)?.Trim('.').ToLowerInvariant() ?? "";
+            var type = MapTypeByExtension(ext);
+
+            // 3) 專案（lockedProject > yyyyMM）
+            var project = !string.IsNullOrWhiteSpace(lockedProject)
+                ? lockedProject!.Trim()
+                : $"{year}{month}";
+
+            // 4) 組合資料夾層級（依設定開關）
+            var parts = new List<string>();
+            if (_cfg.Routing?.UseYear == true) parts.Add(year);
+            if (_cfg.Routing?.UseMonth == true) parts.Add(month);
+            if (_cfg.Routing?.UseProject == true) parts.Add(project);
+            if (_cfg.Routing?.UseType == true) parts.Add(type);
+
+            // 5) 合法化每個段落
+            parts = parts.Select(NormalizeFolderSegment).Where(s => !string.IsNullOrWhiteSpace(s)).ToList();
+
+            // 6) 拼出完整路徑
+            var destDir = Path.Combine(new[] { root }.Concat(parts).ToArray());
+            var destFull = Path.Combine(destDir, fileName);
+            return destFull;
+        }
+
+        // ====== 工具 ======
+
+        /// <summary>
+        /// 由副檔名（不含點）對應到 ExtensionGroups 的 key；找不到則回傳 "Others"。
+        /// </summary>
+        private string MapTypeByExtension(string ext)
+        {
+            var groups = _cfg?.Routing?.ExtensionGroups;
+            if (groups == null || groups.Count == 0)
+                return "Others";
+
             foreach (var kv in groups)
             {
-                var groupName = kv.Key; // e.g. Images / Documents / Code...
-                var exts = kv.Value ?? Array.Empty<string>();
-                foreach (var ext in exts)
-                {
-                    var ex = (ext ?? "").Trim('.').ToLowerInvariant();
-                    if (!string.IsNullOrWhiteSpace(ex))
-                        _ext2Group[ex] = groupName;
-                }
+                var key = kv.Key ?? "";
+                var list = kv.Value ?? Array.Empty<string>();
+                if (list.Any(e => string.Equals(e?.Trim().TrimStart('.'), ext, StringComparison.OrdinalIgnoreCase)))
+                    return string.IsNullOrWhiteSpace(key) ? "Others" : key;
             }
-        }
-
-        public string GetTypeGroupByExt(string ext)
-        {
-            var ex = (ext ?? "").Trim('.').ToLowerInvariant();
-            if (_ext2Group.TryGetValue(ex, out var group))
-                return group;
             return "Others";
         }
 
-        /// <summary>
-        /// 產生目的地完整路徑（不含同名處理），支援黑名單與低信心固定落在 ROOT。
-        /// </summary>
-        public string BuildDestination(string fileName, string project, string category, string ext, DateTime ts,
-                                       bool isBlacklist, bool isLowConfidence)
-        {
-            var root = _cfg.App.RootDir;
-            if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root))
-                root = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
-
-            var pureExt = (ext ?? "").Trim('.').ToLowerInvariant();
-            var typeGroup = GetTypeGroupByExt(pureExt);
-
-            // ✅ 黑名單：ROOT/_blacklist/<file>
-            if (isBlacklist)
-            {
-                var blackRoot = Path.Combine(root, "_blacklist");
-                Directory.CreateDirectory(blackRoot);
-                return Path.Combine(blackRoot, fileName);
-            }
-
-            // ✅ 低信心：ROOT/自整理/<file>
-            if (isLowConfidence)
-            {
-                var autoRoot = Path.Combine(root, _cfg.Routing.AutoFolderName ?? "自整理");
-                Directory.CreateDirectory(autoRoot);
-                return Path.Combine(autoRoot, fileName);
-            }
-
-            // ⬇ 一般模板路徑（依勾選片段）
-            var parts = new List<string> { root };
-
-            if (_cfg.Routing.UseYear)
-                parts.Add(ts.Year.ToString("0000"));
-            if (_cfg.Routing.UseMonth)
-                parts.Add(ts.Month.ToString("00"));
-
-            if (_cfg.Routing.UseProject && !string.IsNullOrWhiteSpace(project))
-                parts.Add(Sanitize(project));
-
-            if (_cfg.Routing.UseType && !string.IsNullOrWhiteSpace(typeGroup))
-                parts.Add(Sanitize(typeGroup));
-
-            if (!string.IsNullOrWhiteSpace(category))
-                parts.Add(Sanitize(category));
-
-            var dir = Path.Combine(parts.ToArray());
-            Directory.CreateDirectory(dir);
-
-            return Path.Combine(dir, fileName);
-        }
-
-        /// <summary>
-        /// 給 Intake/外部使用的便利介面：由 Item 直接產生目的地。
-        /// </summary>
-        public string BuildDestination(Item item, bool isBlacklist, bool isLowConfidence)
-        {
-            var name = item.Filename ?? "noname";
-            var ext = item.Ext ?? Path.GetExtension(name).Trim('.');
-            var ts = FromUnix(item.CreatedTs);
-            return BuildDestination(name, item.Project ?? "", item.Category ?? "", ext, ts, isBlacklist, isLowConfidence);
-        }
-
-        private static DateTime FromUnix(long sec)
+        private static FileInfo? SafeGetFileInfo(string path)
         {
             try
             {
-                return DateTimeOffset.FromUnixTimeSeconds(sec <= 0 ? DateTimeOffset.UtcNow.ToUnixTimeSeconds() : sec)
-                                      .LocalDateTime;
+                var fi = new FileInfo(path);
+                return fi.Exists ? fi : null;
             }
-            catch
-            {
-                return DateTime.Now;
-            }
+            catch { return null; }
         }
 
-        private static string Sanitize(string s)
+        private static readonly Regex _illegal = new Regex(@"[\\/:*?""<>|]+", RegexOptions.Compiled);
+
+        private static string NormalizeFolderSegment(string raw)
         {
-            var invalid = Path.GetInvalidFileNameChars();
-            var safe = new string(s.Select(ch => invalid.Contains(ch) ? '_' : ch).ToArray());
-            return safe.Trim();
+            if (string.IsNullOrWhiteSpace(raw)) return string.Empty;
+
+            var t = raw.Trim();
+            t = _illegal.Replace(t, "_");           // Windows 非法字元轉底線
+            t = t.Trim('.', ' ');                    // 避免尾端是點或空白
+            if (string.IsNullOrWhiteSpace(t)) t = "_";
+            return t;
         }
     }
 }
