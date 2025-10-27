@@ -1,136 +1,141 @@
-﻿using System;
+﻿using AI.KB.Assistant.Models;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using AI.KB.Assistant.Models;
 
 namespace AI.KB.Assistant.Services
 {
-    public sealed class RoutingService
+    /// <summary>
+    /// 路由規則服務：負責預覽/產生最終目的地路徑
+    /// </summary>
+    public class RoutingService : IDisposable
     {
         private AppConfig _cfg;
-
-        // 用來將副檔名對應到群組名（Type）
-        private Dictionary<string, string> _ext2Group = new(StringComparer.OrdinalIgnoreCase);
 
         public RoutingService(AppConfig cfg)
         {
             _cfg = cfg;
-            RebuildExtMap();
+            _cfg.Import?.RebuildExtGroupsCache();
         }
 
         public void ApplyConfig(AppConfig cfg)
         {
             _cfg = cfg;
-            RebuildExtMap();
+            _cfg.Import?.RebuildExtGroupsCache();
         }
 
-        private void RebuildExtMap()
+        public void Dispose() { }
+
+        /// <summary>
+        /// 依目前設定預覽目標路徑（含檔名），不執行任何 IO。lockedProject 優先於 item.Project。
+        /// </summary>
+        public string PreviewDestPath(string srcFullPath, string? lockedProject)
         {
-            _ext2Group.Clear();
-            var groups = _cfg.Routing.ExtensionGroups ?? new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
-            foreach (var kv in groups)
+            if (string.IsNullOrWhiteSpace(srcFullPath))
+                return string.Empty;
+
+            var fi = new FileInfo(srcFullPath);
+            var item = new Models.Item
             {
-                var groupName = kv.Key; // e.g. Images / Documents / Code...
-                var exts = kv.Value ?? Array.Empty<string>();
-                foreach (var ext in exts)
-                {
-                    var ex = (ext ?? "").Trim('.').ToLowerInvariant();
-                    if (!string.IsNullOrWhiteSpace(ex))
-                        _ext2Group[ex] = groupName;
-                }
-            }
-        }
+                Filename = fi.Name,
+                Ext = (fi.Extension ?? "").Trim('.').ToLowerInvariant(),
+                Project = string.Empty,
+                Path = fi.FullName,
+                CreatedTs = fi.Exists
+                    ? new DateTimeOffset(fi.CreationTimeUtc).ToUnixTimeSeconds()
+                    : DateTimeOffset.Now.ToUnixTimeSeconds()
+            };
 
-        public string GetTypeGroupByExt(string ext)
-        {
-            var ex = (ext ?? "").Trim('.').ToLowerInvariant();
-            if (_ext2Group.TryGetValue(ex, out var group))
-                return group;
-            return "Others";
+            // 依門檻判斷是否為低信心（資料若不存在 DB，預設用 0）
+            var lowConf = item.Confidence < (_cfg?.Classification?.ConfidenceThreshold ?? 0.75);
+
+            return BuildDestination(item,
+                                    isBlacklist: false,
+                                    isLowConfidence: lowConf,
+                                    lockedProject: lockedProject);
         }
 
         /// <summary>
-        /// 產生目的地完整路徑（不含同名處理），支援黑名單與低信心固定落在 ROOT。
+        /// 產生最終目的地（含檔名）。此方法供 Commit 時實際路由使用。
         /// </summary>
-        public string BuildDestination(string fileName, string project, string category, string ext, DateTime ts,
-                                       bool isBlacklist, bool isLowConfidence)
+        public string BuildDestination(Models.Item item, bool isBlacklist, bool isLowConfidence, string? lockedProject)
+            => BuildDestination(item, isBlacklist, isLowConfidence, lockedProject, DateTimeOffset.FromUnixTimeSeconds(item.CreatedTs).UtcDateTime);
+
+        private string BuildDestination(Models.Item item, bool isBlacklist, bool isLowConfidence, string? lockedProject, DateTime utcCreated)
         {
-            var root = _cfg.App.RootDir;
-            if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root))
-                root = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
+            var root = _cfg.App?.RootDir ?? "";
+            if (string.IsNullOrWhiteSpace(root)) return string.Empty;
 
-            var pureExt = (ext ?? "").Trim('.').ToLowerInvariant();
-            var typeGroup = GetTypeGroupByExt(pureExt);
+            // 目的地的第一層：黑名單 / 低信心 / 一般自整理
+            var level1 = isBlacklist
+                ? "_blacklist"
+                : isLowConfidence
+                    ? (_cfg.Routing?.LowConfidenceFolderName ?? "信心不足")
+                    : (_cfg.Routing?.AutoFolderName ?? "自整理");
 
-            // ✅ 黑名單：ROOT/_blacklist/<file>
-            if (isBlacklist)
+            var segments = new List<string> { root, level1 };
+
+            // 片段：年、月、專案、類型
+            if (_cfg.Routing?.UseYear == true)
             {
-                var blackRoot = Path.Combine(root, "_blacklist");
-                Directory.CreateDirectory(blackRoot);
-                return Path.Combine(blackRoot, fileName);
+                var y = (utcCreated == default ? DateTime.UtcNow : utcCreated).ToLocalTime().ToString("yyyy");
+                segments.Add(y);
             }
 
-            // ✅ 低信心：ROOT/自整理/<file>
-            if (isLowConfidence)
+            if (_cfg.Routing?.UseMonth == true)
             {
-                var autoRoot = Path.Combine(root, _cfg.Routing.AutoFolderName ?? "自整理");
-                Directory.CreateDirectory(autoRoot);
-                return Path.Combine(autoRoot, fileName);
+                var m = (utcCreated == default ? DateTime.UtcNow : utcCreated).ToLocalTime().ToString("MM");
+                segments.Add(m);
             }
 
-            // ⬇ 一般模板路徑（依勾選片段）
-            var parts = new List<string> { root };
+            if (_cfg.Routing?.UseProject == true)
+            {
+                var proj = FirstNonEmpty(lockedProject, _cfg.App?.ProjectLock, item.Project);
+                if (!string.IsNullOrWhiteSpace(proj)) segments.Add(SanitizeFolder(proj!));
+            }
 
-            if (_cfg.Routing.UseYear)
-                parts.Add(ts.Year.ToString("0000"));
-            if (_cfg.Routing.UseMonth)
-                parts.Add(ts.Month.ToString("00"));
+            if (_cfg.Routing?.UseType == true)
+            {
+                var type = ResolveTypeByExt(item.Ext);
+                if (!string.IsNullOrWhiteSpace(type)) segments.Add(SanitizeFolder(type!));
+            }
 
-            if (_cfg.Routing.UseProject && !string.IsNullOrWhiteSpace(project))
-                parts.Add(Sanitize(project));
+            // 組最終資料夾
+            var destDir = Path.Combine(segments.ToArray());
 
-            if (_cfg.Routing.UseType && !string.IsNullOrWhiteSpace(typeGroup))
-                parts.Add(Sanitize(typeGroup));
+            // 最終檔名：直接使用原始檔名
+            var filename = item.Filename ?? "unknown";
 
-            if (!string.IsNullOrWhiteSpace(category))
-                parts.Add(Sanitize(category));
-
-            var dir = Path.Combine(parts.ToArray());
-            Directory.CreateDirectory(dir);
-
-            return Path.Combine(dir, fileName);
+            return Path.Combine(destDir, filename);
         }
 
-        /// <summary>
-        /// 給 Intake/外部使用的便利介面：由 Item 直接產生目的地。
-        /// </summary>
-        public string BuildDestination(Item item, bool isBlacklist, bool isLowConfidence)
+        private string ResolveTypeByExt(string? ext)
         {
-            var name = item.Filename ?? "noname";
-            var ext = item.Ext ?? Path.GetExtension(name).Trim('.');
-            var ts = FromUnix(item.CreatedTs);
-            return BuildDestination(name, item.Project ?? "", item.Category ?? "", ext, ts, isBlacklist, isLowConfidence);
+            if (string.IsNullOrWhiteSpace(ext)) return string.Empty;
+            var map = _cfg.Import?.ExtGroupMap ?? new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var kv in map)
+            {
+                if (kv.Value.Contains(ext.Trim('.')))
+                    return kv.Key;
+            }
+            return "其他";
         }
 
-        private static DateTime FromUnix(long sec)
+        private static string FirstNonEmpty(params string?[] values)
         {
-            try
-            {
-                return DateTimeOffset.FromUnixTimeSeconds(sec <= 0 ? DateTimeOffset.UtcNow.ToUnixTimeSeconds() : sec)
-                                      .LocalDateTime;
-            }
-            catch
-            {
-                return DateTime.Now;
-            }
+            foreach (var v in values)
+                if (!string.IsNullOrWhiteSpace(v)) return v!;
+            return string.Empty;
         }
 
-        private static string Sanitize(string s)
+        private static string SanitizeFolder(string name)
         {
             var invalid = Path.GetInvalidFileNameChars();
-            var safe = new string(s.Select(ch => invalid.Contains(ch) ? '_' : ch).ToArray());
-            return safe.Trim();
+            var arr = name.Select(ch => invalid.Contains(ch) ? '_' : ch).ToArray();
+            var cleaned = new string(arr).Trim();
+            return string.IsNullOrWhiteSpace(cleaned) ? "Unnamed" : cleaned;
         }
     }
 }

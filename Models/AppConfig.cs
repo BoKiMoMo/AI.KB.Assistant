@@ -1,222 +1,150 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace AI.KB.Assistant.Models
 {
-    public sealed class AppConfig
+    /// <summary>
+    /// App 的整體設定模型（可 JSON 序列化）
+    /// </summary>
+    public class AppConfig
     {
-        [JsonPropertyName("app")]
         public AppSection App { get; set; } = new();
-
-        [JsonPropertyName("import")]
         public ImportSection Import { get; set; } = new();
-
-        [JsonPropertyName("routing")]
         public RoutingSection Routing { get; set; } = new();
-
-        [JsonPropertyName("openAI")]
+        public ClassificationSection Classification { get; set; } = new();
         public OpenAISection OpenAI { get; set; } = new();
 
-        [JsonPropertyName("classification")]
-        public ClassificationSection Classification { get; set; } = new();
-
-        // ★ 新增：完整主題色彩設定（供 ThemeService / SettingsWindow 使用）
-        [JsonPropertyName("theme")]
-        public ThemeSection Theme { get; set; } = ThemeSection.Default();
-
-        [JsonPropertyName("themeColors")]
-        public ThemeColors ThemeColors { get; set; } = new ThemeColors();
-
-
-        // ============== Sections ==============
-
-        public sealed class AppSection
-        {
-            [JsonPropertyName("dbPath")] public string DbPath { get; set; } = "data.db";
-            [JsonPropertyName("rootDir")] public string RootDir { get; set; } = "";
-            [JsonPropertyName("projectLock")] public string ProjectLock { get; set; } = "";
-            // 舊版曾在這裡放 theme 名稱，保留以維持相容（僅當作字串標記，不參與 ThemeService）
-            [JsonPropertyName("theme")] public string? ThemeName { get; set; }
-        }
-
-        public sealed class ImportSection
-        {
-            [JsonPropertyName("autoOnDrop")] public bool AutoOnDrop { get; set; } = true;
-            [JsonPropertyName("includeSubdirectories")] public bool IncludeSubdirectories { get; set; } = true;
-
-            [JsonPropertyName("hotFolderPath")] public string HotFolderPath { get; set; } = "";
-            [JsonPropertyName("enableHotFolder")] public bool EnableHotFolder { get; set; } = false;
-
-            [JsonPropertyName("blacklistFolderNames")] public string[] BlacklistFolderNames { get; set; } = Array.Empty<string>();
-            [JsonPropertyName("blacklistExts")] public string[] BlacklistExts { get; set; } = Array.Empty<string>();
-
-            [JsonPropertyName("moveMode")]
-            [JsonConverter(typeof(LowercaseEnumConverter<MoveMode>))]
-            public MoveMode MoveMode { get; set; } = MoveMode.Move;
-
-            [JsonPropertyName("overwritePolicy")]
-            [JsonConverter(typeof(LowercaseEnumConverter<OverwritePolicy>))]
-            public OverwritePolicy OverwritePolicy { get; set; } = OverwritePolicy.Rename;
-
-            // 舊版相容：單一黑名單欄位
-            [JsonPropertyName("blacklistFolderName")] public string? _compatSingleFolderName { get; set; }
-        }
-
-        public sealed class RoutingSection
-        {
-            [JsonPropertyName("useYear")] public bool UseYear { get; set; } = true;
-            [JsonPropertyName("useMonth")] public bool UseMonth { get; set; } = true;
-            [JsonPropertyName("useType")] public bool UseType { get; set; } = true;
-            [JsonPropertyName("useProject")] public bool UseProject { get; set; } = true;
-
-            [JsonPropertyName("autoFolderName")] public string AutoFolderName { get; set; } = "自整理";
-
-            [JsonPropertyName("extensionGroups")]
-            public Dictionary<string, string[]> ExtensionGroups { get; set; } = DefaultExtensionGroups();
-
-            private static Dictionary<string, string[]> DefaultExtensionGroups()
-            {
-                return new(StringComparer.OrdinalIgnoreCase)
-                {
-                    ["Images"] = new[] { "png", "jpg", "jpeg", "gif", "bmp", "tiff", "heic", "webp", "avif", "raw", "cr2", "nef", "dng" },
-                    ["Vector"] = new[] { "ai", "eps", "svg", "pdf" },
-                    ["Design"] = new[] { "psd", "psb", "xd", "fig", "sketch", "ind", "indd", "idml", "afphoto", "afdesign" },
-                    ["Documents"] = new[] { "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "odt", "ods", "odp", "rtf", "txt", "md" },
-                    ["Videos"] = new[] { "mp4", "mov", "avi", "mkv", "webm", "m4v", "wmv", "flv", "mpg", "mpeg", "3gp", "prores" },
-                    ["Audio"] = new[] { "mp3", "wav", "aac", "m4a", "flac", "ogg", "wma", "aiff", "opus" },
-                    ["Projects"] = new[] { "prproj", "aep", "aepx", "mogrt", "drp", "drproj", "veg", "imovieproj", "resolve" },
-                    ["Subtitles"] = new[] { "srt", "ass", "vtt", "sub" },
-                    ["3DModels"] = new[] { "obj", "fbx", "blend", "stl", "dae", "3ds", "max", "c4d", "glb", "gltf" },
-                    ["Fonts"] = new[] { "ttf", "otf", "woff", "woff2", "eot", "font" },
-                    ["Data"] = new[] { "csv", "json", "xml", "yaml", "yml", "parquet", "feather", "npy", "h5", "sav", "mat", "db", "sqlite", "sql", "xmind" },
-                    ["BuildFiles"] = new[] { "dockerfile", "makefile", "gradle", "cmake", "sln", "csproj", "vcxproj", "xcodeproj", "pbxproj" },
-                    ["Package"] = new[] { "npmrc", "package.json", "package-lock.json", "yarn.lock", "pnpm-lock.yaml", "requirements.txt", "pipfile", "poetry.lock", "gemfile", "go.mod", "go.sum" },
-                    ["Code"] = new[] { "cs", "py", "js", "ts", "jsx", "tsx", "vue", "java", "kt", "go", "rs", "cpp", "c", "h", "swift", "php", "rb", "dart", "r", "lua", "pl", "sh", "ps1", "bat", "cmd", "html", "css", "scss", "toml", "ini", "jsonc" },
-                    ["Config"] = new[] { "env", "config", "cfg", "ini", "toml", "jsonc", "yml", "yaml", "xml", "plist" },
-                    ["Archives"] = new[] { "zip", "rar", "7z", "tar", "gz", "bz2" },
-                    ["Executables"] = new[] { "exe", "dll", "app", "pkg", "deb", "rpm", "bin", "run" },
-                    ["Notes"] = new[] { "md", "markdown", "txt" },
-                    ["Others"] = new[] { "log", "old", "unknown" }
-                };
-            }
-        }
-
-        public sealed class OpenAISection
-        {
-            [JsonPropertyName("apiKey")] public string ApiKey { get; set; } = "";
-            [JsonPropertyName("model")] public string Model { get; set; } = "gpt-4o-mini";
-            [JsonPropertyName("baseUrl")] public string BaseUrl { get; set; } = "";
-            [JsonPropertyName("enableWhenLowConfidence")] public bool EnableWhenLowConfidence { get; set; } = true;
-
-            // 舊版相容
-            [JsonPropertyName("enable")] public bool? _compatEnable { get; set; }
-        }
-
-        public sealed class ClassificationSection
-        {
-            [JsonPropertyName("confidenceThreshold")] public double ConfidenceThreshold { get; set; } = 0.65;
-
-            // 舊版相容
-            [JsonPropertyName("useLLM")] public bool? _compatUseLlm { get; set; }
-        }
-
-        // ★ 新增：主題顏色區段（字串用 #RRGGBB 或 #AARRGGBB）
-        public sealed class ThemeSection
-        {
-            // 基礎
-            [JsonPropertyName("background")] public string Background { get; set; } = "#111319";
-            [JsonPropertyName("panel")] public string Panel { get; set; } = "#1B1F2A";
-            [JsonPropertyName("border")] public string Border { get; set; } = "#2A3140";
-            [JsonPropertyName("text")] public string Text { get; set; } = "#E7EAF0";
-            [JsonPropertyName("textMuted")] public string TextMuted { get; set; } = "#A9B1C1";
-
-            // 主色
-            [JsonPropertyName("primary")] public string Primary { get; set; } = "#3B82F6";
-            [JsonPropertyName("primaryHover")] public string PrimaryHover { get; set; } = "#60A5FA";
-            [JsonPropertyName("secondary")] public string Secondary { get; set; } = "#64748B";
-
-            // Banner / 狀態
-            [JsonPropertyName("bannerInfo")] public string BannerInfo { get; set; } = "#FFF8D6";
-            [JsonPropertyName("bannerWarn")] public string BannerWarn { get; set; } = "#FFE7E7";
-            [JsonPropertyName("bannerError")] public string BannerError { get; set; } = "#FFE1E1";
-
-            [JsonPropertyName("success")] public string Success { get; set; } = "#22C55E";
-            [JsonPropertyName("warning")] public string Warning { get; set; } = "#F59E0B";
-            [JsonPropertyName("error")] public string Error { get; set; } = "#EF4444";
-
-            public static ThemeSection Default() => new ThemeSection();
-        }
-
-        // ============== Load / Save ==============
-
-        public static AppConfig Load(string path)
-        {
-            if (!File.Exists(path))
-                return new AppConfig();
-
-            var json = File.ReadAllText(path);
-            var cfg = JsonSerializer.Deserialize<AppConfig>(json, JsonOptions()) ?? new AppConfig();
-
-            // 舊版相容：單一黑名單欄位 → 陣列
-            if (!string.IsNullOrWhiteSpace(cfg.Import._compatSingleFolderName) &&
-                (cfg.Import.BlacklistFolderNames == null || cfg.Import.BlacklistFolderNames.Length == 0))
-            {
-                cfg.Import.BlacklistFolderNames = new[] { cfg.Import._compatSingleFolderName! };
-            }
-
-            // 舊版相容：分類是否使用 LLM → OpenAI.EnableWhenLowConfidence
-            if (cfg.Classification._compatUseLlm.HasValue && cfg.Classification._compatUseLlm.Value == false)
-                cfg.OpenAI.EnableWhenLowConfidence = false;
-
-            // 舊版相容：OpenAI.enable → EnableWhenLowConfidence
-            if (cfg.OpenAI._compatEnable.HasValue)
-                cfg.OpenAI.EnableWhenLowConfidence = cfg.OpenAI._compatEnable.Value;
-
-            // 保險：Theme 區段不存在時補預設
-            cfg.Theme ??= ThemeSection.Default();
-
-            return cfg;
-        }
-
-        public static void Save(string path, AppConfig cfg)
-        {
-            var json = JsonSerializer.Serialize(cfg, JsonOptions(indented: true));
-            Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path)) ?? ".");
-            File.WriteAllText(path, json);
-        }
-
-        private static JsonSerializerOptions JsonOptions(bool indented = false) => new()
-        {
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-            ReadCommentHandling = JsonCommentHandling.Skip,
-            AllowTrailingCommas = true,
-            WriteIndented = indented,
-            Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) }
-        };
+        /// <summary>（選用）其他 UI/Theme 相關設定若需可擴充</summary>
+        public ThemeSection Theme { get; set; } = new();
     }
 
-    // ====== 相依型別（沿用你專案裡的定義） ======
-    public enum MoveMode { Move = 0, Copy = 1 }
-    public enum OverwritePolicy { Replace = 0, Rename = 1, Skip = 2 }
-
-    /// <summary>把 enum 以小寫寫入/讀取 JSON 的 converter（沿用你的專案習慣）</summary>
-    public sealed class LowercaseEnumConverter<T> : JsonConverter<T> where T : struct, Enum
+    public class AppSection
     {
-        public override T Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
-        {
-            var s = reader.GetString();
-            if (string.IsNullOrWhiteSpace(s)) return default;
-            if (Enum.TryParse<T>(s, ignoreCase: true, out var v)) return v;
-            return default;
-        }
+        /// <summary>SQLite 資料庫路徑（*.db 或 *.sqlite）</summary>
+        public string DbPath { get; set; } = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "app.db");
 
-        public override void Write(Utf8JsonWriter writer, T value, JsonSerializerOptions options)
+        /// <summary>檔案分類的根目錄（最終目的地樹）</summary>
+        public string RootDir { get; set; } = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+
+        /// <summary>專案鎖定（若非空則優先作為 Project 片段）</summary>
+        public string ProjectLock { get; set; } = string.Empty;
+    }
+
+    public class ImportSection
+    {
+        /// <summary>收件夾（待處理）路徑</summary>
+        public string HotFolderPath { get; set; } = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "Inbox");
+
+        /// <summary>加入收件夾時是否包含子資料夾（右鍵整夾加入時會用到）</summary>
+        public bool IncludeSubdir { get; set; } = true;
+
+        /// <summary>黑名單資料夾名稱（樹/清單過濾時用）</summary>
+        public string[] BlacklistFolderNames { get; set; } = Array.Empty<string>();
+
+        /// <summary>黑名單副檔名（加入/預處理時排除，不含點）</summary>
+        public string[] BlacklistExts { get; set; } = new[] { "tmp", "bak", "log" };
+
+        /// <summary>搬移模式（Move 或 Copy）</summary>
+        [JsonConverter(typeof(JsonStringEnumConverter))]
+        public MoveMode MoveMode { get; set; } = MoveMode.Move;
+
+        /// <summary>檔名衝突策略</summary>
+        [JsonConverter(typeof(JsonStringEnumConverter))]
+        public OverwritePolicy OverwritePolicy { get; set; } = OverwritePolicy.Rename;
+
+        /// <summary>
+        /// 副檔名群組設定（JSON 字串）。示例：
+        /// {
+        ///   "文件": ["pdf","doc","docx","txt","md"],
+        ///   "影像": ["jpg","jpeg","png","gif","bmp"],
+        ///   "表格": ["xls","xlsx","csv"],
+        ///   "簡報": ["ppt","pptx"],
+        ///   "壓縮": ["zip","rar","7z"],
+        ///   "程式": ["cs","py","js","ts","java","cpp","h","csproj","sln"]
+        /// }
+        /// </summary>
+        public string ExtGroupsJson { get; set; } =
+            "{\"文件\":[\"pdf\",\"doc\",\"docx\",\"txt\",\"md\"],\"影像\":[\"jpg\",\"jpeg\",\"png\",\"gif\",\"bmp\"],\"表格\":[\"xls\",\"xlsx\",\"csv\"],\"簡報\":[\"ppt\",\"pptx\"],\"壓縮\":[\"zip\",\"rar\",\"7z\"],\"程式\":[\"cs\",\"py\",\"js\",\"ts\",\"java\",\"cpp\",\"h\",\"csproj\",\"sln\"]}";
+
+        /// <summary>快取解析後的副檔名群組（執行時建構）</summary>
+        [JsonIgnore] public Dictionary<string, HashSet<string>> ExtGroupMap { get; private set; } = new(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>解析 ExtGroupsJson 成快取供 Routing 使用</summary>
+        public void RebuildExtGroupsCache()
         {
-            writer.WriteStringValue(value.ToString().ToLowerInvariant());
+            ExtGroupMap = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+            if (string.IsNullOrWhiteSpace(ExtGroupsJson)) return;
+
+            try
+            {
+                var dict = JsonSerializer.Deserialize<Dictionary<string, string[]>>(ExtGroupsJson) ?? new();
+                foreach (var kv in dict)
+                {
+                    var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    foreach (var ext in kv.Value ?? Array.Empty<string>())
+                    {
+                        var clean = (ext ?? "").Trim().TrimStart('.');
+                        if (!string.IsNullOrWhiteSpace(clean)) set.Add(clean);
+                    }
+                    if (set.Count > 0) ExtGroupMap[kv.Key] = set;
+                }
+            }
+            catch
+            {
+                // 解析失敗時保持空字典（不拋例外，以免阻斷主流程）
+                ExtGroupMap = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+            }
         }
     }
 
+    public class RoutingSection
+    {
+        /// <summary>低信心的暫存資料夾名稱（預設「信心不足」）</summary>
+        public string LowConfidenceFolderName { get; set; } = "信心不足";
+
+        /// <summary>一般自動整理的資料夾名稱（預設「自整理」）</summary>
+        public string AutoFolderName { get; set; } = "自整理";
+
+        /// <summary>是否啟用年（YYYY）片段</summary>
+        public bool UseYear { get; set; } = true;
+
+        /// <summary>是否啟用月（MM）片段</summary>
+        public bool UseMonth { get; set; } = true;
+
+        /// <summary>是否啟用專案（Project）片段</summary>
+        public bool UseProject { get; set; } = true;
+
+        /// <summary>是否啟用類型群組（由副檔名映射）片段</summary>
+        public bool UseType { get; set; } = true;
+    }
+
+    public class ClassificationSection
+    {
+        /// <summary>信心度門檻（低於此值可觸發 LLM 建議）</summary>
+        public double ConfidenceThreshold { get; set; } = 0.75;
+    }
+
+    public class OpenAISection
+    {
+        public string ApiKey { get; set; } = string.Empty;
+        public string Model { get; set; } = "gpt-4o-mini";
+        /// <summary>當分類信心低於門檻時啟用 LLM 建議</summary>
+        public bool EnableWhenLowConfidence { get; set; } = true;
+    }
+
+    public class ThemeSection
+    {
+        // 保留擴充點，實際顏色交由 Theme.xaml 管理
+        public string Accent { get; set; } = "#4F46E5";
+    }
+
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public enum MoveMode { Move, Copy }
+
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public enum OverwritePolicy { Replace, Rename, Skip }
 }

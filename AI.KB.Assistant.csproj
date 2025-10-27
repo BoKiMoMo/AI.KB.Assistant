@@ -10,11 +10,13 @@
 	</PropertyGroup>
 
 	<ItemGroup>
-		<Compile Remove="Helpers\Converters.cs" />
-		<Compile Remove="Helpers\DateResolver.cs" />
-		<Compile Remove="Helpers\PanelSpacing.cs" />
-		<Compile Remove="Helpers\TimePathHelper.cs" />
-		<Compile Remove="Helpers\UnixToDateConverter - 複製.cs" />
+	  <Compile Remove="Helpers\**" />
+	  <EmbeddedResource Remove="Helpers\**" />
+	  <None Remove="Helpers\**" />
+	  <Page Remove="Helpers\**" />
+	</ItemGroup>
+
+	<ItemGroup>
 		<Compile Remove="Models\ActionBatch.cs" />
 		<Compile Remove="Models\ClassificationResult.cs" />
 		<Compile Remove="Models\Enums.cs" />

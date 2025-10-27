@@ -23,11 +23,7 @@ namespace AI.KB.Assistant.Services
             _cfg = cfg;
         }
 
-        public void UpdateConfig(AppConfig cfg)
-        {
-            _cfg = cfg;
-        }
-
+        public void UpdateConfig(AppConfig cfg) => _cfg = cfg;
         public void Dispose() { }
 
         // 只進入 Inbox（Stage）
@@ -44,7 +40,7 @@ namespace AI.KB.Assistant.Services
                 Project = _cfg.App.ProjectLock ?? "",
                 Category = "",
                 Confidence = 0,
-                CreatedTs = DateTimeOffset.FromFileTime(fi.CreationTimeUtc.ToFileTimeUtc()).ToUnixTimeSeconds(),
+                CreatedTs = new DateTimeOffset(fi.CreationTimeUtc).ToUnixTimeSeconds(),
                 Status = "inbox",
                 Path = fi.FullName,
                 Tags = ""
@@ -65,17 +61,17 @@ namespace AI.KB.Assistant.Services
             {
                 Filename = fi.Name,
                 Ext = (fi.Extension ?? "").Trim('.').ToLowerInvariant(),
-                CreatedTs = DateTimeOffset.FromFileTime(fi.CreationTimeUtc.ToFileTimeUtc()).ToUnixTimeSeconds(),
+                CreatedTs = new DateTimeOffset(fi.CreationTimeUtc).ToUnixTimeSeconds(),
                 Path = fi.FullName
             };
 
-            // ↓↓↓ 你的規則判斷（範例）
+            // 規則判斷（簡版）
             item.Category = GuessCategory(item) ?? "";
             item.Confidence = GuessConfidence(item);
 
-            // NEW: 黑名單偵測（副檔名黑名單 或 路徑含黑名單資料夾名）
+            // 黑名單副檔名/資料夾名
             var isExtBlack = (_cfg.Import.BlacklistExts ?? Array.Empty<string>())
-                                .Any(x => string.Equals(x.Trim('.'), item.Ext, StringComparison.OrdinalIgnoreCase));
+                .Any(x => string.Equals(x.Trim('.'), item.Ext, StringComparison.OrdinalIgnoreCase));
 
             var isPathBlack = false;
             if ((_cfg.Import.BlacklistFolderNames?.Length ?? 0) > 0)
@@ -85,17 +81,9 @@ namespace AI.KB.Assistant.Services
             }
 
             if (isExtBlack || isPathBlack)
-            {
-                item.Status = "blacklist"; // ✅ 標記黑名單
-            }
+                item.Status = "blacklist";
             else
-            {
-                // NEW: 低信心進自整理暫存
-                if (item.Confidence < _cfg.Classification.ConfidenceThreshold)
-                    item.Status = "auto-staging";
-                else
-                    item.Status = "pending";
-            }
+                item.Status = item.Confidence < _cfg.Classification.ConfidenceThreshold ? "auto-staging" : "pending";
 
             _db.UpsertItem(item);
             await Task.CompletedTask;
@@ -123,7 +111,6 @@ namespace AI.KB.Assistant.Services
                 // 同名策略
                 dest = ApplyOverwritePolicy(dest, _cfg.Import.OverwritePolicy);
 
-                // Move/Copy
                 try
                 {
                     Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
@@ -139,7 +126,7 @@ namespace AI.KB.Assistant.Services
                 }
                 catch
                 {
-                    // 失敗可考慮記錄 item.Status = "error"
+                    // TODO: 失敗記錄
                 }
             }
 
@@ -147,7 +134,7 @@ namespace AI.KB.Assistant.Services
             return moved;
         }
 
-        // ===== 你原本的規則/信心估計：這裡留簡易版範例 =====
+        // 規則/信心估計：簡版
         private static string? GuessCategory(Item it)
         {
             var name = (it.Filename ?? "").ToLowerInvariant();
@@ -157,17 +144,11 @@ namespace AI.KB.Assistant.Services
             if (name.Contains("proposal") || name.Contains("提案")) return "提案";
             return null;
         }
-
-        private static double GuessConfidence(Item it)
-        {
-            var cat = it.Category ?? "";
-            return string.IsNullOrWhiteSpace(cat) ? 0.4 : 0.85;
-        }
+        private static double GuessConfidence(Item it) => string.IsNullOrWhiteSpace(it.Category) ? 0.4 : 0.85;
 
         private static string ApplyOverwritePolicy(string dest, OverwritePolicy policy)
         {
             if (policy == OverwritePolicy.Replace) return dest;
-
             if (!File.Exists(dest)) return dest;
 
             var dir = Path.GetDirectoryName(dest)!;
@@ -178,15 +159,12 @@ namespace AI.KB.Assistant.Services
             if (policy == OverwritePolicy.Rename)
             {
                 string candidate;
-                do
-                {
-                    candidate = Path.Combine(dir, $"{baseName} ({i++}){ext}");
-                } while (File.Exists(candidate));
+                do { candidate = Path.Combine(dir, $"{baseName} ({i++}){ext}"); }
+                while (File.Exists(candidate));
                 return candidate;
             }
-
-            // Skip
-            return Path.Combine(dir, $"{baseName}{ext}"); // 原樣返回（外層會試著寫入，失敗就算略過）
+            // Skip → 讓外層嘗試寫入，失敗即視為略過
+            return Path.Combine(dir, $"{baseName}{ext}");
         }
     }
 }

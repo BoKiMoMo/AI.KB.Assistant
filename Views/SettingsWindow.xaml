@@ -1,357 +1,552 @@
 ﻿<Window x:Class="AI.KB.Assistant.Views.SettingsWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="設定" Height="840" Width="980"
+        Title="設定"
+        Height="720" Width="1080"
         WindowStartupLocation="CenterOwner"
         Background="{DynamicResource App.BackgroundBrush}"
         Foreground="{DynamicResource App.TextBrush}">
-
     <Window.Resources>
-        <!-- 左標籤/右內容用的表單欄寬 -->
+        <!-- 表單網格 -->
         <Style x:Key="FormGrid" TargetType="Grid">
-            <Setter Property="Margin" Value="12"/>
-            <Setter Property="ColumnDefinitions">
-                <Setter.Value>
-                    <ColumnDefinitionCollection>
-                        <ColumnDefinition Width="170"/>
-                        <ColumnDefinition Width="*"/>
-                    </ColumnDefinitionCollection>
-                </Setter.Value>
-            </Setter>
+            <Setter Property="Margin" Value="0,6,0,6"/>
+            <Setter Property="HorizontalAlignment" Value="Stretch"/>
         </Style>
 
-        <!-- 灰色說明文字：自動換行、不會被擋住 -->
-        <Style x:Key="HintText" TargetType="TextBlock">
+        <!-- 標籤 -->
+        <Style x:Key="FormLabel" TargetType="TextBlock">
+            <Setter Property="VerticalAlignment" Value="Center"/>
             <Setter Property="Foreground" Value="{DynamicResource App.TextMutedBrush}"/>
-            <Setter Property="FontSize"   Value="12"/>
-            <Setter Property="TextWrapping" Value="Wrap"/>
-            <Setter Property="Margin" Value="0,6,0,0"/>
+            <Setter Property="Margin" Value="0,0,12,0"/>
         </Style>
 
-        <!-- 欄位之間的垂直空距 -->
-        <Thickness x:Key="FieldMargin">8,4</Thickness>
+        <!-- 輸入 -->
+        <Style x:Key="Txt" TargetType="TextBox">
+            <Setter Property="Padding" Value="8,6"/>
+            <Setter Property="Background" Value="{DynamicResource App.PanelBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource App.BorderBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource App.TextBrush}"/>
+        </Style>
+
+        <Style x:Key="Pwd" TargetType="PasswordBox">
+            <Setter Property="Padding" Value="8,6"/>
+            <Setter Property="Background" Value="{DynamicResource App.PanelBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource App.BorderBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource App.TextBrush}"/>
+        </Style>
+
+        <Style x:Key="Cbx" TargetType="ComboBox">
+            <Setter Property="Padding" Value="6,4"/>
+            <Setter Property="Background" Value="{DynamicResource App.PanelBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource App.BorderBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource App.TextBrush}"/>
+        </Style>
+
+        <Style x:Key="Chk" TargetType="CheckBox">
+            <Setter Property="Margin" Value="0,4,0,4"/>
+            <Setter Property="Foreground" Value="{DynamicResource App.TextBrush}"/>
+        </Style>
+
+        <Style x:Key="Sep" TargetType="Separator">
+            <Setter Property="Margin" Value="0,12,0,12"/>
+            <Setter Property="Background" Value="{DynamicResource App.BorderBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource App.BorderBrush}"/>
+        </Style>
+
+        <Style x:Key="PrimaryButton" TargetType="Button">
+            <Setter Property="Padding" Value="14,8"/>
+            <Setter Property="Margin" Value="8,0,0,0"/>
+            <Setter Property="Background" Value="{DynamicResource App.PrimaryBrush}"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource App.PrimaryHover}"/>
+        </Style>
+        <Style x:Key="PlainButton" TargetType="Button">
+            <Setter Property="Padding" Value="14,8"/>
+            <Setter Property="Margin" Value="8,0,0,0"/>
+            <Setter Property="Background" Value="{DynamicResource App.PanelBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource App.TextBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource App.BorderBrush}"/>
+        </Style>
+
+        <Style x:Key="Swatch" TargetType="Border">
+            <Setter Property="Width" Value="36"/>
+            <Setter Property="Height" Value="24"/>
+            <Setter Property="CornerRadius" Value="4"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource App.BorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Margin" Value="8,0,0,0"/>
+        </Style>
     </Window.Resources>
 
-    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="12">
-        <StackPanel Orientation="Vertical" >
+    <Grid Margin="16" IsSharedSizeScope="True">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
 
-            <!-- 一、一般 -->
-            <GroupBox Header="一般" Margin="0,0,0,12">
-                <Grid Style="{StaticResource FormGrid}">
-                    <!-- 0: DB 路徑 -->
-                    <TextBlock Grid.Row="0" Grid.Column="0" Text="資料庫路徑：" VerticalAlignment="Center"/>
-                    <DockPanel Grid.Row="0" Grid.Column="1" Margin="{StaticResource FieldMargin}">
-                        <TextBox x:Name="TxtDbPath" Margin="0,0,8,0"/>
-                        <Button Content="瀏覽…" Click="BtnPickDbPath_Click" Style="{StaticResource TonedBtn}" MinWidth="76"/>
-                    </DockPanel>
-                    <TextBlock Grid.Row="1" Grid.ColumnSpan="2"
-                               Text="SQLite 檔案位置，預設 data.db。建議放在程式可寫入的位置。"
-                               Style="{StaticResource HintText}"/>
+        <TabControl Grid.Row="0"
+                    Background="{DynamicResource App.BackgroundBrush}"
+                    BorderBrush="{DynamicResource App.BorderBrush}">
 
-                    <!-- 2: 根目錄 -->
-                    <TextBlock Grid.Row="2" Grid.Column="0" Text="專案根目錄：" VerticalAlignment="Center"/>
-                    <DockPanel Grid.Row="2" Grid.Column="1" Margin="{StaticResource FieldMargin}">
-                        <TextBox x:Name="TxtRootDir" Margin="0,0,8,0"/>
-                        <Button Content="瀏覽…" Click="BtnPickRootDir_Click" Style="{StaticResource TonedBtn}" MinWidth="76"/>
-                    </DockPanel>
-                    <TextBlock Grid.Row="3" Grid.ColumnSpan="2"
-                               Text="自動整理與專案資料夾的根位置。未設定時會以桌面作為起點。"
-                               Style="{StaticResource HintText}"/>
-                </Grid>
-            </GroupBox>
+            <!-- 一般設定 -->
+            <TabItem Header="一般設定">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="12">
+                    <Grid IsSharedSizeScope="True" Margin="12">
+                        <StackPanel>
+                            <!-- DbPath -->
+                            <Grid Style="{StaticResource FormGrid}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition SharedSizeGroup="Label" Width="160"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="8"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="資料庫檔案（DbPath）" Style="{StaticResource FormLabel}"/>
+                                <TextBox  Grid.Column="1" x:Name="TxtDbPath" Style="{StaticResource Txt}"/>
+                                <Button  Grid.Column="3" Content="瀏覽…" Style="{StaticResource PlainButton}"
+                                         Click="BtnPickDbPath_Click"/>
+                            </Grid>
 
-            <!-- 二、匯入 / HotFolder -->
-            <GroupBox Header="匯入 / HotFolder" Margin="0,0,0,12">
-                <Grid Style="{StaticResource FormGrid}">
-                    <!-- 0: 拖放 / 子資料夾 -->
-                    <TextBlock Grid.Row="0" Grid.Column="0" Text="拖放加入 / 子資料夾：" VerticalAlignment="Center"/>
-                    <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal" Margin="{StaticResource FieldMargin}">
-                        <CheckBox x:Name="CbAutoOnDrop" Content="拖放自動加入收件夾" Margin="0,0,16,0"/>
-                        <CheckBox x:Name="CbIncludeSubdir" Content="包含子資料夾"/>
-                    </StackPanel>
-                    <TextBlock Grid.Row="1" Grid.ColumnSpan="2"
-                               Text="拖放檔案是否自動加入 Inbox；加入資料夾時是否遞迴處理子資料夾。"
-                               Style="{StaticResource HintText}"/>
+                            <!-- RootDir -->
+                            <Grid Style="{StaticResource FormGrid}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition SharedSizeGroup="Label" Width="160"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="8"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="根目錄（RootDir）" Style="{StaticResource FormLabel}"/>
+                                <TextBox  Grid.Column="1" x:Name="TxtRootDir" Style="{StaticResource Txt}"/>
+                                <Button  Grid.Column="3" Content="瀏覽…" Style="{StaticResource PlainButton}"
+                                         Click="BtnPickRootDir_Click"/>
+                            </Grid>
 
-                    <!-- 2: HotFolder -->
-                    <TextBlock Grid.Row="2" Grid.Column="0" Text="HotFolder 路徑：" VerticalAlignment="Center"/>
-                    <DockPanel Grid.Row="2" Grid.Column="1" Margin="{StaticResource FieldMargin}">
-                        <TextBox x:Name="TxtHotFolder" Margin="0,0,8,0"/>
-                        <Button Content="瀏覽…" Click="BtnPickHotFolder_Click" Style="{StaticResource TonedBtn}" MinWidth="76"/>
-                    </DockPanel>
-                    <TextBlock Grid.Row="3" Grid.ColumnSpan="2"
-                               Text="監控資料夾：檔案放進此資料夾即視為收件夾（Inbox）。"
-                               Style="{StaticResource HintText}"/>
+                            <Separator Style="{StaticResource Sep}"/>
 
-                    <!-- 4: 搬檔/覆蓋策略 -->
-                    <TextBlock Grid.Row="4" Grid.Column="0" Text="搬檔模式：" VerticalAlignment="Center"/>
-                    <ComboBox x:Name="CbMoveMode" Grid.Row="4" Grid.Column="1" Margin="{StaticResource FieldMargin}"
-                              ToolTip="移動：檔案搬到目的地；複製：保留原檔並複製到目的地。"
-                              Width="180">
-                        <!-- 0=Move, 1=Copy -->
-                        <ComboBoxItem Content="移動（Move）"/>
-                        <ComboBoxItem Content="複製（Copy）"/>
-                    </ComboBox>
-                    <TextBlock Grid.Row="5" Grid.ColumnSpan="2"
-                               Text="選擇將檔案『移動』或『複製』到目的地。"
-                               Style="{StaticResource HintText}"/>
+                            <!-- Hot Folder -->
+                            <Grid Style="{StaticResource FormGrid}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition SharedSizeGroup="Label" Width="160"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="8"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="收件夾（Hot Folder）" Style="{StaticResource FormLabel}"/>
+                                <TextBox  Grid.Column="1" x:Name="TxtHotFolder" Style="{StaticResource Txt}"/>
+                                <Button  Grid.Column="3" Content="瀏覽…" Style="{StaticResource PlainButton}"
+                                         Click="BtnPickHotFolder_Click"/>
+                            </Grid>
 
-                    <TextBlock Grid.Row="6" Grid.Column="0" Text="覆蓋策略：" VerticalAlignment="Center"/>
-                    <ComboBox x:Name="CbOverwritePolicy" Grid.Row="6" Grid.Column="1" Margin="{StaticResource FieldMargin}"
-                              ToolTip="目的地已存在同名檔案時的處理方式。" Width="180">
-                        <!-- 0=Replace,1=Rename,2=Skip -->
-                        <ComboBoxItem Content="取代（Replace）"/>
-                        <ComboBoxItem Content="重新命名（Rename）"/>
-                        <ComboBoxItem Content="略過（Skip）"/>
-                    </ComboBox>
-                    <TextBlock Grid.Row="7" Grid.ColumnSpan="2"
-                               Text="同名衝突時：取代＝覆寫、重新命名＝在檔名後加序號、略過＝不搬。"
-                               Style="{StaticResource HintText}"/>
+                            <!-- 選項 -->
+                            <Grid Style="{StaticResource FormGrid}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition SharedSizeGroup="Label" Width="160"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="拖曳 / 子資料夾" Style="{StaticResource FormLabel}"/>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                    <CheckBox x:Name="CbAutoOnDrop"  Style="{StaticResource Chk}" Content="拖曳到主視窗時自動加入收件夾"/>
+                                    <CheckBox x:Name="CbIncludeSubdir" Style="{StaticResource Chk}" Content="收件夾包含子資料夾" Margin="16,0,0,0"/>
+                                </StackPanel>
+                            </Grid>
 
-                    <!-- 8: 黑名單（資料夾/副檔名） -->
-                    <TextBlock Grid.Row="8" Grid.Column="0" Text="黑名單（資料夾）：" VerticalAlignment="Top"/>
-                    <TextBox  x:Name="TxtBlacklistFolders" Grid.Row="8" Grid.Column="1" Height="70"
-                              AcceptsReturn="True" VerticalScrollBarVisibility="Auto" Margin="{StaticResource FieldMargin}"/>
-                    <TextBlock Grid.Row="9" Grid.ColumnSpan="2"
-                               Text="要忽略的資料夾名稱；多筆以逗號或換行分隔。"
-                               Style="{StaticResource HintText}"/>
+                            <!-- 搬移策略 / 重名處理 -->
+                            <Grid Style="{StaticResource FormGrid}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition SharedSizeGroup="Label" Width="160"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="搬移策略 / 重名處理" Style="{StaticResource FormLabel}"/>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                    <ComboBox x:Name="CbMoveMode" Style="{StaticResource Cbx}" Width="160"
+                                              ToolTip="選擇搬檔模式（移動或複製）">
+                                        <ComboBoxItem>移動</ComboBoxItem>
+                                        <ComboBoxItem>複製</ComboBoxItem>
+                                    </ComboBox>
+                                    <ComboBox x:Name="CbOverwritePolicy" Style="{StaticResource Cbx}" Width="200" Margin="12,0,0,0"
+                                              ToolTip="遇到相同檔名時的處理方式">
+                                        <ComboBoxItem>覆蓋（Replace）</ComboBoxItem>
+                                        <ComboBoxItem>重新命名（Rename）</ComboBoxItem>
+                                        <ComboBoxItem>略過（Skip）</ComboBoxItem>
+                                    </ComboBox>
+                                </StackPanel>
+                            </Grid>
 
-                    <TextBlock Grid.Row="10" Grid.Column="0" Text="黑名單（副檔名）：" VerticalAlignment="Top"/>
-                    <TextBox  x:Name="TxtBlacklistExts" Grid.Row="10" Grid.Column="1" Height="60"
-                              AcceptsReturn="True" VerticalScrollBarVisibility="Auto" Margin="{StaticResource FieldMargin}"/>
-                    <TextBlock Grid.Row="11" Grid.ColumnSpan="2"
-                               Text="要忽略的副檔名，不含點；多筆以逗號或換行分隔。"
-                               Style="{StaticResource HintText}"/>
-                </Grid>
-            </GroupBox>
+                            <!-- 黑名單 -->
+                            <Grid Style="{StaticResource FormGrid}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition SharedSizeGroup="Label" Width="160"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="黑名單資料夾" Style="{StaticResource FormLabel}"/>
+                                <TextBox  Grid.Column="1" x:Name="TxtBlacklistFolders" Style="{StaticResource Txt}"
+                                          ToolTip="以逗號分隔，名稱包含任一字串者視為黑名單"/>
+                            </Grid>
 
-            <!-- 三、路徑模板 -->
-            <GroupBox Header="路徑模板（自動整理的資料夾階層）" Margin="0,0,0,12">
-                <Grid Style="{StaticResource FormGrid}">
-                    <TextBlock Grid.Row="0" Grid.ColumnSpan="2"
-                               Text="勾選後會在目的地分層建立資料夾（例如：Root\2025\01\專案\類型）。"
-                               Style="{StaticResource HintText}" Margin="0,0,0,6"/>
-                    <StackPanel Grid.Row="1" Grid.ColumnSpan="2" Orientation="Horizontal">
-                        <CheckBox x:Name="CbUseYear"    Content="年份（yyyy）" Margin="0,0,16,0"/>
-                        <CheckBox x:Name="CbUseMonth"   Content="月份（MM）"  Margin="0,0,16,0"/>
-                        <CheckBox x:Name="CbUseProject" Content="專案"        Margin="0,0,16,0"/>
-                        <CheckBox x:Name="CbUseType"    Content="型態/類別"/>
-                    </StackPanel>
-                </Grid>
-            </GroupBox>
+                            <Grid Style="{StaticResource FormGrid}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition SharedSizeGroup="Label" Width="160"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="黑名單副檔名" Style="{StaticResource FormLabel}"/>
+                                <TextBox  Grid.Column="1" x:Name="TxtBlacklistExts" Style="{StaticResource Txt}"
+                                          ToolTip="不含點、以逗號分隔（例：tmp, bak, log）"/>
+                            </Grid>
+                        </StackPanel>
+                    </Grid>
+                </ScrollViewer>
+            </TabItem>
 
-            <!-- 四、LLM -->
-            <GroupBox Header="LLM" Margin="0,0,0,12">
-                <Grid Style="{StaticResource FormGrid}">
-                    <TextBlock Grid.Row="0" Grid.Column="0" Text="API Key：" VerticalAlignment="Center"/>
-                    <PasswordBox x:Name="TxtApiKey" Grid.Row="0" Grid.Column="1" Margin="{StaticResource FieldMargin}"/>
-                    <TextBlock Grid.Row="1" Grid.ColumnSpan="2"
-                               Text="OpenAI 之類的服務金鑰。留空則不啟用。"
-                               Style="{StaticResource HintText}"/>
-
-                    <TextBlock Grid.Row="2" Grid.Column="0" Text="Model：" VerticalAlignment="Center"/>
-                    <TextBox x:Name="TxtModel" Grid.Row="2" Grid.Column="1" Margin="{StaticResource FieldMargin}"/>
-                    <TextBlock Grid.Row="3" Grid.ColumnSpan="2"
-                               Text="模型名稱，例如 gpt-4o-mini。"
-                               Style="{StaticResource HintText}"/>
-
-                    <TextBlock Grid.Row="4" Grid.Column="0" Text="觸發條件：" VerticalAlignment="Center"/>
-                    <CheckBox x:Name="CbLmLowConf" Grid.Row="4" Grid.Column="1" Margin="{StaticResource FieldMargin}"
-                              Content="僅在低信心時啟用"/>
-                    <TextBlock Grid.Row="5" Grid.ColumnSpan="2"
-                               Text="打開後僅在分類信心不足時才呼叫 LLM。"
-                               Style="{StaticResource HintText}"/>
-                </Grid>
-            </GroupBox>
-
-            <!-- 五、主題 / 顏色 -->
-            <GroupBox Header="主題 / 顏色（與 Theme.xaml 同步）" Margin="0,0,0,12">
-                <Grid Margin="12">
+            <!-- 路由與副檔名群組 -->
+            <TabItem Header="路由與副檔名群組">
+                <Grid Margin="12" IsSharedSizeScope="True">
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="2*"/>
+                        <ColumnDefinition Width="3*"/>
                     </Grid.ColumnDefinitions>
 
-                    <!-- 左列：背景/文字 -->
-                    <StackPanel Grid.Column="0" Margin="0,0,8,0">
-                        <TextBlock Text="介面背景 / 邊框 / 文字" FontWeight="Bold"/>
-                        <UniformGrid Columns="3" Margin="0,6,0,10">
-                            <StackPanel>
-                                <TextBlock Text="背景 Bg"/>
-                                <DockPanel>
-                                    <TextBox x:Name="TbBg" Width="110" Margin="0,0,6,0" TextChanged="ThemeTextBox_TextChanged"/>
-                                    <Button Content="…" Width="32" Click="PickBg_Click" Style="{StaticResource TonedBtn}"/>
-                                </DockPanel>
-                                <Border x:Name="PrevBg" Height="22" BorderBrush="{DynamicResource App.BorderBrush}" BorderThickness="1"/>
+                    <!-- 左：路由選項 -->
+                    <StackPanel Grid.Column="0">
+                        <Grid Style="{StaticResource FormGrid}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition SharedSizeGroup="Label" Width="160"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="路徑片段" Style="{StaticResource FormLabel}"/>
+                            <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                <CheckBox x:Name="CbUseYear"    Style="{StaticResource Chk}" Content="年（YYYY）"/>
+                                <CheckBox x:Name="CbUseMonth"   Style="{StaticResource Chk}" Content="月（MM）" Margin="16,0,0,0"/>
+                                <CheckBox x:Name="CbUseProject" Style="{StaticResource Chk}" Content="專案（Project）" Margin="16,0,0,0"/>
+                                <CheckBox x:Name="CbUseType"    Style="{StaticResource Chk}" Content="類型群組（依副檔名）" Margin="16,0,0,0"/>
                             </StackPanel>
+                        </Grid>
 
-                            <StackPanel>
-                                <TextBlock Text="面板 Panel"/>
-                                <DockPanel>
-                                    <TextBox x:Name="TbPanel" Width="110" Margin="0,0,6,0" TextChanged="ThemeTextBox_TextChanged"/>
-                                    <Button Content="…" Width="32" Click="PickPanel_Click" Style="{StaticResource TonedBtn}"/>
-                                </DockPanel>
-                                <Border x:Name="PrevPanel" Height="22" BorderBrush="{DynamicResource App.BorderBrush}" BorderThickness="1"/>
-                            </StackPanel>
+                        <Separator Style="{StaticResource Sep}"/>
 
-                            <StackPanel>
-                                <TextBlock Text="邊框 Border"/>
-                                <DockPanel>
-                                    <TextBox x:Name="TbBorder" Width="110" Margin="0,0,6,0" TextChanged="ThemeTextBox_TextChanged"/>
-                                    <Button Content="…" Width="32" Click="PickBorder_Click" Style="{StaticResource TonedBtn}"/>
-                                </DockPanel>
-                                <Border x:Name="PrevBorder" Height="22" BorderBrush="{DynamicResource App.BorderBrush}" BorderThickness="1"/>
-                            </StackPanel>
-                        </UniformGrid>
-
-                        <TextBlock Text="文字 / 次色" FontWeight="Bold"/>
-                        <UniformGrid Columns="3" Margin="0,6,0,0">
-                            <StackPanel>
-                                <TextBlock Text="文字 Text"/>
-                                <DockPanel>
-                                    <TextBox x:Name="TbText" Width="110" Margin="0,0,6,0" TextChanged="ThemeTextBox_TextChanged"/>
-                                    <Button Content="…" Width="32" Click="PickText_Click" Style="{StaticResource TonedBtn}"/>
-                                </DockPanel>
-                                <Border x:Name="PrevText" Height="22" BorderBrush="{DynamicResource App.BorderBrush}" BorderThickness="1"/>
-                            </StackPanel>
-
-                            <StackPanel>
-                                <TextBlock Text="文字（次）TextMuted"/>
-                                <DockPanel>
-                                    <TextBox x:Name="TbTextMuted" Width="110" Margin="0,0,6,0" TextChanged="ThemeTextBox_TextChanged"/>
-                                    <Button Content="…" Width="32" Click="PickTextMuted_Click" Style="{StaticResource TonedBtn}"/>
-                                </DockPanel>
-                                <Border x:Name="PrevTextMuted" Height="22" BorderBrush="{DynamicResource App.BorderBrush}" BorderThickness="1"/>
-                            </StackPanel>
-
-                            <StackPanel>
-                                <TextBlock Text="次色 Secondary"/>
-                                <DockPanel>
-                                    <TextBox x:Name="TbSecondary" Width="110" Margin="0,0,6,0" TextChanged="ThemeTextBox_TextChanged"/>
-                                    <Button Content="…" Width="32" Click="PickSecondary_Click" Style="{StaticResource TonedBtn}"/>
-                                </DockPanel>
-                                <Border x:Name="PrevSecondary" Height="22" BorderBrush="{DynamicResource App.BorderBrush}" BorderThickness="1"/>
-                            </StackPanel>
-                        </UniformGrid>
+                        <Grid Style="{StaticResource FormGrid}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition SharedSizeGroup="Label" Width="160"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="副檔名群組 JSON" Style="{StaticResource FormLabel}"/>
+                            <TextBlock Grid.Column="1" Text="請於右側編輯框輸入/修改群組設定。"
+                                       Foreground="{DynamicResource App.TextMutedBrush}" VerticalAlignment="Center"/>
+                            <Button   Grid.Column="2" x:Name="BtnCompactExtGroups" Content="整理為單行陣列"
+                                      Style="{StaticResource PlainButton}" Click="BtnCompactExtGroups_Click"
+                                      ToolTip="將多行陣列壓成單行、去除多餘空白"/>
+                        </Grid>
                     </StackPanel>
 
-                    <!-- 右列：主色/Banner/狀態 -->
-                    <StackPanel Grid.Column="1" Margin="8,0,0,0">
-                        <TextBlock Text="主要色 / Banner / 狀態色" FontWeight="Bold"/>
-                        <UniformGrid Columns="3" Margin="0,6,0,10">
-                            <StackPanel>
-                                <TextBlock Text="主色 Primary"/>
-                                <DockPanel>
-                                    <TextBox x:Name="TbPrimary" Width="110" Margin="0,0,6,0" TextChanged="ThemeTextBox_TextChanged"/>
-                                    <Button Content="…" Width="32" Click="PickPrimary_Click" Style="{StaticResource TonedBtn}"/>
-                                </DockPanel>
-                                <Border x:Name="PrevPrimary" Height="22" BorderBrush="{DynamicResource App.BorderBrush}" BorderThickness="1"/>
-                            </StackPanel>
+                    <!-- 右：編輯框 -->
+                    <Border Grid.Column="1" Margin="20,0,0,0" Padding="8"
+                            Background="{DynamicResource App.PanelBrush}"
+                            BorderBrush="{DynamicResource App.BorderBrush}" BorderThickness="1">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <TextBox x:Name="TxtExtGroups"
+                                     Style="{StaticResource Txt}"
+                                     AcceptsReturn="True"
+                                     FontFamily="Consolas"
+                                     VerticalScrollBarVisibility="Auto"
+                                     TextWrapping="NoWrap"
+                                     MinHeight="320"/>
+                        </ScrollViewer>
+                    </Border>
+                </Grid>
+            </TabItem>
 
-                            <StackPanel>
-                                <TextBlock Text="主色 Hover"/>
-                                <DockPanel>
-                                    <TextBox x:Name="TbPrimaryHover" Width="110" Margin="0,0,6,0" TextChanged="ThemeTextBox_TextChanged"/>
-                                    <Button Content="…" Width="32" Click="PickPrimaryHover_Click" Style="{StaticResource TonedBtn}"/>
-                                </DockPanel>
-                                <Border x:Name="PrevPrimaryHover" Height="22" BorderBrush="{DynamicResource App.BorderBrush}" BorderThickness="1"/>
-                            </StackPanel>
+            <!-- LLM（AI 輔助） -->
+            <TabItem Header="LLM（AI 輔助）">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="12">
+                    <Grid IsSharedSizeScope="True" Margin="12">
+                        <StackPanel>
+                            <Grid Style="{StaticResource FormGrid}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition SharedSizeGroup="Label" Width="160"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="OpenAI API Key" Style="{StaticResource FormLabel}"/>
+                                <PasswordBox Grid.Column="1" x:Name="TxtApiKey" Style="{StaticResource Pwd}"/>
+                            </Grid>
 
-                            <StackPanel>
-                                <TextBlock Text="Banner Info"/>
-                                <DockPanel>
-                                    <TextBox x:Name="TbBannerInfo" Width="110" Margin="0,0,6,0" TextChanged="ThemeTextBox_TextChanged"/>
-                                    <Button Content="…" Width="32" Click="PickBannerInfo_Click" Style="{StaticResource TonedBtn}"/>
-                                </DockPanel>
-                                <Border x:Name="PrevBannerInfo" Height="22" BorderBrush="{DynamicResource App.BorderBrush}" BorderThickness="1"/>
-                            </StackPanel>
+                            <Grid Style="{StaticResource FormGrid}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition SharedSizeGroup="Label" Width="160"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="模型（Model）" Style="{StaticResource FormLabel}"/>
+                                <TextBox  Grid.Column="1" x:Name="TxtModel" Style="{StaticResource Txt}"/>
+                            </Grid>
 
-                            <StackPanel>
-                                <TextBlock Text="Banner Warn"/>
-                                <DockPanel>
-                                    <TextBox x:Name="TbBannerWarn" Width="110" Margin="0,0,6,0" TextChanged="ThemeTextBox_TextChanged"/>
-                                    <Button Content="…" Width="32" Click="PickBannerWarn_Click" Style="{StaticResource TonedBtn}"/>
-                                </DockPanel>
-                                <Border x:Name="PrevBannerWarn" Height="22" BorderBrush="{DynamicResource App.BorderBrush}" BorderThickness="1"/>
-                            </StackPanel>
+                            <Grid Style="{StaticResource FormGrid}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition SharedSizeGroup="Label" Width="160"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="啟用條件" Style="{StaticResource FormLabel}"/>
+                                <CheckBox  Grid.Column="1" x:Name="CbLmLowConf" Style="{StaticResource Chk}"
+                                           Content="分類信心低於門檻時啟用 LLM 建議（EnableWhenLowConfidence）"/>
+                            </Grid>
+                        </StackPanel>
+                    </Grid>
+                </ScrollViewer>
+            </TabItem>
 
-                            <StackPanel>
-                                <TextBlock Text="Banner Error"/>
-                                <DockPanel>
-                                    <TextBox x:Name="TbBannerError" Width="110" Margin="0,0,6,0" TextChanged="ThemeTextBox_TextChanged"/>
-                                    <Button Content="…" Width="32" Click="PickBannerError_Click" Style="{StaticResource TonedBtn}"/>
-                                </DockPanel>
-                                <Border x:Name="PrevBannerError" Height="22" BorderBrush="{DynamicResource App.BorderBrush}" BorderThickness="1"/>
-                            </StackPanel>
+            <!-- 主題（Theme） -->
+            <TabItem Header="主題（Theme）">
+                <Grid Margin="12" IsSharedSizeScope="True">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="2*"/>
+                        <ColumnDefinition Width="3*"/>
+                    </Grid.ColumnDefinitions>
 
-                            <StackPanel>
-                                <TextBlock Text="Success"/>
-                                <DockPanel>
-                                    <TextBox x:Name="TbSuccess" Width="110" Margin="0,0,6,0" TextChanged="ThemeTextBox_TextChanged"/>
-                                    <Button Content="…" Width="32" Click="PickSuccess_Click" Style="{StaticResource TonedBtn}"/>
-                                </DockPanel>
-                                <Border x:Name="PrevSuccess" Height="22" BorderBrush="{DynamicResource App.BorderBrush}" BorderThickness="1"/>
-                            </StackPanel>
+                    <!-- 左：色碼 -->
+                    <StackPanel Grid.Column="0">
+                        <!-- 背景 -->
+                        <Grid Style="{StaticResource FormGrid}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition SharedSizeGroup="Label" Width="160"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="背景（Background）" Style="{StaticResource FormLabel}"/>
+                            <TextBox  Grid.Column="1" x:Name="TbBg" Style="{StaticResource Txt}" TextChanged="ThemeTextBox_TextChanged"/>
+                            <Button   Grid.Column="2" Content="挑色" Style="{StaticResource PlainButton}" Click="PickBg_Click"/>
+                            <Border   Grid.Column="3" x:Name="PrevBg" Style="{StaticResource Swatch}"/>
+                        </Grid>
 
-                            <StackPanel>
-                                <TextBlock Text="Warning"/>
-                                <DockPanel>
-                                    <TextBox x:Name="TbWarning" Width="110" Margin="0,0,6,0" TextChanged="ThemeTextBox_TextChanged"/>
-                                    <Button Content="…" Width="32" Click="PickWarning_Click" Style="{StaticResource TonedBtn}"/>
-                                </DockPanel>
-                                <Border x:Name="PrevWarning" Height="22" BorderBrush="{DynamicResource App.BorderBrush}" BorderThickness="1"/>
-                            </StackPanel>
+                        <!-- 面板 -->
+                        <Grid Style="{StaticResource FormGrid}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition SharedSizeGroup="Label" Width="160"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="面板（Panel）" Style="{StaticResource FormLabel}"/>
+                            <TextBox  Grid.Column="1" x:Name="TbPanel" Style="{StaticResource Txt}" TextChanged="ThemeTextBox_TextChanged"/>
+                            <Button   Grid.Column="2" Content="挑色" Style="{StaticResource PlainButton}" Click="PickPanel_Click"/>
+                            <Border   Grid.Column="3" x:Name="PrevPanel" Style="{StaticResource Swatch}"/>
+                        </Grid>
 
-                            <StackPanel>
-                                <TextBlock Text="Error"/>
-                                <DockPanel>
-                                    <TextBox x:Name="TbError" Width="110" Margin="0,0,6,0" TextChanged="ThemeTextBox_TextChanged"/>
-                                    <Button Content="…" Width="32" Click="PickError_Click" Style="{StaticResource TonedBtn}"/>
-                                </DockPanel>
-                                <Border x:Name="PrevError" Height="22" BorderBrush="{DynamicResource App.BorderBrush}" BorderThickness="1"/>
-                            </StackPanel>
-                        </UniformGrid>
+                        <!-- 邊框 -->
+                        <Grid Style="{StaticResource FormGrid}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition SharedSizeGroup="Label" Width="160"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="邊框（Border）" Style="{StaticResource FormLabel}"/>
+                            <TextBox  Grid.Column="1" x:Name="TbBorder" Style="{StaticResource Txt}" TextChanged="ThemeTextBox_TextChanged"/>
+                            <Button   Grid.Column="2" Content="挑色" Style="{StaticResource PlainButton}" Click="PickBorder_Click"/>
+                            <Border   Grid.Column="3" x:Name="PrevBorder" Style="{StaticResource Swatch}"/>
+                        </Grid>
 
-                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                            <Button Content="還原預設" Width="110" Margin="0,0,8,0" Click="ResetTheme_Click" Style="{StaticResource TonedBtn}"/>
-                            <Button Content="套用並儲存" Width="120" Click="SaveTheme_Click" Style="{StaticResource PrimaryBtn}"/>
+                        <!-- 文字 -->
+                        <Grid Style="{StaticResource FormGrid}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition SharedSizeGroup="Label" Width="160"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="文字（Text）" Style="{StaticResource FormLabel}"/>
+                            <TextBox  Grid.Column="1" x:Name="TbText" Style="{StaticResource Txt}" TextChanged="ThemeTextBox_TextChanged"/>
+                            <Button   Grid.Column="2" Content="挑色" Style="{StaticResource PlainButton}" Click="PickText_Click"/>
+                            <Border   Grid.Column="3" x:Name="PrevText" Style="{StaticResource Swatch}"/>
+                        </Grid>
+
+                        <!-- 次要文字 -->
+                        <Grid Style="{StaticResource FormGrid}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition SharedSizeGroup="Label" Width="160"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="次要文字（TextMuted）" Style="{StaticResource FormLabel}"/>
+                            <TextBox  Grid.Column="1" x:Name="TbTextMuted" Style="{StaticResource Txt}" TextChanged="ThemeTextBox_TextChanged"/>
+                            <Button   Grid.Column="2" Content="挑色" Style="{StaticResource PlainButton}" Click="PickTextMuted_Click"/>
+                            <Border   Grid.Column="3" x:Name="PrevTextMuted" Style="{StaticResource Swatch}"/>
+                        </Grid>
+
+                        <Separator Style="{StaticResource Sep}"/>
+
+                        <!-- 主色 -->
+                        <Grid Style="{StaticResource FormGrid}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition SharedSizeGroup="Label" Width="160"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="主色（Primary）" Style="{StaticResource FormLabel}"/>
+                            <TextBox  Grid.Column="1" x:Name="TbPrimary" Style="{StaticResource Txt}" TextChanged="ThemeTextBox_TextChanged"/>
+                            <Button   Grid.Column="2" Content="挑色" Style="{StaticResource PlainButton}" Click="PickPrimary_Click"/>
+                            <Border   Grid.Column="3" x:Name="PrevPrimary" Style="{StaticResource Swatch}"/>
+                        </Grid>
+
+                        <!-- 主色滑過 -->
+                        <Grid Style="{StaticResource FormGrid}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition SharedSizeGroup="Label" Width="160"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="主色滑過（PrimaryHover）" Style="{StaticResource FormLabel}"/>
+                            <TextBox  Grid.Column="1" x:Name="TbPrimaryHover" Style="{StaticResource Txt}" TextChanged="ThemeTextBox_TextChanged"/>
+                            <Button   Grid.Column="2" Content="挑色" Style="{StaticResource PlainButton}" Click="PickPrimaryHover_Click"/>
+                            <Border   Grid.Column="3" x:Name="PrevPrimaryHover" Style="{StaticResource Swatch}"/>
+                        </Grid>
+
+                        <!-- 次色 -->
+                        <Grid Style="{StaticResource FormGrid}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition SharedSizeGroup="Label" Width="160"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="次色（Secondary）" Style="{StaticResource FormLabel}"/>
+                            <TextBox  Grid.Column="1" x:Name="TbSecondary" Style="{StaticResource Txt}" TextChanged="ThemeTextBox_TextChanged"/>
+                            <Button   Grid.Column="2" Content="挑色" Style="{StaticResource PlainButton}" Click="PickSecondary_Click"/>
+                            <Border   Grid.Column="3" x:Name="PrevSecondary" Style="{StaticResource Swatch}"/>
+                        </Grid>
+
+                        <Separator Style="{StaticResource Sep}"/>
+
+                        <!-- 橫幅 / 狀態 -->
+                        <Grid Style="{StaticResource FormGrid}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition SharedSizeGroup="Label" Width="160"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="資訊（BannerInfo）" Style="{StaticResource FormLabel}"/>
+                            <TextBox  Grid.Column="1" x:Name="TbBannerInfo" Style="{StaticResource Txt}" TextChanged="ThemeTextBox_TextChanged"/>
+                            <Button   Grid.Column="2" Content="挑色" Style="{StaticResource PlainButton}" Click="PickBannerInfo_Click"/>
+                            <Border   Grid.Column="3" x:Name="PrevBannerInfo" Style="{StaticResource Swatch}"/>
+                        </Grid>
+
+                        <Grid Style="{StaticResource FormGrid}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition SharedSizeGroup="Label" Width="160"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="警告（BannerWarn）" Style="{StaticResource FormLabel}"/>
+                            <TextBox  Grid.Column="1" x:Name="TbBannerWarn" Style="{StaticResource Txt}" TextChanged="ThemeTextBox_TextChanged"/>
+                            <Button   Grid.Column="2" Content="挑色" Style="{StaticResource PlainButton}" Click="PickBannerWarn_Click"/>
+                            <Border   Grid.Column="3" x:Name="PrevBannerWarn" Style="{StaticResource Swatch}"/>
+                        </Grid>
+
+                        <Grid Style="{StaticResource FormGrid}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition SharedSizeGroup="Label" Width="160"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="錯誤（BannerError）" Style="{StaticResource FormLabel}"/>
+                            <TextBox  Grid.Column="1" x:Name="TbBannerError" Style="{StaticResource Txt}" TextChanged="ThemeTextBox_TextChanged"/>
+                            <Button   Grid.Column="2" Content="挑色" Style="{StaticResource PlainButton}" Click="PickBannerError_Click"/>
+                            <Border   Grid.Column="3" x:Name="PrevBannerError" Style="{StaticResource Swatch}"/>
+                        </Grid>
+
+                        <Separator Style="{StaticResource Sep}"/>
+
+                        <!-- 成功/注意/錯誤 -->
+                        <Grid Style="{StaticResource FormGrid}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition SharedSizeGroup="Label" Width="160"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="成功（Success）" Style="{StaticResource FormLabel}"/>
+                            <TextBox  Grid.Column="1" x:Name="TbSuccess" Style="{StaticResource Txt}" TextChanged="ThemeTextBox_TextChanged"/>
+                            <Button   Grid.Column="2" Content="挑色" Style="{StaticResource PlainButton}" Click="PickSuccess_Click"/>
+                            <Border   Grid.Column="3" x:Name="PrevSuccess" Style="{StaticResource Swatch}"/>
+                        </Grid>
+
+                        <Grid Style="{StaticResource FormGrid}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition SharedSizeGroup="Label" Width="160"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="注意（Warning）" Style="{StaticResource FormLabel}"/>
+                            <TextBox  Grid.Column="1" x:Name="TbWarning" Style="{StaticResource Txt}" TextChanged="ThemeTextBox_TextChanged"/>
+                            <Button   Grid.Column="2" Content="挑色" Style="{StaticResource PlainButton}" Click="PickWarning_Click"/>
+                            <Border   Grid.Column="3" x:Name="PrevWarning" Style="{StaticResource Swatch}"/>
+                        </Grid>
+
+                        <Grid Style="{StaticResource FormGrid}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition SharedSizeGroup="Label" Width="160"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="錯誤（Error）" Style="{StaticResource FormLabel}"/>
+                            <TextBox  Grid.Column="1" x:Name="TbError" Style="{StaticResource Txt}" TextChanged="ThemeTextBox_TextChanged"/>
+                            <Button   Grid.Column="2" Content="挑色" Style="{StaticResource PlainButton}" Click="PickError_Click"/>
+                            <Border   Grid.Column="3" x:Name="PrevError" Style="{StaticResource Swatch}"/>
+                        </Grid>
+
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
+                            <Button Content="恢復預設" Style="{StaticResource PlainButton}" Click="ResetTheme_Click"/>
+                            <Button Content="套用並儲存" Style="{StaticResource PrimaryButton}" Click="SaveTheme_Click"/>
                         </StackPanel>
                     </StackPanel>
+
+                    <!-- 右：預覽（不命名，避免重複） -->
+                    <Border Grid.Column="1" Margin="20,0,0,0" Padding="16"
+                            Background="{DynamicResource App.PanelBrush}"
+                            BorderBrush="{DynamicResource App.BorderBrush}" BorderThickness="1">
+                        <StackPanel>
+                            <TextBlock Text="主題預覽" FontWeight="Bold" Margin="0,0,0,10"/>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                <TextBlock Text="主色" Width="120" Style="{StaticResource FormLabel}"/>
+                                <Border Style="{StaticResource Swatch}" Background="{DynamicResource App.PrimaryBrush}"/>
+                                <Border Style="{StaticResource Swatch}" Background="{DynamicResource App.PrimaryHover}"/>
+                                <Border Style="{StaticResource Swatch}" Background="{DynamicResource App.SecondaryBrush}"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                <TextBlock Text="文字" Width="120" Style="{StaticResource FormLabel}"/>
+                                <Border Style="{StaticResource Swatch}" Background="{DynamicResource App.TextBrush}"/>
+                                <Border Style="{StaticResource Swatch}" Background="{DynamicResource App.TextMutedBrush}"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                <TextBlock Text="訊息橫幅" Width="120" Style="{StaticResource FormLabel}"/>
+                                <Border Style="{StaticResource Swatch}" Background="{DynamicResource App.BannerInfoBrush}"/>
+                                <Border Style="{StaticResource Swatch}" Background="{DynamicResource App.BannerWarnBrush}"/>
+                                <Border Style="{StaticResource Swatch}" Background="{DynamicResource App.BannerErrorBrush}"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                <TextBlock Text="狀態" Width="120" Style="{StaticResource FormLabel}"/>
+                                <Border Style="{StaticResource Swatch}" Background="{DynamicResource App.SuccessBrush}"/>
+                                <Border Style="{StaticResource Swatch}" Background="{DynamicResource App.WarningBrush}"/>
+                                <Border Style="{StaticResource Swatch}" Background="{DynamicResource App.ErrorBrush}"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
                 </Grid>
-            </GroupBox>
+            </TabItem>
+        </TabControl>
 
-            <!-- 六、Extension Groups 檢視 / 匯入 -->
-            <GroupBox Header="Extension Groups 檢視 / 匯入" Margin="0,0,0,12">
-                <Grid Margin="12">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="*"/>
-                    </Grid.RowDefinitions>
-
-                    <DockPanel Grid.Row="0" LastChildFill="False">
-                        <TextBlock Text="每組為『副檔名群組 → 列表』。按「整理為單行陣列」可把每個陣列壓成單行，方便閱讀/編輯。"
-                                   Style="{StaticResource HintText}" Margin="0,0,12,0}"/>
-                        <Button x:Name="BtnCompactExtGroups" Content="整理為單行陣列"
-                                Click="BtnCompactExtGroups_Click" Style="{StaticResource TonedBtn}" Padding="8,4"/>
-                    </DockPanel>
-
-                    <TextBox x:Name="TxtExtGroups" Grid.Row="1"
-                             AcceptsReturn="True"
-                             VerticalScrollBarVisibility="Auto"
-                             HorizontalScrollBarVisibility="Auto"
-                             FontFamily="Consolas"
-                             Height="220"
-                             TextWrapping="NoWrap"/>
-                </Grid>
-            </GroupBox>
-
-            <!-- 動作列 -->
-            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,0,8">
-                <Button x:Name="BtnOk" Content="確定" Width="100" Margin="0,0,8,0"
-                        Click="BtnOk_Click" Style="{StaticResource PrimaryBtn}"/>
-                <Button Content="取消" Width="100" IsCancel="True" Style="{StaticResource TonedBtn}"/>
+        <!-- 底部操作列 -->
+        <DockPanel Grid.Row="1" Margin="0,12,0,0">
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" DockPanel.Dock="Right">
+                <Button Content="取消" Style="{StaticResource PlainButton}" IsCancel="True"/>
+                <Button Content="確定" Style="{StaticResource PrimaryButton}" Click="BtnOk_Click" IsDefault="True"/>
             </StackPanel>
-
-        </StackPanel>
-    </ScrollViewer>
+        </DockPanel>
+    </Grid>
 </Window>

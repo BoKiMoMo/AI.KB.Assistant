@@ -1,27 +1,26 @@
-using System;
+using System.Diagnostics;
 
 namespace AI.KB.Assistant.Models
 {
+    [DebuggerDisplay("{Filename} ({Project}) [{Tags}]")]
     public sealed class Item
     {
-        public long Id { get; set; }
-        public string Filename { get; set; } = string.Empty;
-        public string Ext { get; set; } = string.Empty;
+        public long Id { get; set; }                 // DB: items.id
+        public string? Path { get; set; }            // DB: items.path
+        public string? Filename { get; set; }        // DB: items.filename
+        public string? Ext { get; set; }             // DB: items.ext
+        public string? Project { get; set; }         // DB: items.project
+        public string? Category { get; set; }        // DB: items.category
+        public string? Tags { get; set; }            // DB: items.tags
+        public string? Status { get; set; }          // DB: items.status
+        public double Confidence { get; set; }       // DB: items.confidence
+        public long CreatedTs { get; set; }          // DB: items.created_ts (Unix seconds)
+        public string? ProposedPath { get; set; }
 
-        // 業務欄位（在 Intake / Routing 會用到）
-        public string Project { get; set; } = string.Empty;
-        public string Category { get; set; } = string.Empty;
-        public double Confidence { get; set; } = 0d;
-        public string Status { get; set; } = string.Empty;
-
-        // 檔案資訊
-        public long CreatedTs { get; set; } = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-        public string Path { get; set; } = string.Empty;
-        public string Tags { get; set; } = string.Empty;
-
-        // IntakeService 會用到的暫存說明欄位
-        public string FileType { get; set; } = string.Empty;  // e.g. image/pdf/office/code…
-        public string ProposedPath { get; set; } = string.Empty;  // 建議搬移目的地
-        public string Reasoning { get; set; } = string.Empty;  // 規則/LLM 的推論說明
+        /// <summary>
+        /// 非持久化：主畫面用來顯示「預計搬運到哪個路徑」的欄位。
+        /// 不會寫入 DB，純 UI 預覽。
+        /// </summary>
+        public string? PredictedPath { get; set; }
     }
 }
