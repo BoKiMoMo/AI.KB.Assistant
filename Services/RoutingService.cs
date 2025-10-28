@@ -7,135 +7,126 @@ using System.Linq;
 namespace AI.KB.Assistant.Services
 {
     /// <summary>
-    /// 路由規則服務：負責預覽/產生最終目的地路徑
+    /// 路徑預覽 / 實際目的地計算（不負責 IO）
     /// </summary>
-    public class RoutingService : IDisposable
+    public class RoutingService
     {
+        public const string AutoFolderName = "自整理";
+        public const string LowConfidenceFolderName = "信心不足";
+
         private AppConfig _cfg;
 
         public RoutingService(AppConfig cfg)
         {
-            _cfg = cfg;
-            _cfg.Import?.RebuildExtGroupsCache();
+            _cfg = cfg ?? new AppConfig();
+            ApplyConfig(_cfg);
         }
 
         public void ApplyConfig(AppConfig cfg)
         {
-            _cfg = cfg;
-            _cfg.Import?.RebuildExtGroupsCache();
+            _cfg = cfg ?? new AppConfig();
+            ConfigService.Normalize(_cfg);
         }
 
-        public void Dispose() { }
+        /// <summary>
+        /// 預覽目的地（不做 IO），若信心不足或無法判斷，會落到「自整理」或「信心不足」。
+        /// </summary>
+        public string PreviewDestPath(string srcPath, string? lockedProject, double? confidence = null)
+        {
+            if (string.IsNullOrWhiteSpace(srcPath)) return srcPath;
+
+            var root = _cfg.App.RootDir!;
+            var project = !string.IsNullOrWhiteSpace(lockedProject) ? lockedProject! : GuessProject(srcPath);
+            var baseDir = Path.Combine(root, project);
+
+            // 低信心 → 指向「信心不足」
+            var th = _cfg.Classification.ConfidenceThreshold;
+            if (confidence.HasValue && confidence.Value < th)
+                return Path.Combine(root, LowConfidenceFolderName, Path.GetFileName(srcPath));
+
+            // 依副檔名群組 → 子類別資料夾
+            var group = ResolveGroupByExt(srcPath);
+            if (string.IsNullOrWhiteSpace(group))
+                return Path.Combine(root, AutoFolderName, Path.GetFileName(srcPath));
+
+            var destDir = Path.Combine(baseDir, group);
+            return Path.Combine(destDir, Path.GetFileName(srcPath));
+        }
 
         /// <summary>
-        /// 依目前設定預覽目標路徑（含檔名），不執行任何 IO。lockedProject 優先於 item.Project。
+        /// 實際目的地（會處理同名策略 Replace / Rename / Skip，僅回傳結果路徑，不做搬檔）
         /// </summary>
-        public string PreviewDestPath(string srcFullPath, string? lockedProject)
+        public string BuildDestination(string srcPath, string? lockedProject, double? confidence = null)
         {
-            if (string.IsNullOrWhiteSpace(srcFullPath))
-                return string.Empty;
+            var dest = PreviewDestPath(srcPath, lockedProject, confidence);
+            var policy = _cfg.Import.OverwritePolicy;
 
-            var fi = new FileInfo(srcFullPath);
-            var item = new Models.Item
+            if (!File.Exists(dest)) return dest;
+
+            return policy switch
             {
-                Filename = fi.Name,
-                Ext = (fi.Extension ?? "").Trim('.').ToLowerInvariant(),
-                Project = string.Empty,
-                Path = fi.FullName,
-                CreatedTs = fi.Exists
-                    ? new DateTimeOffset(fi.CreationTimeUtc).ToUnixTimeSeconds()
-                    : DateTimeOffset.Now.ToUnixTimeSeconds()
+                OverwritePolicy.Replace => dest,
+                OverwritePolicy.Skip => string.Empty, // 呼叫端自行略過
+                OverwritePolicy.Rename => MakeNonConflictFile(dest),
+                _ => MakeNonConflictFile(dest)
             };
-
-            // 依門檻判斷是否為低信心（資料若不存在 DB，預設用 0）
-            var lowConf = item.Confidence < (_cfg?.Classification?.ConfidenceThreshold ?? 0.75);
-
-            return BuildDestination(item,
-                                    isBlacklist: false,
-                                    isLowConfidence: lowConf,
-                                    lockedProject: lockedProject);
         }
 
-        /// <summary>
-        /// 產生最終目的地（含檔名）。此方法供 Commit 時實際路由使用。
-        /// </summary>
-        public string BuildDestination(Models.Item item, bool isBlacklist, bool isLowConfidence, string? lockedProject)
-            => BuildDestination(item, isBlacklist, isLowConfidence, lockedProject, DateTimeOffset.FromUnixTimeSeconds(item.CreatedTs).UtcDateTime);
-
-        private string BuildDestination(Models.Item item, bool isBlacklist, bool isLowConfidence, string? lockedProject, DateTime utcCreated)
+        // -------------------------------------------------
+        // Helpers
+        // -------------------------------------------------
+        private string GuessProject(string srcPath)
         {
-            var root = _cfg.App?.RootDir ?? "";
-            if (string.IsNullOrWhiteSpace(root)) return string.Empty;
-
-            // 目的地的第一層：黑名單 / 低信心 / 一般自整理
-            var level1 = isBlacklist
-                ? "_blacklist"
-                : isLowConfidence
-                    ? (_cfg.Routing?.LowConfidenceFolderName ?? "信心不足")
-                    : (_cfg.Routing?.AutoFolderName ?? "自整理");
-
-            var segments = new List<string> { root, level1 };
-
-            // 片段：年、月、專案、類型
-            if (_cfg.Routing?.UseYear == true)
+            // 以父層資料夾名當 project
+            var dir = Path.GetDirectoryName(srcPath);
+            if (!string.IsNullOrWhiteSpace(dir))
             {
-                var y = (utcCreated == default ? DateTime.UtcNow : utcCreated).ToLocalTime().ToString("yyyy");
-                segments.Add(y);
+                var name = new DirectoryInfo(dir).Name;
+                if (!string.IsNullOrWhiteSpace(name))
+                    return name;
             }
-
-            if (_cfg.Routing?.UseMonth == true)
-            {
-                var m = (utcCreated == default ? DateTime.UtcNow : utcCreated).ToLocalTime().ToString("MM");
-                segments.Add(m);
-            }
-
-            if (_cfg.Routing?.UseProject == true)
-            {
-                var proj = FirstNonEmpty(lockedProject, _cfg.App?.ProjectLock, item.Project);
-                if (!string.IsNullOrWhiteSpace(proj)) segments.Add(SanitizeFolder(proj!));
-            }
-
-            if (_cfg.Routing?.UseType == true)
-            {
-                var type = ResolveTypeByExt(item.Ext);
-                if (!string.IsNullOrWhiteSpace(type)) segments.Add(SanitizeFolder(type!));
-            }
-
-            // 組最終資料夾
-            var destDir = Path.Combine(segments.ToArray());
-
-            // 最終檔名：直接使用原始檔名
-            var filename = item.Filename ?? "unknown";
-
-            return Path.Combine(destDir, filename);
+            return "Default";
         }
 
-        private string ResolveTypeByExt(string? ext)
+        private string ResolveGroupByExt(string srcPath)
         {
-            if (string.IsNullOrWhiteSpace(ext)) return string.Empty;
-            var map = _cfg.Import?.ExtGroupMap ?? new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+            var ext = Path.GetExtension(srcPath).TrimStart('.').ToLowerInvariant();
+            if (string.IsNullOrWhiteSpace(ext)) return "Others";
 
-            foreach (var kv in map)
+            // 到 ExtGroupsCache 找
+            foreach (var kv in _cfg.Import.ExtGroupsCache)
             {
-                if (kv.Value.Contains(ext.Trim('.')))
+                if (kv.Value != null && kv.Value.Contains(ext))
                     return kv.Key;
             }
-            return "其他";
+            return "Others";
         }
 
-        private static string FirstNonEmpty(params string?[] values)
+        private static string MakeNonConflictFile(string fullPath)
         {
-            foreach (var v in values)
-                if (!string.IsNullOrWhiteSpace(v)) return v!;
-            return string.Empty;
+            var dir = Path.GetDirectoryName(fullPath)!;
+            var name = Path.GetFileNameWithoutExtension(fullPath);
+            var ext = Path.GetExtension(fullPath);
+            var i = 1;
+            var tryPath = fullPath;
+
+            while (File.Exists(tryPath))
+            {
+                tryPath = Path.Combine(dir, $"{name} ({i++}){ext}");
+            }
+            return tryPath;
         }
 
-        private static string SanitizeFolder(string name)
+        // 左樹過濾：黑名單資料夾或系統隱藏
+        public bool ShouldHideFolder(string folderName)
         {
-            var invalid = Path.GetInvalidFileNameChars();
-            var arr = name.Select(ch => invalid.Contains(ch) ? '_' : ch).ToArray();
-            var cleaned = new string(arr).Trim();
-            return string.IsNullOrWhiteSpace(cleaned) ? "Unnamed" : cleaned;
+            if (string.IsNullOrWhiteSpace(folderName)) return true;
+            var n = folderName.Trim();
+            if (_cfg.Import.BlacklistFolderNames.Any(b => string.Equals(b, n, StringComparison.OrdinalIgnoreCase)))
+                return true;
+            if (string.Equals(n, AutoFolderName, StringComparison.OrdinalIgnoreCase)) return true;
+            if (string.Equals(n, LowConfidenceFolderName, StringComparison.OrdinalIgnoreCase)) return true;
+            return false;
         }
     }
 }

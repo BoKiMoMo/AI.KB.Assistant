@@ -1,19 +1,42 @@
-﻿using System;
+﻿using AI.KB.Assistant.Models;
+using System;
 using System.Collections.Generic;
 using System.Linq;
-using AI.KB.Assistant.Models;
-using AI.KB.Assistant.Services;
 
-namespace AI.KB.Assistant.Views
+namespace AI.KB.Assistant.Services
 {
-    internal static class DbServiceExtensions
+    public static class DbServiceExtensions
     {
-        public static IEnumerable<Item> QueryByTag(this DbService db, string tag)
+        public static void Upsert(this DbService db, Item item)
+            => db.UpsertAsync(item).GetAwaiter().GetResult();
+
+        public static bool QueryByPath(this DbService db, string path, out Item? item)
         {
-            return db.QuerySince(0).Where(i => (i.Tags ?? "")
-                .Split(',', StringSplitOptions.RemoveEmptyEntries)
-                .Select(s => s.Trim())
-                .Contains(tag, StringComparer.OrdinalIgnoreCase));
+            item = db.TryGetByPathAsync(path).GetAwaiter().GetResult();
+            return item != null;
+        }
+
+        public static Item? QueryByPath(this DbService db, string path)
+            => db.TryGetByPathAsync(path).GetAwaiter().GetResult();
+
+        // ★ Item.CreatedTs 是 long（ticks）
+        public static List<Item> QuerySince(this DbService db, DateTime since)
+        {
+            long ticks = since.Ticks;
+            return db.QueryAllAsync().GetAwaiter().GetResult()
+                     .Where(x => x.CreatedTs >= ticks).ToList();
+        }
+
+        public static List<Item> QueryByStatus(this DbService db, string status)
+        {
+            status ??= string.Empty;
+            var all = db.QueryAllAsync().GetAwaiter().GetResult();
+            return all.Where(x =>
+                string.Equals(x.Project ?? "", status, StringComparison.OrdinalIgnoreCase) ||
+                (x.Tags ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries)
+                               .Select(t => t.Trim())
+                               .Any(t => string.Equals(t, status, StringComparison.OrdinalIgnoreCase))
+            ).ToList();
         }
     }
 }

@@ -22,6 +22,7 @@
 		<Compile Remove="Models\Enums.cs" />
 		<Compile Remove="Models\OpenAIConfig.cs" />
 		<Compile Remove="Models\PathNode.cs" />
+		<Compile Remove="Models\ThemeColors.cs" />
 		<Compile Remove="Services\ClassifierService.cs" />
 		<Compile Remove="Services\EmbeddingService.cs" />
 		<Compile Remove="Views\HelpWindow.xaml.cs" />

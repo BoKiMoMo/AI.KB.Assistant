@@ -25,32 +25,15 @@
             <Setter Property="Width" Value="5"/>
         </Style>
 
-        <!-- 顶部四顆路徑籤的資料樣板 -->
+        <!-- 置頂四顆路徑籤 -->
         <DataTemplate x:Key="TopPathTemplate">
             <Border CornerRadius="4" Padding="6,4" Margin="0,0,8,0"
                     Background="{DynamicResource App.PanelBrush}"
-                    BorderBrush="{DynamicResource App.BorderBrush}" BorderThickness="1"
-                    ToolTip="{Binding Path}">
+                    BorderBrush="{DynamicResource App.BorderBrush}" BorderThickness="1">
                 <StackPanel Orientation="Horizontal">
                     <TextBlock Text="{Binding Label}" FontWeight="Bold" Margin="0,0,6,0"/>
                     <TextBlock Text="{Binding Path}" Foreground="{DynamicResource App.TextMutedBrush}" />
                 </StackPanel>
-                <Border.InputBindings>
-                    <!-- 左鍵開啟 -->
-                    <MouseBinding MouseAction="LeftClick"
-                                  Command="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=OpenPathCommand}"
-                                  CommandParameter="{Binding Path}"/>
-                </Border.InputBindings>
-                <Border.ContextMenu>
-                    <ContextMenu>
-                        <MenuItem Header="在檔案總管開啟"
-                                  Command="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=OpenPathCommand}"
-                                  CommandParameter="{Binding Path}"/>
-                        <MenuItem Header="複製路徑"
-                                  Command="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=CopyPathCommand}"
-                                  CommandParameter="{Binding Path}"/>
-                    </ContextMenu>
-                </Border.ContextMenu>
             </Border>
         </DataTemplate>
     </Window.Resources>
@@ -66,17 +49,14 @@
             <Separator/>
             <Button Style="{StaticResource ToolbarBtn}" Content="⚙ 設定" Click="BtnOpenSettings_Click"/>
             <Separator/>
-            <!-- 收件夾快捷鈕 -->
-            <Button Style="{StaticResource ToolbarBtn}" Content="🗂 開啟收件夾" Click="BtnOpenInbox_Click"/>
+            <Button Style="{StaticResource ToolbarBtn}" Content="🗂 收件夾" Click="BtnOpenInbox_Click"/>
             <Separator/>
-            <!-- 左右收合 -->
-            <Button Style="{StaticResource ToolbarBtn}" Content="⟨ 左側" Click="BtnEdgeLeft_Click"/>
-            <Button Style="{StaticResource ToolbarBtn}" Content="右側 ⟩" Click="BtnEdgeRight_Click"/>
+            <Button Style="{StaticResource ToolbarBtn}" Content="路徑樹" Click="BtnEdgeLeft_Click"/>
+            <Button Style="{StaticResource ToolbarBtn}" Content="資訊欄" Click="BtnEdgeRight_Click"/>
         </ToolBar>
 
-        <!-- 路徑資訊列 + 麵包屑 + 搜尋/鎖定 -->
+        <!-- 置頂路徑籤 + 搜尋/鎖定 -->
         <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="12,8,12,8" VerticalAlignment="Center">
-            <!-- 置頂四顆路徑籤（ROOT/收件夾/桌面/DB） -->
             <ItemsControl x:Name="TopPaths" ItemTemplate="{StaticResource TopPathTemplate}" Margin="0,0,12,0">
                 <ItemsControl.ItemsPanel>
                     <ItemsPanelTemplate>
@@ -85,10 +65,10 @@
                 </ItemsControl.ItemsPanel>
             </ItemsControl>
 
-            <!-- 麵包屑 -->
+            <!-- 麵包屑(保留容器，程式碼端可自行填充) -->
             <StackPanel Orientation="Horizontal" x:Name="PathStrip" VerticalAlignment="Center"/>
 
-            <!-- 專案鎖定/搜尋 -->
+            <!-- 專案鎖定/搜尋（僅 UI 容器，事件在程式碼端處理） -->
             <Border Margin="8,0,0,0" BorderBrush="{DynamicResource App.BorderBrush}" BorderThickness="1" Padding="6,4">
                 <StackPanel Orientation="Horizontal">
                     <TextBlock Text="專案鎖定：" VerticalAlignment="Center" Margin="0,0,6,0"/>
@@ -98,16 +78,16 @@
                 </StackPanel>
             </Border>
 
-            <!-- 樹狀目錄過濾 -->
             <StackPanel Orientation="Horizontal" Margin="8,0,0,0">
                 <TextBlock Text="目錄搜尋：" VerticalAlignment="Center" Margin="8,0,6,0"/>
-                <TextBox x:Name="TvFilterBox" Width="220" TextChanged="TvFilterBox_TextChanged"/>
+                <TextBox x:Name="TvFilterBox" Width="220"/>
             </StackPanel>
         </StackPanel>
 
         <!-- Banner -->
         <Border x:Name="Banner" DockPanel.Dock="Top" Visibility="Collapsed" Padding="10"
-                Background="{DynamicResource App.BannerInfoBrush}" BorderBrush="{DynamicResource App.BorderBrush}" BorderThickness="1">
+                Background="{DynamicResource App.BannerInfoBrush}"
+                BorderBrush="{DynamicResource App.BorderBrush}" BorderThickness="1">
             <TextBlock x:Name="BannerText" />
         </Border>
 
@@ -159,9 +139,7 @@
                                 <RowDefinition Height="Auto"/>
                             </Grid.RowDefinitions>
 
-                            <!-- 檔案清單 -->
-                            <ListView x:Name="FileList" Grid.Row="0" SelectionMode="Extended"
-                                      MouseDoubleClick="List_DoubleClick">
+                            <ListView x:Name="FileList" Grid.Row="0" SelectionMode="Extended" MouseDoubleClick="List_DoubleClick">
                                 <ListView.View>
                                     <GridView x:Name="MainGridView" AllowsColumnReorder="True">
                                         <GridViewColumn Width="220">
@@ -188,14 +166,12 @@
                                                 <Binding Path="Tags"/>
                                             </GridViewColumn.DisplayMemberBinding>
                                         </GridViewColumn>
-                                        <!-- 路徑 -->
                                         <GridViewColumn Width="280">
                                             <GridViewColumnHeader Tag="Path" Click="ListHeader_Click">路徑</GridViewColumnHeader>
                                             <GridViewColumn.DisplayMemberBinding>
                                                 <Binding Path="Path"/>
                                             </GridViewColumn.DisplayMemberBinding>
                                         </GridViewColumn>
-                                        <!-- 預計路徑（對應 Item.ProposedPath） -->
                                         <GridViewColumn Width="320">
                                             <GridViewColumnHeader Tag="PredictedPath" Click="ListHeader_Click">預計路徑</GridViewColumnHeader>
                                             <GridViewColumn.DisplayMemberBinding>
@@ -212,7 +188,6 @@
                                 </ListView.View>
                             </ListView>
 
-                            <!-- 計數列 + 批次列 -->
                             <DockPanel Grid.Row="1" Margin="8">
                                 <TextBlock x:Name="TxtCounter" />
                                 <StackPanel x:Name="BatchBar" Orientation="Horizontal" HorizontalAlignment="Right">
@@ -244,7 +219,6 @@
                         <TextBlock x:Name="RtThresholdValue" Margin="6,0,0,0" VerticalAlignment="Center"/>
                     </StackPanel>
 
-                    <!-- 顯示目前選取檔案 -->
                     <TextBlock Text="名稱" FontWeight="Bold" Margin="0,4,0,0"/>
                     <TextBlock x:Name="RtName" TextWrapping="Wrap" />
                     <TextBlock Text="摘要" FontWeight="Bold" Margin="0,6,0,0"/>

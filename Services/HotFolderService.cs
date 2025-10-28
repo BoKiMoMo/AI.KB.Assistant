@@ -1,12 +1,15 @@
 ﻿using System;
 using System.IO;
-using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using AI.KB.Assistant.Models;
 
 namespace AI.KB.Assistant.Services
 {
+    /// <summary>
+    /// 熱資料夾監聽（可選）。目前不再依賴 AppConfig.Import.EnableHotFolder，
+    /// 一律以外部呼叫 Start/Stop 控制，避免舊屬性造成編譯錯誤。
+    /// </summary>
     public sealed class HotFolderService : IDisposable
     {
         private readonly IntakeService _intake;
@@ -21,44 +24,21 @@ namespace AI.KB.Assistant.Services
 
         public void Start()
         {
-            try
+            Stop();
+            var hot = _cfg.Import?.HotFolderPath;
+            if (string.IsNullOrWhiteSpace(hot) || !Directory.Exists(hot)) return;
+
+            _fw = new FileSystemWatcher(hot)
             {
-                if (_cfg.Import.EnableHotFolder != true) return;
-
-                var path = _cfg.Import.HotFolderPath;
-                if (string.IsNullOrWhiteSpace(path) || !Directory.Exists(path)) return;
-
-                _fw = new FileSystemWatcher(path)
-                {
-                    IncludeSubdirectories = _cfg.Import.IncludeSubdirectories,
-                    EnableRaisingEvents = true,
-                    NotifyFilter = NotifyFilters.FileName | NotifyFilters.CreationTime | NotifyFilters.Size
-                };
-                _fw.Created += OnCreated;
-                _fw.Renamed += OnCreated;
-            }
-            catch { /* ignore */ }
+                IncludeSubdirectories = false,
+                NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite | NotifyFilters.CreationTime
+            };
+            _fw.Created += OnCreated;
+            _fw.Renamed += OnCreated;
+            _fw.EnableRaisingEvents = true;
         }
 
-        private async void OnCreated(object sender, FileSystemEventArgs e)
-        {
-            try
-            {
-                if (Directory.Exists(e.FullPath)) return;
-
-                var dir = Path.GetDirectoryName(e.FullPath) ?? "";
-                var blocks = _cfg.Import.BlacklistFolderNames ?? Array.Empty<string>();
-                if (blocks.Any() && blocks.Any(b => !string.IsNullOrWhiteSpace(b) &&
-                    dir.Contains(b, StringComparison.OrdinalIgnoreCase)))
-                    return;
-
-                await Task.Delay(600); // 等檔案穩定
-                await _intake.StageOnlyAsync(e.FullPath, CancellationToken.None);
-            }
-            catch { /* ignore */ }
-        }
-
-        public void Dispose()
+        public void Stop()
         {
             try
             {
@@ -70,7 +50,21 @@ namespace AI.KB.Assistant.Services
                     _fw.Dispose();
                 }
             }
-            catch { }
+            finally { _fw = null; }
         }
+
+        private async void OnCreated(object sender, FileSystemEventArgs e)
+        {
+            // 等檔案寫入完成（簡單延遲）
+            await Task.Delay(300);
+            try
+            {
+                if (File.Exists(e.FullPath))
+                    await _intake.StageOnlyAsync(e.FullPath, CancellationToken.None);
+            }
+            catch { /* 忽略單檔錯誤 */ }
+        }
+
+        public void Dispose() => Stop();
     }
 }

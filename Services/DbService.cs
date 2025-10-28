@@ -1,151 +1,254 @@
-﻿using System;
+﻿using AI.KB.Assistant.Models;
+using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Data;
 using System.IO;
 using System.Linq;
-using Dapper;
+using System.Threading.Tasks;
+
+#if USE_SQLITE
 using Microsoft.Data.Sqlite;
-using AI.KB.Assistant.Models;
+#endif
 
 namespace AI.KB.Assistant.Services
 {
-    public sealed class DbService : IDisposable
+    /// <summary>
+    /// 最終版 DbService
+    /// - 以「db 檔案路徑」初始化
+    /// - 預設使用 SQLite（需要 Microsoft.Data.Sqlite）；若編譯環境沒有套件，退回記憶體後援
+    /// - 提供 Upsert / Remove / TryGetByPath / QueryByProject / QueryByTag / QueryAll
+    /// </summary>
+    public class DbService
     {
-        private readonly string _dbPath;
-        private readonly string _connStr;
+        public string DbPath { get; }
+        private readonly bool _useMemory;
+
+        private readonly ConcurrentDictionary<string, Item> _mem = new(StringComparer.OrdinalIgnoreCase);
 
         public DbService(string dbPath)
         {
-            _dbPath = string.IsNullOrWhiteSpace(dbPath) ? "data.db" : dbPath;
-            Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(_dbPath)) ?? ".");
-            _connStr = $"Data Source={_dbPath};Cache=Shared";
+            DbPath = string.IsNullOrWhiteSpace(dbPath)
+                ? Path.Combine(Path.GetTempPath(), "ai.kb.assistant.fallback.db")
+                : dbPath;
+
+#if USE_SQLITE
+            _useMemory = false;
+            Directory.CreateDirectory(Path.GetDirectoryName(DbPath)!);
             EnsureSchema();
+#else
+            _useMemory = true;
+#endif
         }
 
-        public void Dispose() { }
-
-        private IDbConnection Open()
-        {
-            var c = new SqliteConnection(_connStr);
-            c.Open();
-            return c;
-        }
+#if USE_SQLITE
+        private string ConnStr => $"Data Source={DbPath};Cache=Shared";
 
         private void EnsureSchema()
         {
-            using var c = Open();
-            c.Execute(@"
-CREATE TABLE IF NOT EXISTS Items(
-    Id INTEGER PRIMARY KEY AUTOINCREMENT,
-    Filename   TEXT,
-    Ext        TEXT,
-    Project    TEXT,
-    Category   TEXT,
-    Confidence REAL,
-    CreatedTs  INTEGER,
-    Status     TEXT,
-    Path       TEXT,
-    Tags       TEXT
-);
-CREATE INDEX IF NOT EXISTS IX_Items_Status     ON Items(Status);
-CREATE INDEX IF NOT EXISTS IX_Items_CreatedTs  ON Items(CreatedTs);
-CREATE INDEX IF NOT EXISTS IX_Items_Project    ON Items(Project);
-CREATE INDEX IF NOT EXISTS IX_Items_Path       ON Items(Path);
-");
+            using var cn = new SqliteConnection(ConnStr);
+            cn.Open();
+            using var cmd = cn.CreateCommand();
+            cmd.CommandText = @"
+CREATE TABLE IF NOT EXISTS items(
+  path TEXT PRIMARY KEY,
+  filename TEXT,
+  ext TEXT,
+  project TEXT,
+  tags TEXT,
+  proposed_path TEXT,
+  created_ts TEXT
+);";
+            cmd.ExecuteNonQuery();
+        }
+#endif
+
+        public async Task UpsertAsync(Item it)
+        {
+            if (it == null) return;
+            var key = it.Path ?? it.Filename ?? Guid.NewGuid().ToString("N");
+
+#if USE_SQLITE
+            using var cn = new SqliteConnection(ConnStr);
+            await cn.OpenAsync();
+            using var cmd = cn.CreateCommand();
+            cmd.CommandText = @"
+INSERT INTO items(path, filename, ext, project, tags, proposed_path, created_ts)
+VALUES($p,$f,$e,$pr,$t,$pp,$c)
+ON CONFLICT(path) DO UPDATE SET
+  filename=excluded.filename,
+  ext=excluded.ext,
+  project=excluded.project,
+  tags=excluded.tags,
+  proposed_path=excluded.proposed_path,
+  created_ts=excluded.created_ts;";
+            cmd.Parameters.AddWithValue("$p", key);
+            cmd.Parameters.AddWithValue("$f", it.Filename ?? "");
+            cmd.Parameters.AddWithValue("$e", it.Ext ?? "");
+            cmd.Parameters.AddWithValue("$pr", it.Project ?? "");
+            cmd.Parameters.AddWithValue("$t", it.Tags ?? "");
+            cmd.Parameters.AddWithValue("$pp", it.ProposedPath ?? "");
+            cmd.Parameters.AddWithValue("$c", it.CreatedTs == default ? DateTime.UtcNow : it.CreatedTs);
+            await cmd.ExecuteNonQueryAsync();
+#else
+            _mem[key] = it;
+            await Task.CompletedTask;
+#endif
         }
 
-        // ---------- 基礎包裝 ----------
-        public IEnumerable<T> Query<T>(string sql, object? args = null)
+        public async Task RemoveAsync(string path)
         {
-            using var c = Open();
-            return c.Query<T>(sql, args);
+            if (string.IsNullOrWhiteSpace(path)) return;
+#if USE_SQLITE
+            using var cn = new SqliteConnection(ConnStr);
+            await cn.OpenAsync();
+            using var cmd = cn.CreateCommand();
+            cmd.CommandText = "DELETE FROM items WHERE path=$p;";
+            cmd.Parameters.AddWithValue("$p", path);
+            await cmd.ExecuteNonQueryAsync();
+#else
+            _mem.TryRemove(path, out _);
+            await Task.CompletedTask;
+#endif
         }
 
-        public int Execute(string sql, object? args = null)
+        public async Task<Item?> TryGetByPathAsync(string path)
         {
-            using var c = Open();
-            return c.Execute(sql, args);
-        }
-
-        public T ExecuteScalar<T>(string sql, object? args = null)
-        {
-            using var c = Open();
-            return c.ExecuteScalar<T>(sql, args);
-        }
-
-        // ---------- Upsert / Update ----------
-        public void Upsert(Item item) => UpsertItem(item);
-
-        public void UpsertItem(Item item)
-        {
-            using var c = Open();
-            if (item.Id > 0)
+            if (string.IsNullOrWhiteSpace(path)) return null;
+#if USE_SQLITE
+            using var cn = new SqliteConnection(ConnStr);
+            await cn.OpenAsync();
+            using var cmd = cn.CreateCommand();
+            cmd.CommandText = "SELECT path,filename,ext,project,tags,proposed_path,created_ts FROM items WHERE path=$p;";
+            cmd.Parameters.AddWithValue("$p", path);
+            using var r = await cmd.ExecuteReaderAsync();
+            if (await r.ReadAsync())
             {
-                c.Execute(@"UPDATE Items SET
-                    Filename=@Filename, Ext=@Ext, Project=@Project, Category=@Category,
-                    Confidence=@Confidence, CreatedTs=@CreatedTs, Status=@Status, Path=@Path, Tags=@Tags
-                    WHERE Id=@Id", item);
+                return new Item
+                {
+                    Path = r.GetString(0),
+                    Filename = r.GetString(1),
+                    Ext = r.GetString(2),
+                    Project = r.GetString(3),
+                    Tags = r.GetString(4),
+                    ProposedPath = r.GetString(5),
+                    CreatedTs = r.IsDBNull(6) ? DateTime.MinValue : r.GetDateTime(6)
+                };
             }
-            else
+            return null;
+#else
+            _mem.TryGetValue(path, out var it);
+            return it;
+#endif
+        }
+
+        public bool TryGetByPath(string path, out Item? item)
+        {
+#if USE_SQLITE
+            item = TryGetByPathAsync(path).GetAwaiter().GetResult();
+            return item != null;
+#else
+            _mem.TryGetValue(path, out item);
+            return item != null;
+#endif
+        }
+
+        public async Task<List<Item>> QueryAllAsync()
+        {
+#if USE_SQLITE
+            var list = new List<Item>();
+            using var cn = new SqliteConnection(ConnStr);
+            await cn.OpenAsync();
+            using var cmd = cn.CreateCommand();
+            cmd.CommandText = "SELECT path,filename,ext,project,tags,proposed_path,created_ts FROM items;";
+            using var r = await cmd.ExecuteReaderAsync();
+            while (await r.ReadAsync())
             {
-                var id = c.ExecuteScalar<long>(@"
-INSERT INTO Items(Filename,Ext,Project,Category,Confidence,CreatedTs,Status,Path,Tags)
-VALUES (@Filename,@Ext,@Project,@Category,@Confidence,@CreatedTs,@Status,@Path,@Tags);
-SELECT last_insert_rowid();", item);
-                item.Id = id;
+                list.Add(new Item
+                {
+                    Path = r.GetString(0),
+                    Filename = r.GetString(1),
+                    Ext = r.GetString(2),
+                    Project = r.GetString(3),
+                    Tags = r.GetString(4),
+                    ProposedPath = r.GetString(5),
+                    CreatedTs = r.IsDBNull(6) ? DateTime.MinValue : r.GetDateTime(6)
+                });
             }
+            return list;
+#else
+            return _mem.Values.ToList();
+#endif
         }
 
-        public void UpdateProject(long id, string project)
+        public async Task<List<Item>> QueryByProjectAsync(string project)
         {
-            using var c = Open();
-            c.Execute("UPDATE Items SET Project=@project WHERE Id=@id", new { id, project });
-        }
-
-        public void UpdateTags(long id, string tags)
-        {
-            using var c = Open();
-            c.Execute("UPDATE Items SET Tags=@tags WHERE Id=@id", new { id, tags });
-        }
-
-        // ---------- 查詢 ----------
-        public IEnumerable<Item> QueryByStatus(string status)
-            => Query<Item>("SELECT * FROM Items WHERE Status=@s ORDER BY CreatedTs DESC", new { s = status });
-
-        public IEnumerable<Item> QueryByStatuses(IEnumerable<string> statuses)
-            => Query<Item>("SELECT * FROM Items WHERE Status IN @st ORDER BY CreatedTs DESC", new { st = statuses });
-
-        public IEnumerable<Item> QuerySince(long since)
-            => Query<Item>("SELECT * FROM Items WHERE CreatedTs>=@since ORDER BY CreatedTs DESC", new { since });
-
-        public IEnumerable<string> QueryDistinctProjects(string? keyword = null)
-        {
-            if (string.IsNullOrWhiteSpace(keyword))
-                return Query<string>("SELECT DISTINCT Project FROM Items WHERE ifnull(Project,'')<>'' ORDER BY Project COLLATE NOCASE");
-            var kw = $"%{keyword}%";
-            return Query<string>("SELECT DISTINCT Project FROM Items WHERE ifnull(Project,'')<>'' AND Project LIKE @kw ORDER BY Project COLLATE NOCASE", new { kw });
-        }
-
-        public IEnumerable<Item> QueryByPath(string path)
-            => Query<Item>("SELECT * FROM Items WHERE Path=@path", new { path });
-
-        // ---------- 清理不存在的實體檔案 ----------
-        public int PurgeMissing()
-        {
-            using var c = Open();
-            // 只抓必要欄位以提速
-            var rows = c.Query<(long Id, string Path)>("SELECT Id, Path FROM Items").ToList();
-            var toDelete = rows.Where(r =>
+            project ??= "";
+#if USE_SQLITE
+            var list = new List<Item>();
+            using var cn = new SqliteConnection(ConnStr);
+            await cn.OpenAsync();
+            using var cmd = cn.CreateCommand();
+            cmd.CommandText = "SELECT path,filename,ext,project,tags,proposed_path,created_ts FROM items WHERE project=$pr;";
+            cmd.Parameters.AddWithValue("$pr", project);
+            using var r = await cmd.ExecuteReaderAsync();
+            while (await r.ReadAsync())
             {
-                try { return string.IsNullOrWhiteSpace(r.Path) || !File.Exists(r.Path); }
-                catch { return true; }
-            }).Select(r => r.Id).ToList();
+                list.Add(new Item
+                {
+                    Path = r.GetString(0),
+                    Filename = r.GetString(1),
+                    Ext = r.GetString(2),
+                    Project = r.GetString(3),
+                    Tags = r.GetString(4),
+                    ProposedPath = r.GetString(5),
+                    CreatedTs = r.IsDBNull(6) ? DateTime.MinValue : r.GetDateTime(6)
+                });
+            }
+            return list;
+#else
+            return _mem.Values.Where(x => string.Equals(x.Project ?? "", project, StringComparison.OrdinalIgnoreCase)).ToList();
+#endif
+        }
 
-            if (toDelete.Count == 0) return 0;
+        public async Task<List<Item>> QueryByTagAsync(string tag)
+        {
+            tag ??= "";
+#if USE_SQLITE
+            // 簡易 LIKE；若要正規化請改關聯表
+            var list = new List<Item>();
+            using var cn = new SqliteConnection(ConnStr);
+            await cn.OpenAsync();
+            using var cmd = cn.CreateCommand();
+            cmd.CommandText = "SELECT path,filename,ext,project,tags,proposed_path,created_ts FROM items WHERE tags LIKE $kw;";
+            cmd.Parameters.AddWithValue("$kw", $"%{tag}%");
+            using var r = await cmd.ExecuteReaderAsync();
+            while (await r.ReadAsync())
+            {
+                list.Add(new Item
+                {
+                    Path = r.GetString(0),
+                    Filename = r.GetString(1),
+                    Ext = r.GetString(2),
+                    Project = r.GetString(3),
+                    Tags = r.GetString(4),
+                    ProposedPath = r.GetString(5),
+                    CreatedTs = r.IsDBNull(6) ? DateTime.MinValue : r.GetDateTime(6)
+                });
+            }
+            return list;
+#else
+            return _mem.Values.Where(x =>
+                (x.Tags ?? "")
+                    .Split(',', StringSplitOptions.RemoveEmptyEntries)
+                    .Select(s => s.Trim())
+                    .Any(t => string.Equals(t, tag, StringComparison.OrdinalIgnoreCase)))
+                .ToList();
+#endif
+        }
 
-            // Dapper IN 支援
-            c.Execute("DELETE FROM Items WHERE Id IN @ids", new { ids = toDelete });
-            return toDelete.Count;
+        public async Task UpsertManyAsync(IEnumerable<Item> items)
+        {
+            foreach (var it in items) await UpsertAsync(it);
         }
     }
 }

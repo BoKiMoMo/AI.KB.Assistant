@@ -1,12 +1,24 @@
 ﻿<Application x:Class="AI.KB.Assistant.App"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             StartupUri="Views/MainWindow.xaml">
+             ShutdownMode="OnMainWindowClose">
     <Application.Resources>
-        <ResourceDictionary>
-            <ResourceDictionary.MergedDictionaries>
-                <ResourceDictionary Source="Themes/Theme.xaml"/>
-            </ResourceDictionary.MergedDictionaries>
-        </ResourceDictionary>
+        <!-- 預設先放淺色 Key，實際顏色在 App.xaml.cs 啟動時由 ThemeSection 注入 -->
+        <SolidColorBrush x:Key="App.BackgroundBrush" Color="#FFFFFFFF"/>
+        <SolidColorBrush x:Key="App.PanelBrush"       Color="#FFF7F7F7"/>
+        <SolidColorBrush x:Key="App.BorderBrush"      Color="#FFD0D0D0"/>
+        <SolidColorBrush x:Key="App.TextBrush"        Color="#FF1F1F1F"/>
+        <SolidColorBrush x:Key="App.TextMutedBrush"   Color="#FF6F6F6F"/>
+
+        <SolidColorBrush x:Key="App.PrimaryBrush"       Color="#FF106EBE"/>
+        <SolidColorBrush x:Key="App.PrimaryHoverBrush"  Color="#FF2B7FD0"/>
+
+        <SolidColorBrush x:Key="App.SuccessBrush"    Color="#FF4CAF50"/>
+        <SolidColorBrush x:Key="App.WarningBrush"    Color="#FFFFB300"/>
+        <SolidColorBrush x:Key="App.ErrorBrush"      Color="#FFE74C3C"/>
+
+        <SolidColorBrush x:Key="App.BannerInfoBrush" Color="#FF007ACC"/>
+        <SolidColorBrush x:Key="App.BannerWarnBrush" Color="#FFFF9800"/>
+        <SolidColorBrush x:Key="App.BannerErrorBrush" Color="#FFD32F2F"/>
     </Application.Resources>
 </Application>
