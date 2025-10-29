@@ -1,105 +1,243 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.IO;
-using System.Linq;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace AI.KB.Assistant.Models
 {
-    // ======================== ENUM ========================
-    public enum MoveMode { Move, Copy }
-    public enum OverwritePolicy { Replace, Rename, Skip }
-    public enum StartupMode { Simple = 0, Detailed = 1 }
-
-    // ======================== 主設定 ========================
-    public sealed class AppConfig
+    /// <summary>
+    /// 應用程式設定：集中管理，支援模組化 Section 與 Load/Save。
+    /// ※ 含舊屬性相容層（RootDir / HotFolder / Threshold），方便過渡。
+    /// </summary>
+    public partial class AppConfig
     {
-        public AppSection App { get; set; } = new();
-        public ImportSection Import { get; set; } = new();
-        public ClassificationSection Classification { get; set; } = new();
-        public ThemeSection ThemeColors { get; set; } = new();
+        // === 路徑 ===
+        /// <summary>預設設定檔檔名</summary>
+        public const string DefaultConfigFile = "config.json";
 
-        // 為相容新版結構
-        public RoutingSection? Routing { get; set; }
-        public DatabaseSection? Database { get; set; }
-    }
-
-    // ======================== 各區段 ========================
-
-    public sealed class AppSection
-    {
-        public string? RootDir { get; set; }
-        public string? DbPath { get; set; }
-        public StartupMode? StartupUIMode { get; set; } = StartupMode.Simple;
-        public string? ProjectLock { get; set; }
-    }
-
-    public sealed class ImportSection
-    {
-        public string? HotFolderPath { get; set; }
-        public bool IncludeSubdir { get; set; } = true;
-
-        public MoveMode MoveMode { get; set; } = MoveMode.Move;
-
+        /// <summary>設定檔實際路徑（預設在執行檔相同資料夾）</summary>
         [JsonIgnore]
-        public bool CopyInsteadOfMove
+        public string ConfigPath { get; set; } =
+            Path.Combine(AppContext.BaseDirectory, DefaultConfigFile);
+
+        // === 模組化 Section ===
+        public ThemeSection Theme { get; set; } = new();
+        public OpenAISection OpenAI { get; set; } = new();
+        public RoutingSection Routing { get; set; } = new();
+        public ImportSection Import { get; set; } = new();
+        public DbSection Db { get; set; } = new();
+
+        // === 舊版相容（讀寫都代理到對應 Section）===
+        [JsonIgnore]
+        public string? RootDir
         {
-            get => MoveMode == MoveMode.Copy;
-            set => MoveMode = value ? MoveMode.Copy : MoveMode.Move;
+            get => Routing.RootDir;
+            set => Routing.RootDir = value;
         }
 
-        public OverwritePolicy OverwritePolicy { get; set; } = OverwritePolicy.Rename;
-        public string[] BlacklistExts { get; set; } = Array.Empty<string>();
-        public string[] BlacklistFolderNames { get; set; } = Array.Empty<string>();
-        public Dictionary<string, string[]> ExtGroups { get; set; } = new();
-        [JsonIgnore] public Dictionary<string, string[]> ExtGroupsCache { get; set; } = new();
-
-        public void RebuildExtGroupsCache()
+        [JsonIgnore]
+        public string? HotFolder
         {
-            ExtGroupsCache.Clear();
-            foreach (var kv in ExtGroups)
+            get => Import.HotFolder;
+            set => Import.HotFolder = value;
+        }
+
+        [JsonIgnore]
+        public double Threshold
+        {
+            get => Routing.Threshold;
+            set => Routing.Threshold = value;
+        }
+
+        // === 靜態 Json 選項 ===
+        private static readonly JsonSerializerOptions s_jsonOptions = new()
+        {
+            WriteIndented = true,
+            ReadCommentHandling = JsonCommentHandling.Skip,
+            AllowTrailingCommas = true,
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+            Converters = { new JsonStringEnumConverter() }
+        };
+
+        // === 讀寫 ===
+        public static AppConfig Load(string? path = null)
+        {
+            var cfg = new AppConfig();
+            if (!string.IsNullOrWhiteSpace(path))
+                cfg.ConfigPath = path;
+
+            try
             {
-                if (kv.Value == null || kv.Value.Length == 0) continue;
-                ExtGroupsCache[kv.Key] = kv.Value
-                    .Select(v => v.Trim().TrimStart('.').ToLowerInvariant())
-                    .Where(v => !string.IsNullOrWhiteSpace(v))
-                    .Distinct().ToArray();
+                var p = cfg.ConfigPath;
+                if (File.Exists(p))
+                {
+                    var json = File.ReadAllText(p);
+                    var loaded = JsonSerializer.Deserialize<AppConfig>(json, s_jsonOptions);
+                    if (loaded != null)
+                    {
+                        // 保留外部傳入的 ConfigPath
+                        loaded.ConfigPath = p;
+                        loaded.Normalize();
+                        return loaded;
+                    }
+                }
+            }
+            catch
+            {
+                // 若讀取失敗，以預設值續行；不拋例外以確保程式可啟動
+            }
+
+            cfg.Normalize();
+            return cfg;
+        }
+
+        public void Save(string? path = null)
+        {
+            if (!string.IsNullOrWhiteSpace(path))
+                ConfigPath = path;
+
+            Normalize();
+
+            var dir = Path.GetDirectoryName(ConfigPath);
+            if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
+                Directory.CreateDirectory(dir);
+
+            var json = JsonSerializer.Serialize(this, s_jsonOptions);
+            File.WriteAllText(ConfigPath, json);
+        }
+
+        /// <summary>
+        /// 修正/回填空值與不合法值，確保執行時穩定。
+        /// </summary>
+        public void Normalize()
+        {
+            Theme ??= new ThemeSection();
+            OpenAI ??= new OpenAISection();
+            Routing ??= new RoutingSection();
+            Import ??= new ImportSection();
+            Db ??= new DbSection();
+
+            // Route 預設夾名
+            if (string.IsNullOrWhiteSpace(Routing.AutoFolderName))
+                Routing.AutoFolderName = "自整理";
+            if (string.IsNullOrWhiteSpace(Routing.LowConfidenceFolderName))
+                Routing.LowConfidenceFolderName = "信心不足";
+
+            // 合法化門檻
+            if (Routing.Threshold < 0) Routing.Threshold = 0;
+            if (Routing.Threshold > 1) Routing.Threshold = 1;
+
+            // 路徑規整
+            if (!string.IsNullOrWhiteSpace(Routing.RootDir))
+                Routing.RootDir = NormalizeDir(Routing.RootDir);
+
+            if (!string.IsNullOrWhiteSpace(Import.HotFolder))
+                Import.HotFolder = NormalizeDir(Import.HotFolder);
+
+            if (!string.IsNullOrWhiteSpace(Db.DbPath))
+                Db.DbPath = Path.GetFullPath(Db.DbPath);
+        }
+
+        private static string NormalizeDir(string path)
+        {
+            try
+            {
+                var full = Path.GetFullPath(path);
+                if (!Directory.Exists(full)) Directory.CreateDirectory(full);
+                return full.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            }
+            catch
+            {
+                return path;
             }
         }
     }
 
-    public sealed class ClassificationSection
+    // ========= 各 Section 定義 =========
+
+    /// <summary>主題設定（保留簡單鍵值，讓 ThemeService 統一運用）</summary>
+    public class ThemeSection
     {
-        public double ConfidenceThreshold { get; set; } = 0.75;
+        /// <summary>Light / Dark（僅用於 UI 切換，不影響 XAML ResourceKey 命名）</summary>
+        public string Mode { get; set; } = "Light";
+        public string AccentColor { get; set; } = "#4F46E5";
     }
 
-    public sealed class ThemeSection
+    public class OpenAISection
     {
-        public string Background { get; set; } = "#FFFFFF";
-        public string Panel { get; set; } = "#F7F7F7";
-        public string Border { get; set; } = "#D0D0D0";
-        public string Text { get; set; } = "#1F1F1F";
-        public string TextMuted { get; set; } = "#6F6F6F";
-        public string Primary { get; set; } = "#106EBE";
-        public string PrimaryHover { get; set; } = "#2B7FD0";
-        public string Success { get; set; } = "#4CAF50";
-        public string Warning { get; set; } = "#FFB300";
-        public string Error { get; set; } = "#E74C3C";
-        public string BannerInfo { get; set; } = "#007ACC";
-        public string BannerWarn { get; set; } = "#FF9800";
-        public string BannerError { get; set; } = "#D32F2F";
+        public string ApiKey { get; set; } = "";
+        public string Model { get; set; } = "gpt-4o-mini";
+        /// <summary>是否在低信心時自動產生建議（不自動搬檔）</summary>
+        public bool SuggestOnLowConfidence { get; set; } = true;
+        /// <summary>最低信心閾值，低於此值才觸發 LLM 建議（僅用於建議，不會覆蓋 Routing.Threshold）</summary>
+        public double SuggestThreshold { get; set; } = 0.75;
     }
 
-    // 新版可選區段
-    public sealed class RoutingSection
+    public class RoutingSection
     {
+        /// <summary>根目錄（實際分類的目的地根）</summary>
         public string? RootDir { get; set; }
+
+        /// <summary>自整理資料夾名稱（RootDir 下）</summary>
         public string AutoFolderName { get; set; } = "自整理";
+
+        /// <summary>信心不足資料夾名稱（RootDir 下）</summary>
         public string LowConfidenceFolderName { get; set; } = "信心不足";
+
+        /// <summary>AI 信心門檻（0~1）</summary>
+        public double Threshold { get; set; } = 0.80;
+
+        /// <summary>是否使用年份/月份路徑</summary>
+        public bool UseYear { get; set; } = true;
+        public bool UseMonth { get; set; } = false;
+
+        /// <summary>是否使用專案夾層</summary>
+        public bool UseProject { get; set; } = true;
+
+        /// <summary>是否使用類型夾層（副檔名/語義類別）</summary>
+        public bool UseType { get; set; } = true;
+
+        /// <summary>目的地檔名衝突策略</summary>
+        public OverwritePolicy OverwritePolicy { get; set; } = OverwritePolicy.Rename;
     }
 
-    public sealed class DatabaseSection
+    public class ImportSection
     {
-        public string? FilePath { get; set; }
+        /// <summary>收件夾（HotFolder）路徑；加入收件夾與拖放都會落這裡</summary>
+        public string? HotFolder { get; set; }
+
+        /// <summary>是否啟用 HotFolder 背景監聽</summary>
+        public bool EnableHotFolder { get; set; } = true;
+
+        /// <summary>拖放到主視窗是否自動加入收件夾</summary>
+        public bool AutoOnDrop { get; set; } = true;
+
+        /// <summary>加入資料夾時是否包含子資料夾</summary>
+        public bool IncludeSubdirectories { get; set; } = true;
+
+        /// <summary>加入資料夾時最大遞迴深度（避免誤吃爆量檔案）</summary>
+        public int MaxDepth { get; set; } = 5;
+    }
+
+    public class DbSection
+    {
+        /// <summary>SQLite 檔案路徑；若 UseMemory=true 則忽略</summary>
+        public string DbPath { get; set; } = Path.Combine(AppContext.BaseDirectory, "data.db");
+
+        /// <summary>是否改用記憶體資料庫（測試模式）</summary>
+        public bool UseMemory { get; set; } = false;
+    }
+
+    // ========= 列舉 =========
+
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public enum OverwritePolicy
+    {
+        /// <summary>覆蓋</summary>
+        Replace,
+        /// <summary>改名（附加 -1, -2…）</summary>
+        Rename,
+        /// <summary>略過</summary>
+        Skip
     }
 }

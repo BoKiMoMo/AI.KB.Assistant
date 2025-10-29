@@ -1,146 +1,122 @@
-﻿using AI.KB.Assistant.Models;
-using AI.KB.Assistant.Services;
-using Microsoft.Win32;
-using System;
+﻿using System;
 using System.IO;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media;
+using Microsoft.Win32;
+using AI.KB.Assistant.Models;
+using AI.KB.Assistant.Services;
 
 namespace AI.KB.Assistant.Views
 {
     public partial class SettingsWindow : Window
     {
-        private readonly string _cfgPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "config.json");
+        private readonly string _cfgPath;
         private AppConfig _cfg;
+        private readonly MainWindow? _ownerMain;
 
-        public SettingsWindow(Window owner, AppConfig current)
+        public SettingsWindow(MainWindow owner, AppConfig cfg)
         {
             InitializeComponent();
-            Owner = owner;
-
-            _cfg = current ?? ConfigService.TryLoad(_cfgPath);
-            LoadToUI(_cfg);
+            _ownerMain = owner;
+            _cfg = cfg ?? new AppConfig();
+            _cfgPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "config.json");
+            Loaded += SettingsWindow_Loaded;
         }
 
-        // -------------------- 載入/套用 --------------------
-
-        private void LoadToUI(AppConfig cfg)
+        public SettingsWindow()
         {
-            // App
-            SetText("TxtRoot", cfg.App.RootDir);
-            SetText("TxtDb", cfg.App.DbPath);
-            SetText("TxtProjectLock", cfg.App.ProjectLock);
-
-            var cbMode = Find<ComboBox>("CbStartupMode");
-            if (cbMode != null)
-            {
-                cbMode.ItemsSource = Enum.GetValues(typeof(StartupMode)).Cast<StartupMode>().ToList();
-                cbMode.SelectedItem = cfg.App.StartupUIMode ?? StartupMode.Simple;
-            }
-
-            // Import
-            SetText("TxtInbox", cfg.Import.HotFolderPath);
-            SetCheck("ChkIncludeSubdir", cfg.Import.IncludeSubdir);
-
-            var cbMove = Find<ComboBox>("CbMoveMode");
-            if (cbMove != null)
-            {
-                cbMove.ItemsSource = Enum.GetValues(typeof(MoveMode)).Cast<MoveMode>().ToList();
-                cbMove.SelectedItem = cfg.Import.MoveMode;
-            }
-
-            var cbOverwrite = Find<ComboBox>("CbOverwrite");
-            if (cbOverwrite != null)
-            {
-                cbOverwrite.ItemsSource = Enum.GetValues(typeof(OverwritePolicy)).Cast<OverwritePolicy>().ToList();
-                cbOverwrite.SelectedItem = cfg.Import.OverwritePolicy;
-            }
-
-            SetText("TxtBlacklistExts", string.Join(", ", cfg.Import.BlacklistExts ?? Array.Empty<string>()));
-            SetText("TxtBlacklistFolders", string.Join(", ", cfg.Import.BlacklistFolderNames ?? Array.Empty<string>()));
-
-            // 分類
-            SetText("TxtThreshold", cfg.Classification.ConfidenceThreshold.ToString("0.00"));
-
-            // Theme（顯示現值，編輯框允許 #RRGGBB）
-            SetText("TxtThemeBackground", cfg.ThemeColors.Background);
-            SetText("TxtThemePanel", cfg.ThemeColors.Panel);
-            SetText("TxtThemeBorder", cfg.ThemeColors.Border);
-            SetText("TxtThemeText", cfg.ThemeColors.Text);
-            SetText("TxtThemeTextMuted", cfg.ThemeColors.TextMuted);
-            SetText("TxtThemePrimary", cfg.ThemeColors.Primary);
-            SetText("TxtThemePrimaryHover", cfg.ThemeColors.PrimaryHover);
-            SetText("TxtThemeSuccess", cfg.ThemeColors.Success);
-            SetText("TxtThemeWarning", cfg.ThemeColors.Warning);
-            SetText("TxtThemeError", cfg.ThemeColors.Error);
-            SetText("TxtBannerInfo", cfg.ThemeColors.BannerInfo);
-            SetText("TxtBannerWarn", cfg.ThemeColors.BannerWarn);
-            SetText("TxtBannerError", cfg.ThemeColors.BannerError);
+            InitializeComponent();
+            _cfgPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "config.json");
+            _cfg = ConfigService.TryLoad(_cfgPath);
+            Loaded += SettingsWindow_Loaded;
         }
 
-        private void ApplyFromUI(AppConfig cfg)
+        private void SettingsWindow_Loaded(object? sender, RoutedEventArgs e)
         {
-            // App
-            cfg.App.RootDir = GetText("TxtRoot");
-            cfg.App.DbPath = GetText("TxtDb");
-            cfg.App.ProjectLock = GetText("TxtProjectLock");
+            _cfg.App ??= new AppConfig.AppSection();
+            _cfg.Import ??= new AppConfig.ImportSection();
+            _cfg.Routing ??= new AppConfig.RoutingSection();
+            _cfg.Classification ??= new AppConfig.ClassificationSection();
+            _cfg.OpenAI ??= new AppConfig.OpenAISection();
 
-            var cbMode = Find<ComboBox>("CbStartupMode");
-            if (cbMode?.SelectedItem is StartupMode sm) cfg.App.StartupUIMode = sm;
+            // ===== 基礎 =====
+            TxtRootDir.Text = _cfg.App.RootDir ?? "";
+            TxtHotFolder.Text = _cfg.Import.HotFolderPath ?? "";
+            TxtDbPath.Text = _cfg.App.DbPath ?? "";
 
-            // Import
-            cfg.Import.HotFolderPath = GetText("TxtInbox");
-            cfg.Import.IncludeSubdir = GetCheck("ChkIncludeSubdir");
-            var cbMove = Find<ComboBox>("CbMoveMode");
-            if (cbMove?.SelectedItem is MoveMode mv) cfg.Import.MoveMode = mv;
-            var cbOverwrite = Find<ComboBox>("CbOverwrite");
-            if (cbOverwrite?.SelectedItem is OverwritePolicy ov) cfg.Import.OverwritePolicy = ov;
+            // ===== 匯入（以 enum 名稱顯示）=====
+            SetComboByText(CmbMoveMode, _cfg.Import.MoveMode.ToString());
+            SetComboByText(CmbOverwritePolicy, _cfg.Import.OverwritePolicy.ToString());
+            ChkIncludeSubdir.IsChecked = _cfg.Import.IncludeSubdir;
 
-            cfg.Import.BlacklistExts = SplitCsv(GetText("TxtBlacklistExts"));
-            cfg.Import.BlacklistFolderNames = SplitCsv(GetText("TxtBlacklistFolders"));
+            TxtBlacklistExts.Text = string.Join(", ",
+                (_cfg.Import.BlacklistExts ?? Array.Empty<string>()).Where(s => !string.IsNullOrWhiteSpace(s)));
 
-            // 分類
-            if (double.TryParse(GetText("TxtThreshold"), out var th))
-                cfg.Classification.ConfidenceThreshold = Math.Clamp(th, 0, 1);
+            // ===== 路由 =====
+            TxtAutoFolderName.Text = _cfg.Routing.AutoFolderName ?? "自整理";
+            TxtLowConfidenceFolderName.Text = _cfg.Routing.LowConfidenceFolderName ?? "信心不足";
+            ChkUseYear.IsChecked = _cfg.Routing.UseYear;
+            ChkUseMonth.IsChecked = _cfg.Routing.UseMonth;
+            ChkUseProject.IsChecked = _cfg.Routing.UseProject;
+            ChkUseType.IsChecked = _cfg.Routing.UseType;
 
-            // Theme
-            cfg.ThemeColors.Background = GetText("TxtThemeBackground");
-            cfg.ThemeColors.Panel = GetText("TxtThemePanel");
-            cfg.ThemeColors.Border = GetText("TxtThemeBorder");
-            cfg.ThemeColors.Text = GetText("TxtThemeText");
-            cfg.ThemeColors.TextMuted = GetText("TxtThemeTextMuted");
-            cfg.ThemeColors.Primary = GetText("TxtThemePrimary");
-            cfg.ThemeColors.PrimaryHover = GetText("TxtThemePrimaryHover");
-            cfg.ThemeColors.Success = GetText("TxtThemeSuccess");
-            cfg.ThemeColors.Warning = GetText("TxtThemeWarning");
-            cfg.ThemeColors.Error = GetText("TxtThemeError");
-            cfg.ThemeColors.BannerInfo = GetText("TxtBannerInfo");
-            cfg.ThemeColors.BannerWarn = GetText("TxtBannerWarn");
-            cfg.ThemeColors.BannerError = GetText("TxtBannerError");
+            TxtBlacklistFolders.Text = string.Join(", ",
+                (_cfg.Import.BlacklistFolderNames ?? Array.Empty<string>()).Where(s => !string.IsNullOrWhiteSpace(s)));
 
-            // 重新整理快取
-            cfg.Import.RebuildExtGroupsCache();
+            // ===== AI =====
+            SldThreshold.Value = Guard01(_cfg.Classification.ConfidenceThreshold, 0.75);
+            TxtThresholdValue.Text = $"{SldThreshold.Value:0.00}";
+            TxtModel.Text = _cfg.OpenAI.Model ?? "gpt-4o-mini";
+
+            // ===== 主題（僅重點色，從現有資源讀）=====
+            TxtAccentColor.Text = TryGetBrushHex("App.PrimaryBrush") ?? "#3B82F6";
         }
 
-        // -------------------- 事件 --------------------
+        // ========= 事件 =========
 
-        private void BtnPickRoot_Click(object sender, RoutedEventArgs e) => FolderPickTo("TxtRoot");
-        private void BtnPickDb_Click(object sender, RoutedEventArgs e) => FilePickTo("TxtDb", "SQLite DB|*.db|All Files|*.*");
-        private void BtnPickInbox_Click(object sender, RoutedEventArgs e) => FolderPickTo("TxtInbox");
+        private void BtnPickRoot_Click(object sender, RoutedEventArgs e)
+        {
+            var p = PickFolder(TxtRootDir.Text);
+            if (!string.IsNullOrWhiteSpace(p)) TxtRootDir.Text = p;
+        }
+
+        private void BtnPickHot_Click(object sender, RoutedEventArgs e)
+        {
+            var p = PickFolder(TxtHotFolder.Text);
+            if (!string.IsNullOrWhiteSpace(p)) TxtHotFolder.Text = p;
+        }
+
+        private void BtnPickDb_Click(object sender, RoutedEventArgs e)
+        {
+            var dlg = new SaveFileDialog
+            {
+                Title = "選擇或建立 SQLite 檔案",
+                Filter = "SQLite (*.db)|*.db|所有檔案 (*.*)|*.*",
+                FileName = string.IsNullOrWhiteSpace(TxtDbPath.Text) ? "ai.kb.assistant.db" : TxtDbPath.Text
+            };
+            if (dlg.ShowDialog(this) == true) TxtDbPath.Text = dlg.FileName;
+        }
+
+        private void SldThreshold_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (TxtThresholdValue != null)
+                TxtThresholdValue.Text = $"{SldThreshold.Value:0.00}";
+        }
 
         private void BtnApplyTheme_Click(object sender, RoutedEventArgs e)
         {
-            ApplyFromUI(_cfg);
-            ThemeService.Apply(_cfg);
-            MessageBox.Show("主題已套用。", "提示");
+            var accent = string.IsNullOrWhiteSpace(TxtAccentColor.Text) ? "#3B82F6" : TxtAccentColor.Text.Trim();
+            ThemeService.ApplyAccent(accent);
+            MessageBox.Show(this, "主題已套用（Primary/PrimaryHover）。", "完成", MessageBoxButton.OK, MessageBoxImage.Information);
         }
 
         private void BtnSave_Click(object sender, RoutedEventArgs e)
         {
-            ApplyFromUI(_cfg);
-            ConfigService.Save(_cfg, _cfgPath);
-            ThemeService.Apply(_cfg);
+            PullUiIntoConfig();
+            ConfigService.Save(_cfgPath, _cfg);
+            _ownerMain?.ReloadConfig();
             DialogResult = true;
             Close();
         }
@@ -148,55 +124,118 @@ namespace AI.KB.Assistant.Views
         private void BtnReload_Click(object sender, RoutedEventArgs e)
         {
             _cfg = ConfigService.TryLoad(_cfgPath);
-            LoadToUI(_cfg);
-            ThemeService.Apply(_cfg);
+            SettingsWindow_Loaded(this, new RoutedEventArgs());
+            MessageBox.Show(this, "設定已重新載入。", "完成", MessageBoxButton.OK, MessageBoxImage.Information);
         }
 
-        // -------------------- 小工具 --------------------
-
-        private T? Find<T>(string name) where T : class => this.FindName(name) as T;
-
-        private void SetText(string name, string? val)
+        private void BtnCancel_Click(object sender, RoutedEventArgs e)
         {
-            var tb = Find<TextBox>(name);
-            if (tb != null) tb.Text = val ?? string.Empty;
-        }
-        private string GetText(string name)
-        {
-            var tb = Find<TextBox>(name);
-            return tb?.Text?.Trim() ?? string.Empty;
+            DialogResult = false;
+            Close();
         }
 
-        private void SetCheck(string name, bool v)
-        {
-            var cb = Find<CheckBox>(name);
-            if (cb != null) cb.IsChecked = v;
-        }
-        private bool GetCheck(string name)
-        {
-            var cb = Find<CheckBox>(name);
-            return cb?.IsChecked == true;
-        }
+        // ========= 私有 =========
 
-        private static string[] SplitCsv(string s)
-            => string.IsNullOrWhiteSpace(s)
-               ? Array.Empty<string>()
-               : s.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries)
-                  .Select(x => x.Trim()).Where(x => x.Length > 0).ToArray();
-
-        private void FolderPickTo(string targetTextBoxName)
+        private static void SetComboByText(ComboBox combo, string text)
         {
-            var dlg = new System.Windows.Forms.FolderBrowserDialog();
-            var r = dlg.ShowDialog();
-            if (r == System.Windows.Forms.DialogResult.OK)
-                SetText(targetTextBoxName, dlg.SelectedPath);
+            if (combo == null) return;
+            for (int i = 0; i < combo.Items.Count; i++)
+            {
+                var it = combo.Items[i] as ComboBoxItem;
+                if (string.Equals(it?.Content?.ToString(), text, StringComparison.OrdinalIgnoreCase))
+                {
+                    combo.SelectedIndex = i;
+                    return;
+                }
+            }
+            if (combo.Items.Count > 0 && combo.SelectedIndex < 0) combo.SelectedIndex = 0;
         }
 
-        private void FilePickTo(string targetTextBoxName, string filter)
+        private string PickFolder(string? seed)
         {
-            var dlg = new OpenFileDialog { Filter = filter, CheckFileExists = false };
-            if (dlg.ShowDialog(this) == true)
-                SetText(targetTextBoxName, dlg.FileName);
+            var msg = "請在『檔案總管』複製路徑後貼到輸入框。\n（此按鈕暫以現有文字為主，不開對話框）";
+            if (!string.IsNullOrEmpty(seed))
+            {
+                MessageBox.Show(this, msg, "提示", MessageBoxButton.OK, MessageBoxImage.Information);
+                return seed;
+            }
+            MessageBox.Show(this, msg, "提示", MessageBoxButton.OK, MessageBoxImage.Information);
+            return AppDomain.CurrentDomain.BaseDirectory;
+        }
+
+        private static string[] SplitCsv(string? text)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return Array.Empty<string>();
+            return text.Split(new[] { ',', ';', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries)
+                       .Select(s => s.Trim())
+                       .Where(s => s.Length > 0)
+                       .ToArray();
+        }
+
+        private static double Guard01(double v, double @default)
+        {
+            if (double.IsNaN(v)) return @default;
+            if (v < 0) return 0;
+            if (v > 1) return 1;
+            return v;
+        }
+
+        private static string? TryGetBrushHex(string key)
+        {
+            try
+            {
+                if (Application.Current.Resources[key] is SolidColorBrush b)
+                    return $"#{b.Color.A:X2}{b.Color.R:X2}{b.Color.G:X2}{b.Color.B:X2}";
+            }
+            catch { }
+            return null;
+        }
+
+        private void PullUiIntoConfig()
+        {
+            _cfg.App ??= new AppConfig.AppSection();
+            _cfg.Import ??= new AppConfig.ImportSection();
+            _cfg.Routing ??= new AppConfig.RoutingSection();
+            _cfg.Classification ??= new AppConfig.ClassificationSection();
+            _cfg.OpenAI ??= new AppConfig.OpenAISection();
+
+            // ===== 基礎 =====
+            _cfg.App.RootDir = (TxtRootDir.Text ?? "").Trim();
+            _cfg.Import.HotFolderPath = (TxtHotFolder.Text ?? "").Trim();
+            _cfg.App.DbPath = (TxtDbPath.Text ?? "").Trim();
+
+            // ===== 匯入（ComboBox → Enum）=====
+            _cfg.Import.MoveMode =
+                Enum.TryParse<MoveMode>((CmbMoveMode.SelectedItem as ComboBoxItem)?.Content?.ToString(), true, out var mm)
+                    ? mm : MoveMode.Move;
+
+            _cfg.Import.OverwritePolicy =
+                Enum.TryParse<OverwritePolicy>((CmbOverwritePolicy.SelectedItem as ComboBoxItem)?.Content?.ToString(), true, out var op)
+                    ? op : OverwritePolicy.Rename;
+
+            _cfg.Import.IncludeSubdir = ChkIncludeSubdir.IsChecked == true;
+
+            _cfg.Import.BlacklistExts = SplitCsv(TxtBlacklistExts.Text)
+                                        .Select(s => s.TrimStart('.').ToLowerInvariant())
+                                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                                        .ToArray();
+
+            // ===== 路由 =====
+            _cfg.Routing.AutoFolderName = string.IsNullOrWhiteSpace(TxtAutoFolderName.Text) ? "自整理" : TxtAutoFolderName.Text.Trim();
+            _cfg.Routing.LowConfidenceFolderName = string.IsNullOrWhiteSpace(TxtLowConfidenceFolderName.Text) ? "信心不足" : TxtLowConfidenceFolderName.Text.Trim();
+            _cfg.Routing.UseYear = ChkUseYear.IsChecked == true;
+            _cfg.Routing.UseMonth = ChkUseMonth.IsChecked == true;
+            _cfg.Routing.UseProject = ChkUseProject.IsChecked == true;
+            _cfg.Routing.UseType = ChkUseType.IsChecked == true;
+
+            _cfg.Import.BlacklistFolderNames = SplitCsv(TxtBlacklistFolders.Text);
+
+            // ===== AI =====
+            _cfg.Classification.ConfidenceThreshold = Guard01(SldThreshold.Value, 0.75);
+            if (!string.IsNullOrWhiteSpace(TxtModel.Text))
+                _cfg.OpenAI.Model = TxtModel.Text.Trim();
+
+            // 主題不寫入 _cfg（使用 ThemeService.ApplyAccent 即時套用）
         }
     }
 }

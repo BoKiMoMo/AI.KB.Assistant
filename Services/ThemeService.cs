@@ -1,134 +1,75 @@
-﻿using AI.KB.Assistant.Models;
-using System;
+﻿using System;
 using System.Globalization;
 using System.Windows;
 using System.Windows.Media;
+using AI.KB.Assistant.Models;
 
 namespace AI.KB.Assistant.Services
 {
-    /// <summary>
-    /// 負責把 AppConfig.ThemeColors 轉成全域資源（Brush），
-    /// 供 XAML 以 {DynamicResource ...} 取得並即時更新。
-    /// </summary>
     public static class ThemeService
     {
-        // 資源鍵（與 XAML 對齊）
-        public const string BackgroundBrushKey = "App.BackgroundBrush";
-        public const string PanelBrushKey = "App.PanelBrush";
-        public const string BorderBrushKey = "App.BorderBrush";
-        public const string TextBrushKey = "App.TextBrush";
-        public const string TextMutedBrushKey = "App.TextMutedBrush";
-
-        public const string PrimaryBrushKey = "App.PrimaryBrush";
-        public const string PrimaryHoverBrushKey = "App.PrimaryHoverBrush";
-
-        public const string SuccessBrushKey = "App.SuccessBrush";
-        public const string WarningBrushKey = "App.WarningBrush";
-        public const string ErrorBrushKey = "App.ErrorBrush";
-
-        public const string BannerInfoBrushKey = "App.BannerInfoBrush";
-        public const string BannerWarnBrushKey = "App.BannerWarnBrush";
-        public const string BannerErrorBrushKey = "App.BannerErrorBrush";
-
         /// <summary>
-        /// 從整份設定套用主題（常用）
+        /// 相容舊呼叫；目前不從 cfg 取色（避免型別差異）。保留入口以免編譯錯誤。
         /// </summary>
         public static void Apply(AppConfig cfg)
         {
-            if (cfg == null) return;
-            Apply(cfg.ThemeColors ?? new ThemeSection());
+            // 若之後你在 AppConfig 重新定義 Theme 相關屬性，再從這裡讀取並呼叫 SetBrush。
+            // 目前留白即可，確保不拋例外。
         }
 
         /// <summary>
-        /// 直接從 ThemeSection 套用主題
+        /// 直接以十六進位色碼套用重點色（Primary）並自動生成 Hover。
         /// </summary>
-        public static void Apply(ThemeSection theme)
+        public static void ApplyAccent(string hex)
         {
-            // 背景 / 面板 / 邊框 / 文字
-            SetBrush(BackgroundBrushKey, theme.Background);
-            SetBrush(PanelBrushKey, theme.Panel);
-            SetBrush(BorderBrushKey, theme.Border);
-            SetBrush(TextBrushKey, theme.Text);
-            SetBrush(TextMutedBrushKey, theme.TextMuted);
+            var primary = ToBrushSafe(hex) ?? new SolidColorBrush(Colors.SteelBlue);
+            var hover = new SolidColorBrush(Lighten(((SolidColorBrush)primary).Color, 0.12));
 
-            // 主色
-            SetBrush(PrimaryBrushKey, theme.Primary);
-            SetBrush(PrimaryHoverBrushKey, theme.PrimaryHover);
-
-            // 狀態色
-            SetBrush(SuccessBrushKey, theme.Success);
-            SetBrush(WarningBrushKey, theme.Warning);
-            SetBrush(ErrorBrushKey, theme.Error);
-
-            // Banner
-            SetBrush(BannerInfoBrushKey, theme.BannerInfo);
-            SetBrush(BannerWarnBrushKey, theme.BannerWarn);
-            SetBrush(BannerErrorBrushKey, theme.BannerError);
+            SetResourceBrush("App.PrimaryBrush", primary);
+            SetResourceBrush("App.PrimaryHoverBrush", hover);
         }
 
-        // -------------------------------------------------------
-        // Helpers
-        // -------------------------------------------------------
+        // ================= Helper =================
 
-        private static void SetBrush(string key, string colorHex)
+        private static void SetResourceBrush(string key, SolidColorBrush brush)
         {
-            var brush = ToBrush(colorHex);
-            var dict = Application.Current?.Resources;
-            if (dict == null) return;
-
-            // 若已存在則直接覆寫，否則新增
-            if (dict.Contains(key))
-                dict[key] = brush;
+            brush.Freeze();
+            if (Application.Current.Resources.Contains(key))
+                Application.Current.Resources[key] = brush;
             else
-                dict.Add(key, brush);
+                Application.Current.Resources.Add(key, brush);
         }
 
-        private static SolidColorBrush ToBrush(string hexOrName)
+        private static SolidColorBrush? ToBrushSafe(string? hex)
         {
-            // 容錯：允許 #RGB / #ARGB / #RRGGBB / #AARRGGBB 或已知顏色名稱
             try
             {
-                var c = ParseColor(hexOrName);
-                var b = new SolidColorBrush(c);
-                b.Freeze(); // 讓 Brush 可跨執行緒 & 效能更佳
-                return b;
+                if (string.IsNullOrWhiteSpace(hex)) return null;
+                var c = (Color)ColorConverter.ConvertFromString(NormalizeHex(hex))!;
+                return new SolidColorBrush(c);
             }
-            catch
-            {
-                // 退回安全預設（深灰）
-                var b = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#2D2D2D"));
-                b.Freeze();
-                return b;
-            }
+            catch { return null; }
         }
 
-        private static Color ParseColor(string value)
+        private static string NormalizeHex(string s)
         {
-            if (string.IsNullOrWhiteSpace(value))
-                return Colors.Transparent;
-
-            value = value.Trim();
-
-            // 支援不帶 # 的 6/8 位十六進位
-            if (!value.StartsWith("#", StringComparison.Ordinal))
+            s = s.Trim();
+            if (!s.StartsWith("#")) s = "#" + s;
+            // #RGB -> #RRGGBB
+            if (s.Length == 4)
             {
-                // 嘗試顏色名稱（e.g., "Red"）
-                try
-                {
-                    var named = (Color)ColorConverter.ConvertFromString(value);
-                    return named;
-                }
-                catch { }
-
-                // 嘗試直接以 RRGGBB/ AARRGGBB 解析
-                if (value.Length is 6 or 8)
-                    value = "#" + value;
-                else
-                    return Colors.Transparent;
+                var r = s[1]; var g = s[2]; var b = s[3];
+                s = $"#{r}{r}{g}{g}{b}{b}";
             }
+            // #RRGGBB -> #AARRGGBB（補滿不透明）
+            if (s.Length == 7) s = "#FF" + s.Substring(1);
+            return s.ToUpperInvariant();
+        }
 
-            // 標準 #RRGGBB / #AARRGGBB / #RGB / #ARGB
-            return (Color)ColorConverter.ConvertFromString(value);
+        private static Color Lighten(Color c, double by)
+        {
+            byte L(byte v) => (byte)Math.Clamp(v + (255 - v) * by, 0, 255);
+            return Color.FromArgb(c.A, L(c.R), L(c.G), L(c.B));
         }
     }
 }

@@ -8,213 +8,193 @@
         Foreground="{DynamicResource App.TextBrush}">
     <DockPanel>
 
-        <!-- 標題列 -->
-        <Border DockPanel.Dock="Top" Padding="10"
+        <!-- 頂部標題 -->
+        <Border DockPanel.Dock="Top" Padding="12"
                 Background="{DynamicResource App.PanelBrush}"
-                BorderBrush="{DynamicResource App.BorderBrush}"
-                BorderThickness="0,0,0,1">
-            <StackPanel Orientation="Horizontal">
-                <TextBlock Text="AI.KB.Assistant 設定" FontSize="18" FontWeight="Bold"/>
-                <TextBlock Text="  —  路徑 / 匯入 / 分類 / 主題" Margin="6,0,0,0"
-                           Foreground="{DynamicResource App.TextMutedBrush}"/>
+                BorderBrush="{DynamicResource App.BorderBrush}" BorderThickness="0,0,0,1">
+            <TextBlock Text="系統設定" FontSize="18" FontWeight="Bold"/>
+        </Border>
+
+        <!-- 底部動作列 -->
+        <Border DockPanel.Dock="Bottom" Padding="12"
+                Background="{DynamicResource App.PanelBrush}"
+                BorderBrush="{DynamicResource App.BorderBrush}" BorderThickness="1,1,1,0">
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button x:Name="BtnApplyTheme" Content="套用主題" Margin="0,0,8,0" Click="BtnApplyTheme_Click"/>
+                <Button x:Name="BtnReload" Content="重新載入" Margin="0,0,8,0" Click="BtnReload_Click"/>
+                <Button x:Name="BtnSave" Content="儲存" Margin="0,0,8,0" Click="BtnSave_Click"/>
+                <Button x:Name="BtnCancel" Content="取消" Click="BtnCancel_Click"/>
             </StackPanel>
         </Border>
 
-        <!-- 底部操作列 -->
-        <Border DockPanel.Dock="Bottom" Padding="10"
-                Background="{DynamicResource App.PanelBrush}"
-                BorderBrush="{DynamicResource App.BorderBrush}"
-                BorderThickness="0,1,0,0">
-            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" >
-                <Button Style="{StaticResource TonedBtn}" Content="套用主題" Click="BtnApplyTheme_Click"/>
-                <Button Style="{StaticResource TonedBtn}" Content="重新載入" Margin="8,0,0,0" Click="BtnReload_Click"/>
-                <Button Style="{StaticResource TonedBtn}" Content="儲存" Margin="8,0,0,0" Click="BtnSave_Click"/>
-                <Button Style="{StaticResource TonedBtn}" Content="關閉" Margin="8,0,0,0" IsCancel="True"/>
-            </StackPanel>
-        </Border>
-
-        <!-- 主內容 -->
+        <!-- 內容 -->
         <ScrollViewer VerticalScrollBarVisibility="Auto">
-            <TabControl Margin="10">
-                <!-- 基本 -->
-                <TabItem Header="基本">
-                    <Grid Margin="8">
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="*"/>
-                        </Grid.RowDefinitions>
+            <TabControl Margin="12">
+
+                <!-- 基礎 -->
+                <TabItem Header="基礎">
+                    <Grid Margin="12">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="160"/>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="10"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="10"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
 
-                        <TextBlock Text="Root 目錄" Grid.Row="0" Grid.Column="0" VerticalAlignment="Center"/>
-                        <TextBox x:Name="TxtRoot" Grid.Row="0" Grid.Column="1" Margin="6,4"/>
-                        <Button Content="瀏覽…" Grid.Row="0" Grid.Column="2" Style="{StaticResource TonedBtn}"
-                                Click="BtnPickRoot_Click" Margin="8,0,0,0"/>
+                        <TextBlock Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" Text="Root 目錄"/>
+                        <TextBox x:Name="TxtRootDir" Grid.Row="0" Grid.Column="1" Margin="8,0,8,0"/>
+                        <Button x:Name="BtnPickRoot" Grid.Row="0" Grid.Column="2" Content="瀏覽..." Width="90" Click="BtnPickRoot_Click"/>
 
-                        <TextBlock Text="資料庫 (.db)" Grid.Row="1" Grid.Column="0" VerticalAlignment="Center" Margin="0,6,0,0"/>
-                        <TextBox x:Name="TxtDb" Grid.Row="1" Grid.Column="1" Margin="6,10,6,4"/>
-                        <Button Content="選擇…" Grid.Row="1" Grid.Column="2" Style="{StaticResource TonedBtn}"
-                                Click="BtnPickDb_Click" Margin="8,6,0,0"/>
+                        <TextBlock Grid.Row="2" Grid.Column="0" VerticalAlignment="Center" Text="收件夾 (HotFolder)"/>
+                        <TextBox x:Name="TxtHotFolder" Grid.Row="2" Grid.Column="1" Margin="8,0,8,0"/>
+                        <Button x:Name="BtnPickHot" Grid.Row="2" Grid.Column="2" Content="瀏覽..." Width="90" Click="BtnPickHot_Click"/>
 
-                        <TextBlock Text="啟動模式" Grid.Row="2" Grid.Column="0" VerticalAlignment="Center" Margin="0,6,0,0"/>
-                        <ComboBox x:Name="CbStartupMode" Grid.Row="2" Grid.Column="1" Margin="6,10,6,4" Width="220"/>
-
-                        <TextBlock Text="專案鎖定（可空白）" Grid.Row="3" Grid.Column="0" VerticalAlignment="Center" Margin="0,6,0,0"/>
-                        <TextBox x:Name="TxtProjectLock" Grid.Row="3" Grid.Column="1" Margin="6,10,6,4"/>
-
-                        <Border Grid.Row="4" Grid.ColumnSpan="3" Margin="0,12,0,0"
-                                Background="{DynamicResource App.PanelBrush}"
-                                BorderBrush="{DynamicResource App.BorderBrush}" BorderThickness="1" Padding="8">
-                            <TextBlock Foreground="{DynamicResource App.TextMutedBrush}">
-                                說明：此分頁設定應用的基本環境（根目錄、DB 位置、啟動模式與專案鎖定）。
-                            </TextBlock>
-                        </Border>
+                        <TextBlock Grid.Row="4" Grid.Column="0" VerticalAlignment="Center" Text="資料庫 (.db)"/>
+                        <TextBox x:Name="TxtDbPath" Grid.Row="4" Grid.Column="1" Margin="8,0,8,0"/>
+                        <Button x:Name="BtnPickDb" Grid.Row="4" Grid.Column="2" Content="選擇..." Width="90" Click="BtnPickDb_Click"/>
                     </Grid>
                 </TabItem>
 
                 <!-- 匯入 -->
                 <TabItem Header="匯入">
-                    <Grid Margin="8">
+                    <Grid Margin="12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="220"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="10"/>
                             <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="10"/>
                             <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="10"/>
                             <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="*"/>
                         </Grid.RowDefinitions>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="160"/>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
 
-                        <TextBlock Text="收件夾 (Inbox)" Grid.Row="0" Grid.Column="0" VerticalAlignment="Center"/>
-                        <TextBox x:Name="TxtInbox" Grid.Row="0" Grid.Column="1" Margin="6,4"/>
-                        <Button Content="瀏覽…" Grid.Row="0" Grid.Column="2" Style="{StaticResource TonedBtn}"
-                                Click="BtnPickInbox_Click" Margin="8,0,0,0"/>
+                        <TextBlock Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" Text="匯入模式"/>
+                        <ComboBox x:Name="CmbMoveMode" Grid.Row="0" Grid.Column="1" Margin="8,0,0,0" Width="200">
+                            <ComboBoxItem Content="Move"/>
+                            <ComboBoxItem Content="Copy"/>
+                        </ComboBox>
 
-                        <TextBlock Text="包含子資料夾" Grid.Row="1" Grid.Column="0" VerticalAlignment="Center" Margin="0,6,0,0"/>
-                        <CheckBox x:Name="ChkIncludeSubdir" Grid.Row="1" Grid.Column="1" Margin="6,10,6,4" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Row="2" Grid.Column="0" VerticalAlignment="Center" Text="檔名衝突策略"/>
+                        <ComboBox x:Name="CmbOverwritePolicy" Grid.Row="2" Grid.Column="1" Margin="8,0,0,0" Width="200">
+                            <ComboBoxItem Content="Replace"/>
+                            <ComboBoxItem Content="Rename"/>
+                            <ComboBoxItem Content="Skip"/>
+                        </ComboBox>
 
-                        <TextBlock Text="搬檔模式" Grid.Row="2" Grid.Column="0" VerticalAlignment="Center" Margin="0,6,0,0"/>
-                        <ComboBox x:Name="CbMoveMode" Grid.Row="2" Grid.Column="1" Margin="6,10,6,4" Width="220"/>
+                        <CheckBox x:Name="ChkIncludeSubdir" Grid.Row="4" Grid.Column="1" Content="包含子資料夾"/>
 
-                        <TextBlock Text="同名策略" Grid.Row="3" Grid.Column="0" VerticalAlignment="Center" Margin="0,6,0,0"/>
-                        <ComboBox x:Name="CbOverwrite" Grid.Row="3" Grid.Column="1" Margin="6,10,6,4" Width="220"/>
-
-                        <TextBlock Text="黑名單副檔名（逗號分隔）" Grid.Row="4" Grid.Column="0" VerticalAlignment="Top" Margin="0,6,0,0"/>
-                        <TextBox x:Name="TxtBlacklistExts" Grid.Row="4" Grid.Column="1" Margin="6,10,6,4" Height="60" AcceptsReturn="True" TextWrapping="Wrap"/>
-
-                        <TextBlock Text="黑名單資料夾（逗號分隔）" Grid.Row="5" Grid.Column="0" VerticalAlignment="Top" Margin="0,6,0,0"/>
-                        <TextBox x:Name="TxtBlacklistFolders" Grid.Row="5" Grid.Column="1" Margin="6,10,6,4" Height="60" AcceptsReturn="True" TextWrapping="Wrap"/>
-
-                        <Border Grid.Row="6" Grid.ColumnSpan="3" Margin="0,12,0,0"
-                                Background="{DynamicResource App.PanelBrush}"
-                                BorderBrush="{DynamicResource App.BorderBrush}" BorderThickness="1" Padding="8">
-                            <TextBlock Foreground="{DynamicResource App.TextMutedBrush}">
-                                說明：此分頁設定收件夾掃描與搬檔邏輯（遞迴、搬檔/複製、同名處理與黑名單）。
-                            </TextBlock>
-                        </Border>
+                        <StackPanel Grid.Row="6" Grid.ColumnSpan="2">
+                            <TextBlock Text="黑名單副檔名（逗號分隔，不含點）" Margin="0,0,0,6"/>
+                            <TextBox x:Name="TxtBlacklistExts" AcceptsReturn="True" Height="60" TextWrapping="Wrap"/>
+                        </StackPanel>
                     </Grid>
                 </TabItem>
 
-                <!-- 分類 -->
-                <TabItem Header="分類">
-                    <Grid Margin="8">
+                <!-- 路由 -->
+                <TabItem Header="路由">
+                    <Grid Margin="12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="220"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="10"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="10"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="10"/>
+                            <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
+
+                        <TextBlock Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" Text="自整理資料夾名稱"/>
+                        <TextBox x:Name="TxtAutoFolderName" Grid.Row="0" Grid.Column="1" Margin="8,0,0,0" Width="240"/>
+
+                        <TextBlock Grid.Row="2" Grid.Column="0" VerticalAlignment="Center" Text="低信心資料夾名稱"/>
+                        <TextBox x:Name="TxtLowConfidenceFolderName" Grid.Row="2" Grid.Column="1" Margin="8,0,0,0" Width="240"/>
+
+                        <StackPanel Grid.Row="4" Grid.ColumnSpan="2" Orientation="Horizontal" Margin="0,0,0,6">
+                            <CheckBox x:Name="ChkUseYear" Content="年份層"/>
+                            <CheckBox x:Name="ChkUseMonth" Content="月份層" Margin="16,0,0,0"/>
+                            <CheckBox x:Name="ChkUseProject" Content="專案層" Margin="16,0,0,0"/>
+                            <CheckBox x:Name="ChkUseType" Content="類型層" Margin="16,0,0,0"/>
+                        </StackPanel>
+
+                        <StackPanel Grid.Row="6" Grid.ColumnSpan="2">
+                            <TextBlock Text="黑名單資料夾（逗號分隔）" Margin="0,0,0,6"/>
+                            <TextBox x:Name="TxtBlacklistFolders" AcceptsReturn="True" Height="60" TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </Grid>
+                </TabItem>
+
+                <!-- AI -->
+                <TabItem Header="AI">
+                    <Grid Margin="12">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="160"/>
+                            <ColumnDefinition Width="220"/>
                             <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="10"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="10"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="10"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
 
-                        <TextBlock Text="信心閾值 (0~1)" Grid.Row="0" Grid.Column="0" VerticalAlignment="Center"/>
-                        <TextBox x:Name="TxtThreshold" Grid.Row="0" Grid.Column="1" Margin="6,4" Width="120"/>
+                        <TextBlock Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" Text="信心門檻 (0~1)"/>
+                        <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal">
+                            <Slider x:Name="SldThreshold" Minimum="0" Maximum="1" Width="240" ValueChanged="SldThreshold_ValueChanged"/>
+                            <TextBlock x:Name="TxtThresholdValue" Margin="8,0,0,0" VerticalAlignment="Center" Text="0.75"/>
+                        </StackPanel>
 
-                        <Border Grid.Row="1" Grid.ColumnSpan="3" Margin="0,12,0,0"
-                                Background="{DynamicResource App.PanelBrush}"
-                                BorderBrush="{DynamicResource App.BorderBrush}" BorderThickness="1" Padding="8">
-                            <TextBlock Foreground="{DynamicResource App.TextMutedBrush}">
-                                說明：低於此信心值的檔案將預設放入「信心不足」，你仍可在詳情中手動覆寫。
-                            </TextBlock>
-                        </Border>
+                        <TextBlock Grid.Row="2" Grid.Column="0" VerticalAlignment="Center" Text="OpenAI API Key"/>
+                        <PasswordBox x:Name="TxtApiKey" Grid.Row="2" Grid.Column="1" Margin="8,0,0,0" Width="320"/>
+
+                        <TextBlock Grid.Row="4" Grid.Column="0" VerticalAlignment="Center" Text="OpenAI Model"/>
+                        <TextBox x:Name="TxtModel" Grid.Row="4" Grid.Column="1" Margin="8,0,0,0" Width="320"/>
+
+                        <TextBlock Grid.Row="6" Grid.Column="0" VerticalAlignment="Center" Text="備註"/>
+                        <TextBlock Grid.Row="6" Grid.Column="1" Margin="8,0,0,0"
+                                   Foreground="{DynamicResource App.TextMutedBrush}"
+                                   Text="僅在低信心時呼叫 LLM 產生建議；不會自動搬檔。"/>
                     </Grid>
                 </TabItem>
 
                 <!-- 主題 -->
                 <TabItem Header="主題">
-                    <Grid Margin="8">
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="*"/>
-                        </Grid.RowDefinitions>
+                    <Grid Margin="12">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="220"/>
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="10"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
 
-                        <TextBlock Text="Background #RRGGBB" Grid.Row="0" Grid.Column="0" VerticalAlignment="Center"/>
-                        <TextBox x:Name="TxtThemeBackground" Grid.Row="0" Grid.Column="1" Margin="6,4" Width="200"/>
+                        <TextBlock Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" Text="重點色（Hex）"/>
+                        <TextBox x:Name="TxtAccentColor" Grid.Row="0" Grid.Column="1" Margin="8,0,0,0" Width="160"/>
 
-                        <TextBlock Text="Panel #RRGGBB" Grid.Row="1" Grid.Column="0" VerticalAlignment="Center"/>
-                        <TextBox x:Name="TxtThemePanel" Grid.Row="1" Grid.Column="1" Margin="6,4" Width="200"/>
-
-                        <TextBlock Text="Border #RRGGBB" Grid.Row="2" Grid.Column="0" VerticalAlignment="Center"/>
-                        <TextBox x:Name="TxtThemeBorder" Grid.Row="2" Grid.Column="1" Margin="6,4" Width="200"/>
-
-                        <TextBlock Text="Text #RRGGBB" Grid.Row="3" Grid.Column="0" VerticalAlignment="Center"/>
-                        <TextBox x:Name="TxtThemeText" Grid.Row="3" Grid.Column="1" Margin="6,4" Width="200"/>
-
-                        <TextBlock Text="TextMuted #RRGGBB" Grid.Row="4" Grid.Column="0" VerticalAlignment="Center"/>
-                        <TextBox x:Name="TxtThemeTextMuted" Grid.Row="4" Grid.Column="1" Margin="6,4" Width="200"/>
-
-                        <TextBlock Text="Primary #RRGGBB" Grid.Row="5" Grid.Column="0" VerticalAlignment="Center"/>
-                        <TextBox x:Name="TxtThemePrimary" Grid.Row="5" Grid.Column="1" Margin="6,4" Width="200"/>
-
-                        <TextBlock Text="PrimaryHover #RRGGBB" Grid.Row="6" Grid.Column="0" VerticalAlignment="Center"/>
-                        <TextBox x:Name="TxtThemePrimaryHover" Grid.Row="6" Grid.Column="1" Margin="6,4" Width="200"/>
-
-                        <TextBlock Text="Success #RRGGBB" Grid.Row="7" Grid.Column="0" VerticalAlignment="Center"/>
-                        <TextBox x:Name="TxtThemeSuccess" Grid.Row="7" Grid.Column="1" Margin="6,4" Width="200"/>
-
-                        <TextBlock Text="Warning #RRGGBB" Grid.Row="8" Grid.Column="0" VerticalAlignment="Center"/>
-                        <TextBox x:Name="TxtThemeWarning" Grid.Row="8" Grid.Column="1" Margin="6,4" Width="200"/>
-
-                        <TextBlock Text="Error #RRGGBB" Grid.Row="9" Grid.Column="0" VerticalAlignment="Center"/>
-                        <TextBox x:Name="TxtThemeError" Grid.Row="9" Grid.Column="1" Margin="6,4" Width="200"/>
-
-                        <TextBlock Text="BannerInfo #RRGGBB" Grid.Row="10" Grid.Column="0" VerticalAlignment="Center"/>
-                        <TextBox x:Name="TxtBannerInfo" Grid.Row="10" Grid.Column="1" Margin="6,4" Width="200"/>
-
-                        <TextBlock Text="BannerWarn #RRGGBB" Grid.Row="11" Grid.Column="0" VerticalAlignment="Center"/>
-                        <TextBox x:Name="TxtBannerWarn" Grid.Row="11" Grid.Column="1" Margin="6,4" Width="200"/>
-
-                        <TextBlock Text="BannerError #RRGGBB" Grid.Row="12" Grid.Column="0" VerticalAlignment="Center"/>
-                        <TextBox x:Name="TxtBannerError" Grid.Row="12" Grid.Column="1" Margin="6,4" Width="200"/>
+                        <TextBlock Grid.Row="2" Grid.ColumnSpan="2"
+                                   Foreground="{DynamicResource App.TextMutedBrush}"
+                                   Text="提示：此頁僅示範重點色；完整配色由 ThemeColors 控制，請由 config.json 調整。"/>
                     </Grid>
                 </TabItem>
+
             </TabControl>
         </ScrollViewer>
     </DockPanel>

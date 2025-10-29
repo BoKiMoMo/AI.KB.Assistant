@@ -26,6 +26,7 @@
 		<Compile Remove="Services\ClassifierService.cs" />
 		<Compile Remove="Services\EmbeddingService.cs" />
 		<Compile Remove="Views\HelpWindow.xaml.cs" />
+		<Compile Remove="Views\MainWindow.Events.cs" />
 	</ItemGroup>
 
 	<ItemGroup>

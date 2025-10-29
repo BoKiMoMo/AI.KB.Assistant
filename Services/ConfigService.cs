@@ -1,145 +1,127 @@
-using AI.KB.Assistant.Models;
 using System;
 using System.IO;
-using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
+using AI.KB.Assistant.Models;
 
 namespace AI.KB.Assistant.Services
 {
     /// <summary>
-    /// 設定檔管理：讀取 / 寫入 / 預設補齊。
+    /// 設定檔存取工具（最小相容版）。
     /// </summary>
     public static class ConfigService
     {
-        private static readonly JsonSerializerOptions _jsonOpt = new()
+        private static readonly JsonSerializerOptions Options = new JsonSerializerOptions
         {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
             WriteIndented = true,
-            AllowTrailingCommas = true,
             ReadCommentHandling = JsonCommentHandling.Skip,
-            PropertyNameCaseInsensitive = true
+            AllowTrailingCommas = true,
+            DefaultIgnoreCondition = JsonIgnoreCondition.Never,
+            Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) } // enum 以字串序列化
         };
 
-        private static readonly string _defaultPath =
-            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "config.json");
-
-        /// <summary>
-        /// 舊介面相容：讀取指定路徑設定（失敗時回傳預設設定並建立檔案）。
-        /// </summary>
+        /// <summary>嘗試讀取設定；若失敗則回傳新預設設定。</summary>
         public static AppConfig TryLoad(string path)
         {
             try
             {
-                if (File.Exists(path))
-                {
-                    var json = File.ReadAllText(path, Encoding.UTF8);
-                    var cfg = JsonSerializer.Deserialize<AppConfig>(json, _jsonOpt) ?? new AppConfig();
-                    Normalize(cfg);
-                    return cfg;
-                }
+                if (!File.Exists(path))
+                    return CreateDefault();
+
+                var json = File.ReadAllText(path);
+                if (string.IsNullOrWhiteSpace(json))
+                    return CreateDefault();
+
+                var cfg = JsonSerializer.Deserialize<AppConfig>(json, Options) ?? CreateDefault();
+
+                // 防守：確保每節都有預設物件
+                cfg.App ??= new AppConfig.AppSection();
+                cfg.Import ??= new AppConfig.ImportSection();
+                cfg.Routing ??= new AppConfig.RoutingSection();
+                cfg.Classification ??= new AppConfig.ClassificationSection();
+                cfg.OpenAI ??= new AppConfig.OpenAISection();
+
+                return cfg;
             }
             catch
             {
-                // ignore, fallback below
+                return CreateDefault();
             }
-
-            var def = BuildDefault();
-            Save(def, path);
-            return def;
         }
 
-        /// <summary>
-        /// 新介面：讀取預設路徑 (./config.json)
-        /// </summary>
-        public static AppConfig Load() => TryLoad(_defaultPath);
-
-        /// <summary>
-        /// 將設定存入預設路徑。
-        /// </summary>
-        public static void Save(AppConfig cfg) => Save(cfg, _defaultPath);
-
-        /// <summary>
-        /// 將設定存入指定路徑。
-        /// </summary>
-        public static void Save(AppConfig cfg, string path)
+        /// <summary>寫入設定檔；若資料夾不存在會自動建立。</summary>
+        public static void Save(string path, AppConfig cfg)
         {
             try
             {
-                Normalize(cfg);
-                var json = JsonSerializer.Serialize(cfg, _jsonOpt);
-                File.WriteAllText(path, json, Encoding.UTF8);
+                var dir = Path.GetDirectoryName(path);
+                if (!string.IsNullOrWhiteSpace(dir) && !Directory.Exists(dir))
+                    Directory.CreateDirectory(dir);
+
+                cfg ??= CreateDefault();
+                cfg.App ??= new AppConfig.AppSection();
+                cfg.Import ??= new AppConfig.ImportSection();
+                cfg.Routing ??= new AppConfig.RoutingSection();
+                cfg.Classification ??= new AppConfig.ClassificationSection();
+                cfg.OpenAI ??= new AppConfig.OpenAISection();
+
+                var json = JsonSerializer.Serialize(cfg, Options);
+                File.WriteAllText(path, json);
             }
-            catch (Exception ex)
+            catch
             {
-                Console.WriteLine($"[ConfigService] 寫入設定失敗：{ex.Message}");
+                // 保守處理：不拋例外；如需紀錄可在此寫 Log。
             }
         }
 
-        /// <summary>
-        /// 補齊必要欄位、確保資料夾存在。
-        /// </summary>
-        public static void Normalize(AppConfig cfg)
+        private static AppConfig CreateDefault()
         {
-            cfg ??= new AppConfig();
-            cfg.App ??= new AppSection();
-            cfg.Import ??= new ImportSection();
-            cfg.Classification ??= new ClassificationSection();
-            cfg.ThemeColors ??= new ThemeSection();
-
-            // Root / Db 預設
-            if (string.IsNullOrWhiteSpace(cfg.App.RootDir))
-                cfg.App.RootDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "AI.KB.Root");
-            if (string.IsNullOrWhiteSpace(cfg.App.DbPath))
-                cfg.App.DbPath = Path.Combine(cfg.App.RootDir, "ai.kb.assistant.db");
-
-            // Import 預設
-            if (string.IsNullOrWhiteSpace(cfg.Import.HotFolderPath))
-                cfg.Import.HotFolderPath = Path.Combine(cfg.App.RootDir, "Inbox");
-            cfg.Import.BlacklistExts ??= Array.Empty<string>();
-            cfg.Import.BlacklistFolderNames ??= new[] { "_blacklist", "自整理", "信心不足" };
-            cfg.Import.ExtGroups ??= new();
-            cfg.Import.ExtGroupsCache ??= new();
-            cfg.Import.RebuildExtGroupsCache();
-
-            SafeCreateDir(cfg.App.RootDir);
-            SafeCreateDir(cfg.Import.HotFolderPath);
-            SafeCreateDir(Path.GetDirectoryName(cfg.App.DbPath));
-        }
-
-        /// <summary>
-        /// 產生預設設定。
-        /// </summary>
-        private static AppConfig BuildDefault()
-        {
-            var root = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "AI.KB.Root");
-            var inbox = Path.Combine(root, "Inbox");
             return new AppConfig
             {
-                App = new AppSection
+                App = new AppConfig.AppSection
                 {
-                    RootDir = root,
-                    DbPath = Path.Combine(root, "ai.kb.assistant.db"),
-                    StartupUIMode = StartupMode.Simple,
-                    ProjectLock = null
+                    RootDir = "",
+                    DbPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ai.kb.assistant.db"),
+                    ProjectLock = "",
+                    Theme = "Light",
+                    StartupUIMode = "Detailed"
                 },
-                Import = new ImportSection
+                Import = new AppConfig.ImportSection
                 {
-                    HotFolderPath = inbox,
-                    IncludeSubdir = true,
+                    HotFolderPath = "",
                     MoveMode = MoveMode.Move,
                     OverwritePolicy = OverwritePolicy.Rename,
+                    IncludeSubdir = true,
                     BlacklistExts = Array.Empty<string>(),
-                    BlacklistFolderNames = new[] { "_blacklist", "自整理", "信心不足" },
-                    ExtGroups = new()
+                    BlacklistFolderNames = new[] { "_blacklist" },
+                    ExtGroupMap = new System.Collections.Generic.Dictionary<string, string[]>(),
+                    ExtGroupsJson = ""
                 },
-                Classification = new ClassificationSection { ConfidenceThreshold = 0.75 },
-                ThemeColors = new ThemeSection()
+                Routing = new AppConfig.RoutingSection
+                {
+                    UseYear = true,
+                    UseMonth = true,
+                    UseProject = true,
+                    UseType = true,
+                    AutoFolderName = "自整理",
+                    LowConfidenceFolderName = "信心不足"
+                },
+                Classification = new AppConfig.ClassificationSection
+                {
+                    ConfidenceThreshold = 0.75
+                },
+                OpenAI = new AppConfig.OpenAISection
+                {
+                    ApiKey = "",
+                    Model = "gpt-4o-mini"
+                }
             };
         }
 
-        private static void SafeCreateDir(string? dir)
-        {
-            if (string.IsNullOrWhiteSpace(dir)) return;
-            try { Directory.CreateDirectory(dir); } catch { }
-        }
+        /// <summary>
+        /// 相容舊版：最簡單的正規化。避免找不到 Normalize 的編譯錯誤。
+        /// </summary>
+        public static string Normalize(string input) => input?.Trim() ?? string.Empty;
     }
 }
