@@ -1,127 +1,66 @@
 using System;
-using System.IO;
-using System.Text.Json;
-using System.Text.Json.Serialization;
 using AI.KB.Assistant.Models;
 
 namespace AI.KB.Assistant.Services
 {
     /// <summary>
-    /// 設定檔存取工具（最小相容版）。
+    /// 設定服務封裝：
+    /// - 統一入口存取 AppConfig（AppConfig.Current）
+    /// - 提供 Load/Save 與簡易 Get/Set 輔助
+    /// - 相容舊專案對 ConfigService 的呼叫型式
     /// </summary>
     public static class ConfigService
     {
-        private static readonly JsonSerializerOptions Options = new JsonSerializerOptions
-        {
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-            WriteIndented = true,
-            ReadCommentHandling = JsonCommentHandling.Skip,
-            AllowTrailingCommas = true,
-            DefaultIgnoreCondition = JsonIgnoreCondition.Never,
-            Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) } // enum 以字串序列化
-        };
+        /// <summary>
+        /// 目前設定（等同 AppConfig.Current）
+        /// </summary>
+        public static AppConfig App => AppConfig.Current;
 
-        /// <summary>嘗試讀取設定；若失敗則回傳新預設設定。</summary>
-        public static AppConfig TryLoad(string path)
-        {
-            try
-            {
-                if (!File.Exists(path))
-                    return CreateDefault();
+        /// <summary>
+        /// 載入設定（若檔案不存在會建立預設並儲存）
+        /// </summary>
+        public static void Load(string? path = null) => AppConfig.Load(path);
 
-                var json = File.ReadAllText(path);
-                if (string.IsNullOrWhiteSpace(json))
-                    return CreateDefault();
+        /// <summary>
+        /// 儲存設定至檔案
+        /// </summary>
+        public static void Save(string? path = null) => AppConfig.Save(path);
 
-                var cfg = JsonSerializer.Deserialize<AppConfig>(json, Options) ?? CreateDefault();
-
-                // 防守：確保每節都有預設物件
-                cfg.App ??= new AppConfig.AppSection();
-                cfg.Import ??= new AppConfig.ImportSection();
-                cfg.Routing ??= new AppConfig.RoutingSection();
-                cfg.Classification ??= new AppConfig.ClassificationSection();
-                cfg.OpenAI ??= new AppConfig.OpenAISection();
-
-                return cfg;
-            }
-            catch
-            {
-                return CreateDefault();
-            }
-        }
-
-        /// <summary>寫入設定檔；若資料夾不存在會自動建立。</summary>
-        public static void Save(string path, AppConfig cfg)
+        /// <summary>
+        /// 相容舊呼叫：TryLoad(out cfg, path)
+        /// </summary>
+        public static void TryLoad(out AppConfig cfg, string? path = null)
         {
             try
             {
-                var dir = Path.GetDirectoryName(path);
-                if (!string.IsNullOrWhiteSpace(dir) && !Directory.Exists(dir))
-                    Directory.CreateDirectory(dir);
-
-                cfg ??= CreateDefault();
-                cfg.App ??= new AppConfig.AppSection();
-                cfg.Import ??= new AppConfig.ImportSection();
-                cfg.Routing ??= new AppConfig.RoutingSection();
-                cfg.Classification ??= new AppConfig.ClassificationSection();
-                cfg.OpenAI ??= new AppConfig.OpenAISection();
-
-                var json = JsonSerializer.Serialize(cfg, Options);
-                File.WriteAllText(path, json);
+                AppConfig.Load(path);
+                cfg = AppConfig.Current;
             }
             catch
             {
-                // 保守處理：不拋例外；如需紀錄可在此寫 Log。
+                // 發生例外時回預設並覆寫
+                AppConfig.Load(path);
+                cfg = AppConfig.Current;
             }
-        }
-
-        private static AppConfig CreateDefault()
-        {
-            return new AppConfig
-            {
-                App = new AppConfig.AppSection
-                {
-                    RootDir = "",
-                    DbPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ai.kb.assistant.db"),
-                    ProjectLock = "",
-                    Theme = "Light",
-                    StartupUIMode = "Detailed"
-                },
-                Import = new AppConfig.ImportSection
-                {
-                    HotFolderPath = "",
-                    MoveMode = MoveMode.Move,
-                    OverwritePolicy = OverwritePolicy.Rename,
-                    IncludeSubdir = true,
-                    BlacklistExts = Array.Empty<string>(),
-                    BlacklistFolderNames = new[] { "_blacklist" },
-                    ExtGroupMap = new System.Collections.Generic.Dictionary<string, string[]>(),
-                    ExtGroupsJson = ""
-                },
-                Routing = new AppConfig.RoutingSection
-                {
-                    UseYear = true,
-                    UseMonth = true,
-                    UseProject = true,
-                    UseType = true,
-                    AutoFolderName = "自整理",
-                    LowConfidenceFolderName = "信心不足"
-                },
-                Classification = new AppConfig.ClassificationSection
-                {
-                    ConfidenceThreshold = 0.75
-                },
-                OpenAI = new AppConfig.OpenAISection
-                {
-                    ApiKey = "",
-                    Model = "gpt-4o-mini"
-                }
-            };
         }
 
         /// <summary>
-        /// 相容舊版：最簡單的正規化。避免找不到 Normalize 的編譯錯誤。
+        /// 讀取（便利方法）：selector(AppConfig.Current)
         /// </summary>
-        public static string Normalize(string input) => input?.Trim() ?? string.Empty;
+        public static T Get<T>(Func<AppConfig, T> selector) => selector(App);
+
+        /// <summary>
+        /// 寫入（便利方法）：mutator(AppConfig.Current)；預設會自動 Save
+        /// </summary>
+        public static void Set(Action<AppConfig> mutator, bool save = true)
+        {
+            mutator(App);
+            if (save) Save();
+        }
+
+        /// <summary>
+        /// 目前使用中的設定檔路徑（轉拋 AppConfig.ConfigPath）
+        /// </summary>
+        public static string ConfigPath => AppConfig.ConfigPath;
     }
 }

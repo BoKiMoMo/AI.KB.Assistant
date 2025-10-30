@@ -2,272 +2,201 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Threading;
 using System.Threading.Tasks;
 using AI.KB.Assistant.Models;
 
 namespace AI.KB.Assistant.Services
 {
     /// <summary>
-    /// 進件流程：
-    /// 1) StageOnly：只建立 DB 紀錄（狀態 inbox），不搬檔，供 UI 預覽
-    /// 2) ClassifyOnly：只預估目的地與狀態 preview，不搬檔
-    /// 3) CommitPending：實際搬檔（依 OverwritePolicy），並更新狀態與最終路徑
-    /// 
-    /// 提供多組 Overload 以相容舊呼叫（string / IEnumerable<string> / folder + ct 等）。
+    /// 檔案匯入與搬移服務。
+    /// 負責「收件夾 → 資料庫暫存 → 實際分類搬移」的主要流程。
     /// </summary>
-    public class IntakeService
+    public partial class IntakeService
     {
         private readonly DbService _db;
         private readonly RoutingService _routing;
-        private readonly LlmService? _llm;         // 有些舊建構式會傳入，這裡保留但目前不強制使用
-        private AppConfig _cfg;
 
-        // ───────────────────────── ctor ─────────────────────────
-
-        public IntakeService(DbService db, RoutingService routing, AppConfig cfg)
+        public IntakeService(DbService db, RoutingService routing)
         {
             _db = db;
             _routing = routing;
-            _cfg = cfg ?? new AppConfig();
         }
-
-        /// <summary>相容舊呼叫：第四個參數 LlmService（可為 null）</summary>
-        public IntakeService(DbService db, RoutingService routing, AppConfig cfg, LlmService? llm)
-            : this(db, routing, cfg)
-        {
-            _llm = llm;
-        }
-
-        public void UpdateConfig(AppConfig cfg)
-        {
-            _cfg = cfg ?? _cfg;
-            _routing.ApplyConfig(_cfg);
-        }
-
-        // ────────────────────── StageOnly（暫存） ──────────────────────
 
         /// <summary>
-        /// 暫存多個檔案：寫入或更新 Item，Status="inbox"，並計算預估目的地（DestPath）。
+        /// 僅將檔案掃描加入暫存（不實際搬移）。
         /// </summary>
-        public async Task<int> StageOnlyAsync(IEnumerable<string> files, string? project = null, CancellationToken ct = default)
+        public async Task StageOnlyAsync(IEnumerable<string> files)
         {
-            if (files == null) return 0;
-            int count = 0;
+            if (files == null) return;
 
-            foreach (var f in files.Where(File.Exists))
+            var items = new List<Item>();
+
+            foreach (var path in files.Where(File.Exists))
             {
-                ct.ThrowIfCancellationRequested();
-
-                var it = _db.TryGetByPath(f) ?? new Item
+                var fi = new FileInfo(path);
+                var item = new Item
                 {
-                    SourcePath = f,
-                    FileName = Path.GetFileName(f),
-                    Ext = Path.GetExtension(f).TrimStart('.').ToLowerInvariant(),
-                    Project = project ?? string.Empty,
-                    CreatedAt = DateTime.UtcNow
+                    FileName = Path.GetFileNameWithoutExtension(path),
+                    Ext = Path.GetExtension(path),
+                    Path = path,
+                    SourcePath = path,
+                    ProposedPath = _routing.PreviewDestPath(path, null),
+                    CreatedAt = fi.CreationTime,
+                    Status = ItemStatus.New
                 };
-
-                it.Status = "inbox";
-                // 在暫存階段預先計算預估目的地，UI 可直接顯示
-                it.DestPath = _routing.PreviewDestPath(it.SourcePath, string.IsNullOrWhiteSpace(project) ? it.Project : project);
-
-                await _db.UpsertAsync(it);
-                count++;
+                items.Add(item);
             }
 
-            return count;
+            await _db.InsertItemsAsync(items);
         }
 
         /// <summary>
-        /// 相容簽章：第二參數原為 CancellationToken 的舊呼叫。
+        /// 執行「正式搬檔」流程。
+        /// overwritePolicy 可傳入： "overwrite" / "skip" / "rename"（大小寫不拘）。
+        /// 若為 null 則使用 ConfigService.Cfg.Import.OverwritePolicy 的值。
         /// </summary>
-        public Task<int> StageOnlyAsync(IEnumerable<string> files, CancellationToken ct)
-            => StageOnlyAsync(files, project: null, ct);
-
-        /// <summary>
-        /// 相容簽章：傳入單一路徑（可能是檔案或資料夾）。
-        /// </summary>
-        public Task<int> StageOnlyAsync(string fileOrFolder, CancellationToken ct = default)
+        public async Task<int> CommitPendingAsync(IEnumerable<Item> items, string? overwritePolicy = null)
         {
-            if (Directory.Exists(fileOrFolder))
-                return StageOnlyFromFolderAsync(fileOrFolder, includeSubdir: true, ct);
-            return StageOnlyAsync(new[] { fileOrFolder }, project: null, ct);
-        }
+            if (items == null) return 0;
 
-        /// <summary>
-        /// 從資料夾掃描暫存；支援是否遞迴與副檔名黑名單。
-        /// </summary>
-        public Task<int> StageOnlyFromFolderAsync(string folder, bool includeSubdir, CancellationToken ct = default)
-        {
-            if (!Directory.Exists(folder)) return Task.FromResult(0);
+            var cfg = ConfigService.Cfg;
+            int success = 0;
 
-            var opt = includeSubdir ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
-            var all = Directory.GetFiles(folder, "*.*", opt);
+            // 讀取策略（以字串方式，避免相依列舉型別）
+            var policy = Normalize(cfg?.Import?.OverwritePolicy);
+            var runtimePolicy = Normalize(overwritePolicy) ?? policy ?? "rename";
 
-            // 副檔名黑名單（Import.BlacklistExts）
-            var blacklist = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            if (_cfg.Import?.BlacklistExts != null)
+            // 移動或複製策略
+            var moveMode = Normalize(cfg?.Import?.MoveMode) ?? "move";
+
+            foreach (var item in items)
             {
-                foreach (var e in _cfg.Import.BlacklistExts)
-                    blacklist.Add((e ?? string.Empty).Trim('.').ToLowerInvariant());
-            }
-
-            var validFiles = all.Where(p =>
-            {
-                var ext = Path.GetExtension(p).TrimStart('.').ToLowerInvariant();
-                return !blacklist.Contains(ext);
-            });
-
-            return StageOnlyAsync(validFiles, project: null, ct);
-        }
-
-        /// <summary>相容簽章：舊呼叫 (folder, ct)</summary>
-        public Task<int> StageOnlyFromFolderAsync(string folder, CancellationToken ct)
-            => StageOnlyFromFolderAsync(folder, includeSubdir: true, ct);
-
-        /// <summary>相容簽章：舊呼叫 (folder, includeSubdir, project, ct) —— project 目前僅在 StageOnlyAsync 內寫入</summary>
-        public async Task<int> StageOnlyFromFolderAsync(string folder, bool includeSubdir, string? project, CancellationToken ct)
-        {
-            if (!Directory.Exists(folder)) return 0;
-
-            var opt = includeSubdir ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
-            var all = Directory.GetFiles(folder, "*.*", opt);
-
-            // 黑名單
-            var blacklist = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            if (_cfg.Import?.BlacklistExts != null)
-            {
-                foreach (var e in _cfg.Import.BlacklistExts)
-                    blacklist.Add((e ?? string.Empty).Trim('.').ToLowerInvariant());
-            }
-
-            var validFiles = all.Where(p =>
-            {
-                var ext = Path.GetExtension(p).TrimStart('.').ToLowerInvariant();
-                return !blacklist.Contains(ext);
-            });
-
-            return await StageOnlyAsync(validFiles, project, ct);
-        }
-
-        // ────────────────────── ClassifyOnly（只分類不搬） ──────────────────────
-
-        /// <summary>
-        /// 只做分類與預估目的地（狀態改為 "preview"），不搬檔。
-        /// </summary>
-        public async Task<int> ClassifyOnlyAsync(IEnumerable<string> files, CancellationToken ct = default)
-        {
-            if (files == null) return 0;
-            int count = 0;
-
-            foreach (var f in files.Where(File.Exists))
-            {
-                ct.ThrowIfCancellationRequested();
-
-                var it = _db.TryGetByPath(f) ?? new Item
+                try
                 {
-                    SourcePath = f,
-                    FileName = Path.GetFileName(f),
-                    Ext = Path.GetExtension(f).TrimStart('.').ToLowerInvariant(),
-                    CreatedAt = DateTime.UtcNow
-                };
+                    string src = item.SourcePath;
+                    if (string.IsNullOrWhiteSpace(src) || !File.Exists(src))
+                    {
+                        item.Status = ItemStatus.Failed;
+                        continue;
+                    }
 
-                it.Status = "preview";
-                it.DestPath = _routing.PreviewDestPath(it.SourcePath, it.Project);
+                    // 目的路徑與資料夾
+                    string finalPath = item.ProposedPath;
+                    if (string.IsNullOrWhiteSpace(finalPath))
+                    {
+                        // 若沒有預先計算 ProposedPath，就用 RoutingService 再算一次
+                        finalPath = _routing.PreviewDestPath(src, null);
+                    }
 
-                await _db.UpsertAsync(it);
-                count++;
-            }
+                    string destDir = Path.GetDirectoryName(finalPath) ?? (cfg?.Routing?.RootDir ?? "");
+                    if (string.IsNullOrWhiteSpace(destDir))
+                    {
+                        item.Status = ItemStatus.Failed;
+                        continue;
+                    }
 
-            return count;
-        }
+                    Directory.CreateDirectory(destDir);
 
-        /// <summary>相容簽章：單一路徑（檔案或資料夾）</summary>
-        public Task<int> ClassifyOnlyAsync(string fileOrFolder, CancellationToken ct = default)
-        {
-            if (Directory.Exists(fileOrFolder))
-            {
-                var files = Directory.GetFiles(fileOrFolder, "*.*", SearchOption.AllDirectories);
-                return ClassifyOnlyAsync(files, ct);
-            }
-            return ClassifyOnlyAsync(new[] { fileOrFolder }, ct);
-        }
+                    // 目標檔名衝突處理
+                    finalPath = ResolveCollision(finalPath, runtimePolicy);
 
-        // ────────────────────── Commit（實際搬檔） ──────────────────────
+                    // 實際搬移或複製
+                    bool doOverwrite = string.Equals(runtimePolicy, "overwrite", StringComparison.OrdinalIgnoreCase);
 
-        /// <summary>
-        /// 新簽章（建議用）：明確指定 rootDir / hotFolder / policy。
-        /// 將狀態為 "inbox" 的項目實際搬檔，並依 OverwritePolicy 處理碰撞。
-        /// </summary>
-        public async Task<int> CommitPendingAsync(string rootDir, string hotFolder, OverwritePolicy policy, CancellationToken ct = default)
-        {
-            int moved = 0;
-            var pending = _db.QueryByStatus("inbox").ToList();
+                    if (string.Equals(moveMode, "move", StringComparison.OrdinalIgnoreCase))
+                    {
+                        // .NET 的 File.Move 沒有 overwrite 參數，若要覆蓋需先刪除
+                        if (doOverwrite && File.Exists(finalPath))
+                            File.Delete(finalPath);
 
-            foreach (var it in pending)
-            {
-                ct.ThrowIfCancellationRequested();
+                        File.Move(src, finalPath);
+                    }
+                    else
+                    {
+                        // copy
+                        File.Copy(src, finalPath, overwrite: doOverwrite);
+                    }
 
-                var src = it.SourcePath;
-                if (string.IsNullOrWhiteSpace(src) || !File.Exists(src)) continue;
-
-                var dest = _routing.BuildDestination(rootDir, it);
-                var destDir = Path.GetDirectoryName(dest) ?? string.Empty;
-                Directory.CreateDirectory(destDir);
-
-                var finalPath = ResolveCollision(dest, policy);
-                if (policy == OverwritePolicy.Skip && File.Exists(dest))
-                {
-                    // skip：標記略過
-                    it.Status = "skipped";
+                    item.Status = ItemStatus.Moved;
+                    item.DestPath = finalPath;
+                    success++;
                 }
-                else
+                catch (Exception ex)
                 {
-                    File.Copy(src, finalPath, overwrite: policy == OverwritePolicy.Replace);
-                    it.Status = "done";
-                    it.DestPath = finalPath;
-
-                    // 若你希望來源檔案也更新為新位置（視流程需求）
-                    it.SourcePath = finalPath;
+                    item.Status = ItemStatus.Failed;
+                    Console.WriteLine($"搬移失敗：{item?.FileName} -> {ex.Message}");
                 }
-
-                await _db.UpsertAsync(it);
-                moved++;
             }
 
-            return moved;
+            await _db.UpdateItemsAsync(items);
+            return success;
         }
 
         /// <summary>
-        /// 舊呼叫相容：使用 AppConfig 與（可選）覆寫策略覆蓋。
+        /// 根據字串策略處理目標檔案衝突。
+        /// policy: "overwrite" / "skip" / "rename"
         /// </summary>
-        public Task<int> CommitPendingAsync(AppConfig cfg, OverwritePolicy? overwritePolicyOverride = null, CancellationToken ct = default)
+        public static string ResolveCollision(string finalPath, string policy)
         {
-            var root = cfg.App?.RootDir ?? string.Empty;
-            var hot = cfg.Import?.HotFolderPath ?? string.Empty;
-            var policy = overwritePolicyOverride ?? cfg.Import?.OverwritePolicy ?? OverwritePolicy.Rename;
-            return CommitPendingAsync(root, hot, policy, ct);
+            try
+            {
+                if (!File.Exists(finalPath)) return finalPath;
+
+                var p = Normalize(policy) ?? "rename";
+
+                switch (p)
+                {
+                    case "skip":
+                        // 交由上層決定要不要真的跳過；這裡保留原檔名
+                        return finalPath;
+
+                    case "overwrite":
+                        // 讓上層以 overwrite 方式 Copy，或在 Move 前先刪除
+                        return finalPath;
+
+                    case "rename":
+                    default:
+                        string dir = Path.GetDirectoryName(finalPath) ?? "";
+                        string baseName = Path.GetFileNameWithoutExtension(finalPath);
+                        string ext = Path.GetExtension(finalPath);
+                        int counter = 1;
+                        string newName;
+                        do
+                        {
+                            newName = Path.Combine(dir, $"{baseName}_{counter}{ext}");
+                            counter++;
+                        } while (File.Exists(newName));
+                        return newName;
+                }
+            }
+            catch
+            {
+                return finalPath;
+            }
         }
 
-        // ────────────────────── Helpers ──────────────────────
-
-        private static string ResolveCollision(string destFullPath, OverwritePolicy policy)
+        /// <summary>
+        /// 取得指定資料夾下的所有合法檔案清單（排除黑名單副檔名）。
+        /// </summary>
+        public static IEnumerable<string> EnumerateFiles(string folder, bool includeSubdir, IEnumerable<string>? blacklistExts)
         {
-            if (policy == OverwritePolicy.Replace || policy == OverwritePolicy.Skip)
-                return destFullPath;
+            if (string.IsNullOrWhiteSpace(folder) || !Directory.Exists(folder))
+                return Enumerable.Empty<string>();
 
-            // Rename 策略：加 (1)(2)...
-            var dir = Path.GetDirectoryName(destFullPath) ?? string.Empty;
-            var name = Path.GetFileNameWithoutExtension(destFullPath);
-            var ext = Path.GetExtension(destFullPath);
+            var searchOption = includeSubdir ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
+            var files = Directory.EnumerateFiles(folder, "*", searchOption);
 
-            var i = 1;
-            var candidate = destFullPath;
-            while (File.Exists(candidate))
-                candidate = Path.Combine(dir, $"{name} ({i++}){ext}");
+            if (blacklistExts != null && blacklistExts.Any())
+            {
+                var bl = blacklistExts.Select(e => e.StartsWith(".") ? e.ToLowerInvariant() : "." + e.ToLowerInvariant())
+                                      .ToHashSet();
+                files = files.Where(f => !bl.Contains(Path.GetExtension(f).ToLowerInvariant()));
+            }
 
-            return candidate;
+            return files;
         }
+
+        private static string? Normalize(string? s)
+            => string.IsNullOrWhiteSpace(s) ? null : s.Trim().ToLowerInvariant();
     }
 }

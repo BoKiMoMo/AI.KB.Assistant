@@ -1,42 +1,24 @@
-﻿using AI.KB.Assistant.Models;
+﻿// DbServiceExtensions.cs
+// --------------------------------------
+// 此檔為 DbService 的擴充方法集。
+// 不可再定義名為 DbService 的類別，
+// 否則會與 Services/DbService.cs 衝突。
+// --------------------------------------
+
 using System;
-using System.Collections.Generic;
-using System.Linq;
 
 namespace AI.KB.Assistant.Services
 {
+    /// <summary>
+    /// DbService 的擴充方法集合。
+    /// 之後若有資料處理輔助邏輯，請以靜態擴充方法形式放這裡。
+    /// </summary>
     public static class DbServiceExtensions
     {
-        public static void Upsert(this DbService db, Item item)
-            => db.UpsertAsync(item).GetAwaiter().GetResult();
+        // 範例：
+        // public static string Sanitize(this string input)
+        //     => input.Replace("'", "''");
 
-        public static bool QueryByPath(this DbService db, string path, out Item? item)
-        {
-            item = db.TryGetByPathAsync(path).GetAwaiter().GetResult();
-            return item != null;
-        }
-
-        public static Item? QueryByPath(this DbService db, string path)
-            => db.TryGetByPathAsync(path).GetAwaiter().GetResult();
-
-        // ★ Item.CreatedTs 是 long（ticks）
-        public static List<Item> QuerySince(this DbService db, DateTime since)
-        {
-            long ticks = since.Ticks;
-            return db.QueryAllAsync().GetAwaiter().GetResult()
-                     .Where(x => x.CreatedTs >= ticks).ToList();
-        }
-
-        public static List<Item> QueryByStatus(this DbService db, string status)
-        {
-            status ??= string.Empty;
-            var all = db.QueryAllAsync().GetAwaiter().GetResult();
-            return all.Where(x =>
-                string.Equals(x.Project ?? "", status, StringComparison.OrdinalIgnoreCase) ||
-                (x.Tags ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries)
-                               .Select(t => t.Trim())
-                               .Any(t => string.Equals(t, status, StringComparison.OrdinalIgnoreCase))
-            ).ToList();
-        }
+        // 預設保持空白，避免命名衝突。
     }
 }
