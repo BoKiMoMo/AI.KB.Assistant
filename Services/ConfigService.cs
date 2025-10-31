@@ -10,6 +10,9 @@ namespace AI.KB.Assistant.Services
     /// <summary>統一管理 config.json 載入/儲存。</summary>
     public static class ConfigService
     {
+        // 設定變更事件：任何 Load()/Save() 成功後都會廣播目前設定
+        public static event EventHandler<AppConfig>? ConfigChanged;
+
         // A/B 優先 A：exe 同層；失敗回退到 B：%AppData%\AI.KB.Assistant\
         private static string ResolveConfigPath()
         {
@@ -33,7 +36,7 @@ namespace AI.KB.Assistant.Services
 
         private static string _cfgPath = ResolveConfigPath();
 
-        /// <summary>從磁碟讀取 config.json 並套用到 <see cref="Cfg"/>。</summary>
+        /// <summary>從磁碟讀取 config.json 並套用到 <see cref="Cfg"/>，完成後觸發 ConfigChanged。</summary>
         public static void Load()
         {
             try
@@ -44,7 +47,7 @@ namespace AI.KB.Assistant.Services
                 {
                     // 第一次沒有檔案就建立預設
                     Cfg = AppConfig.Default;
-                    Save();
+                    Save(); // Save 內會廣播
                     return;
                 }
 
@@ -63,15 +66,19 @@ namespace AI.KB.Assistant.Services
 
                 AppConfig.ReplaceCurrent(loaded);
                 Cfg = AppConfig.Current;
+
+                // 廣播：已載入
+                ConfigChanged?.Invoke(null, Cfg);
             }
             catch
             {
                 // 讀檔失敗則回預設避免整個 app 掛掉
                 Cfg = AppConfig.Default;
+                ConfigChanged?.Invoke(null, Cfg);
             }
         }
 
-        /// <summary>把目前 <see cref="Cfg"/> 寫回磁碟。</summary>
+        /// <summary>把目前 <see cref="Cfg"/> 寫回磁碟，完成後觸發 ConfigChanged。</summary>
         public static void Save()
         {
             Directory.CreateDirectory(Path.GetDirectoryName(_cfgPath)!);
@@ -84,6 +91,9 @@ namespace AI.KB.Assistant.Services
 
             var json = JsonSerializer.Serialize(norm, JsonOpts);
             File.WriteAllText(_cfgPath, json);
+
+            // 廣播：已儲存
+            ConfigChanged?.Invoke(null, Cfg);
         }
     }
 }

@@ -44,6 +44,8 @@
             <Separator/>
             <Button Style="{StaticResource ToolbarBtn}" Content="⟨ 左側" Click="BtnEdgeLeft_Click"/>
             <Button Style="{StaticResource ToolbarBtn}" Content="右側 ⟩" Click="BtnEdgeRight_Click"/>
+            <Button Style="{StaticResource ToolbarBtn}" Content="設定" Click="BtnOpenSettings_Click"/>
+
         </ToolBar>
 
         <!-- 頂部路徑列：四顆固定路徑籤 + 專案鎖定 + 左樹過濾 -->
