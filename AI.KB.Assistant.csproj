@@ -10,31 +10,7 @@
 	</PropertyGroup>
 
 	<ItemGroup>
-	  <Compile Remove="Helpers\**" />
-	  <EmbeddedResource Remove="Helpers\**" />
-	  <None Remove="Helpers\**" />
-	  <Page Remove="Helpers\**" />
-	</ItemGroup>
-
-	<ItemGroup>
-		<Compile Remove="Models\ActionBatch.cs" />
-		<Compile Remove="Models\ClassificationResult.cs" />
-		<Compile Remove="Models\Enums.cs" />
-		<Compile Remove="Models\OpenAIConfig.cs" />
-		<Compile Remove="Models\PathNode.cs" />
-		<Compile Remove="Models\ThemeColors.cs" />
-		<Compile Remove="Services\ClassifierService.cs" />
-		<Compile Remove="Services\EmbeddingService.cs" />
-		<Compile Remove="Views\HelpWindow.xaml.cs" />
-		<Compile Remove="Views\MainWindow.Events.cs" />
-	</ItemGroup>
-
-	<ItemGroup>
 		<None Remove="config.json" />
-	</ItemGroup>
-
-	<ItemGroup>
-	  <Page Remove="Views\HelpWindow.xaml" />
 	</ItemGroup>
 
 	<ItemGroup>

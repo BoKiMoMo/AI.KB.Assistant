@@ -1,70 +1,38 @@
-﻿using System;
-using System.IO;
-using System.Threading;
+﻿using System.Collections.Generic;
 using System.Threading.Tasks;
 using AI.KB.Assistant.Models;
 
 namespace AI.KB.Assistant.Services
 {
     /// <summary>
-    /// 熱資料夾監聽（可選）。目前不再依賴 AppConfig.Import.EnableHotFolder，
-    /// 一律以外部呼叫 Start/Stop 控制，避免舊屬性造成編譯錯誤。
+    /// HotFolder 相關處理。此版本只提供最小可編譯骨架，
+    /// 主要目的為對齊 DbService 的簽名，避免參數不符錯誤。
     /// </summary>
-    public sealed class HotFolderService : IDisposable
+    public class HotFolderService
     {
-        private readonly IntakeService _intake;
-        private readonly AppConfig _cfg;
-        private FileSystemWatcher? _fw;
+        private readonly DbService _db;
 
-        public HotFolderService(IntakeService intake, AppConfig cfg)
+        public HotFolderService(DbService db)
         {
-            _intake = intake;
-            _cfg = cfg;
+            _db = db;
         }
 
-        public void Start()
+        /// <summary>
+        /// 將項目標記到指定階段（僅寫入資料層，不做實體檔案搬移）。
+        /// 對齊 DbService.StageOnlyAsync(items, stage) 簽名。
+        /// </summary>
+        public Task<int> StageOnlyAsync(IEnumerable<Item> items, int stage)
         {
-            Stop();
-            var hot = _cfg.Import?.HotFolderPath;
-            if (string.IsNullOrWhiteSpace(hot) || !Directory.Exists(hot)) return;
-
-            _fw = new FileSystemWatcher(hot)
-            {
-                IncludeSubdirectories = false,
-                NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite | NotifyFilters.CreationTime
-            };
-            _fw.Created += OnCreated;
-            _fw.Renamed += OnCreated;
-            _fw.EnableRaisingEvents = true;
+            return _db.StageOnlyAsync(items, stage);
         }
 
-        public void Stop()
+        /// <summary>
+        /// 便捷單筆入口（舊碼相容）。
+        /// </summary>
+        public Task<int> StageOnlyAsync(Item item, int stage)
         {
-            try
-            {
-                if (_fw != null)
-                {
-                    _fw.EnableRaisingEvents = false;
-                    _fw.Created -= OnCreated;
-                    _fw.Renamed -= OnCreated;
-                    _fw.Dispose();
-                }
-            }
-            finally { _fw = null; }
+            var list = new List<Item> { item };
+            return _db.StageOnlyAsync(list, stage);
         }
-
-        private async void OnCreated(object sender, FileSystemEventArgs e)
-        {
-            // 等檔案寫入完成（簡單延遲）
-            await Task.Delay(300);
-            try
-            {
-                if (File.Exists(e.FullPath))
-                    await _intake.StageOnlyAsync(e.FullPath, CancellationToken.None);
-            }
-            catch { /* 忽略單檔錯誤 */ }
-        }
-
-        public void Dispose() => Stop();
     }
 }

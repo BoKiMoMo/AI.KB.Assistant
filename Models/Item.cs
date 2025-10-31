@@ -1,58 +1,61 @@
-﻿// Item.cs
-// --------------------------------------
-// 定義資料項目結構（不再使用 partial）。
-// 與 DbService / IntakeService / RoutingService
-// 皆為同一結構基礎物件。
-// --------------------------------------
-
-using System;
+﻿using System;
+using System.Collections.Generic;
 using System.IO;
 
 namespace AI.KB.Assistant.Models
 {
-    /// <summary>
-    /// 基礎檔案項目模型，用於檔案分類、搬移與紀錄。
-    /// </summary>
-    public partial class Item
+    public class Item
     {
-        /// <summary>唯一識別碼。</summary>
-        public long Id { get; set; }
+        public string Id { get; set; } = Guid.NewGuid().ToString("N");
 
-        /// <summary>檔名（含副檔名）。</summary>
-        public string Filename { get; set; } = string.Empty;
-
-        /// <summary>副檔名（不含.）。</summary>
-        public string Ext { get; set; } = string.Empty;
-
-        /// <summary>來源所在資料夾路徑。</summary>
+        /// <summary>完整來源路徑（單一路徑）。</summary>
         public string Path { get; set; } = string.Empty;
 
-        /// <summary>目的地資料夾路徑。</summary>
-        public string DestPath { get; set; } = string.Empty;
+        /// <summary>預測或建議路徑（分類預覽使用）。</summary>
+        public string ProposedPath { get; set; } = string.Empty;
 
-        /// <summary>所屬專案名稱。</summary>
-        public string Project { get; set; } = string.Empty;
+        /// <summary>相容舊代碼：等同於 Path。</summary>
+        public string SourcePath => Path;
 
-        /// <summary>標籤（以逗號分隔）。</summary>
-        public string Tags { get; set; } = string.Empty;
+        /// <summary>檔名（不含路徑）。</summary>
+        public string FileName
+        {
+            get => System.IO.Path.GetFileName(Path) ?? string.Empty;
+            set
+            {
+                if (string.IsNullOrWhiteSpace(Path)) return;
+                var dir = System.IO.Path.GetDirectoryName(Path) ?? string.Empty;
+                Path = System.IO.Path.Combine(dir, value);
+            }
+        }
 
-        /// <summary>建立時間戳。</summary>
-        public DateTime CreatedTs { get; set; }
+        /// <summary>副檔名（不含點）。</summary>
+        public string Ext
+        {
+            get => System.IO.Path.GetExtension(Path)?.TrimStart('.') ?? string.Empty;
+            set
+            {
+                if (string.IsNullOrWhiteSpace(Path)) return;
+                var newExt = string.IsNullOrWhiteSpace(value)
+                    ? string.Empty
+                    : (value.StartsWith(".") ? value : "." + value);
+                Path = System.IO.Path.ChangeExtension(Path, newExt);
+            }
+        }
 
-        /// <summary>分類或處理狀態。</summary>
-        public string Status { get; set; } = string.Empty;
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
-        /// <summary>完整來源路徑。</summary>
-        public string SourcePath => System.IO.Path.Combine(Path ?? string.Empty, Filename ?? string.Empty);
+        /// <summary>語意標籤。</summary>
+        public List<string> Tags { get; set; } = new();
 
-        /// <summary>
-        /// 複製基礎資訊（淺複製）。
-        /// </summary>
-        public Item Clone() => (Item)this.MemberwiseClone();
+        /// <summary>分類狀態或分類階段。</summary>
+        public string? Status { get; set; }
 
-        /// <summary>
-        /// 取得項目的顯示名稱。
-        /// </summary>
-        public override string ToString() => $"{Filename} ({Status})";
+        /// <summary>隸屬專案（用於分類依據）。</summary>
+        public string? Project { get; set; }
+
+        /// <summary>備註或系統註解。</summary>
+        public string? Note { get; set; }
     }
 }

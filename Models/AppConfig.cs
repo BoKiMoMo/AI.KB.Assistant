@@ -1,71 +1,181 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.IO;
-using AI.KB.Assistant.Services;
+using System.Linq;
+using System.Text.Json;
 
 namespace AI.KB.Assistant.Models
 {
-    // 統一入口：維持 Current / Load / Save 與各區段結構
+    /// <summary>
+    /// 全域設定檔 (A 模式：config.json 與 .exe 同資料夾)
+    /// </summary>
     public sealed class AppConfig
     {
-        public static AppConfig Current { get; private set; } = Default();
+        // === 全域靜態屬性 ===
+        public static AppConfig Current { get; private set; } = Default;
+        public static AppConfig Default => CreateDefault();
+        public static string ConfigPath => Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "config.json");
 
+        // === 區段設定 ===
         public AppSection App { get; set; } = new();
+        public DbSection Db { get; set; } = new();
         public RoutingSection Routing { get; set; } = new();
         public ImportSection Import { get; set; } = new();
-        public DbSection Db { get; set; } = new();
         public OpenAISection OpenAI { get; set; } = new();
 
-        // 舊程式會呼叫：AppConfig.Default()
-        public static AppConfig Default() => new AppConfig
-        {
-            App = new AppSection { StartupUIMode = "home" },
-            Routing = new RoutingSection
-            {
-                RootDir = "",
-                UseProject = true,
-                UseYear = true,
-                UseMonth = true,
-                Threshold = 0.75,
-                AutoFolderName = "_auto",
-                LowConfidenceFolderName = "_low_conf"
-            },
-            Import = new ImportSection
-            {
-                IncludeSubdir = true,
-                HotFolder = "",
-                OverwritePolicy = OverwritePolicy.KeepBoth,
-                EnableHotFolder = false
-            },
-            Db = new DbSection
-            {
-                DbPath = Path.Combine(AppContext.BaseDirectory, "ai_kb.db")
-            },
-            OpenAI = new OpenAISection { ApiKey = "" }
-        };
+        #region === 載入 / 儲存 ===
 
-        public static void Load()
+        public static AppConfig CreateDefault()
         {
-            // 以 ConfigService 為唯一儲存點（你專案已經有）
-            var cfg = ConfigService.TryLoad<AppConfig>("app_config");
-            Current = cfg ?? Default();
+            return new AppConfig
+            {
+                App = new AppSection
+                {
+                    StartupUIMode = "home",
+                    RootDir = ""
+                },
+                Db = new DbSection
+                {
+                    DbPath = Path.Combine(AppContext.BaseDirectory, "ai_kb.db")
+                },
+                Routing = new RoutingSection
+                {
+                    RootDir = "",
+                    UseProject = true,
+                    UseYear = true,
+                    UseMonth = true,
+                    Threshold = 0.75,
+                    AutoFolderName = "_auto",
+                    LowConfidenceFolderName = "_low_conf",
+                    UseType = "rule+llm",
+                    BlacklistExts = new List<string>(),
+                    BlacklistFolderNames = new List<string>()
+                },
+                Import = new ImportSection
+                {
+                    IncludeSubdir = true,
+                    HotFolder = "",
+                    EnableHotFolder = false,
+                    OverwritePolicy = OverwritePolicy.KeepBoth,
+                    MoveMode = "copy"
+                },
+                OpenAI = new OpenAISection
+                {
+                    ApiKey = "",
+                    Model = "gpt-4o-mini"
+                }
+            };
         }
 
-        public static void Save() => ConfigService.Save("app_config", Current);
+        public static AppConfig Load(string? path = null)
+        {
+            var p = string.IsNullOrWhiteSpace(path) ? ConfigPath : path!;
+            if (!File.Exists(p))
+            {
+                Current = Default;
+                Save(p);
+                return Current;
+            }
 
-        // 舊程式會呼叫：ConfigService.Save(cfg)；這裡保留一個簡易代理，避免外部改動太多
+            try
+            {
+                var json = File.ReadAllText(p);
+                var cfg = JsonSerializer.Deserialize<AppConfig>(json, new JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true
+                });
+                Current = cfg ?? Default;
+            }
+            catch
+            {
+                Current = Default;
+            }
+            return Current;
+        }
+
+        public static void Save(string? path = null)
+        {
+            var p = string.IsNullOrWhiteSpace(path) ? ConfigPath : path!;
+            var dir = Path.GetDirectoryName(p);
+            if (!string.IsNullOrWhiteSpace(dir) && !Directory.Exists(dir))
+                Directory.CreateDirectory(dir);
+
+            var json = JsonSerializer.Serialize(Current, new JsonSerializerOptions { WriteIndented = true });
+            File.WriteAllText(p, json);
+        }
+
+        /// <summary>將目前設定直接寫入 config.json。</summary>
         public void SaveAsCurrent()
         {
             Current = this;
             Save();
         }
+
+        /// <summary>以新設定替換目前實例（不自動儲存）。</summary>
+        public static void ReplaceCurrent(AppConfig cfg)
+        {
+            if (cfg != null)
+                Current = cfg;
+        }
+
+        /// <summary>建立淺拷貝副本（避免 UI 改動直接影響記憶體內設定）。</summary>
+        public AppConfig Clone()
+        {
+            return new AppConfig
+            {
+                App = new AppSection
+                {
+                    StartupUIMode = App.StartupUIMode,
+                    RootDir = App.RootDir
+                },
+                Db = new DbSection
+                {
+                    DbPath = Db.DbPath
+                },
+                Routing = new RoutingSection
+                {
+                    RootDir = Routing.RootDir,
+                    UseProject = Routing.UseProject,
+                    UseYear = Routing.UseYear,
+                    UseMonth = Routing.UseMonth,
+                    Threshold = Routing.Threshold,
+                    AutoFolderName = Routing.AutoFolderName,
+                    LowConfidenceFolderName = Routing.LowConfidenceFolderName,
+                    UseType = Routing.UseType,
+                    BlacklistExts = Routing.BlacklistExts?.ToList() ?? new List<string>(),
+                    BlacklistFolderNames = Routing.BlacklistFolderNames?.ToList() ?? new List<string>()
+                },
+                Import = new ImportSection
+                {
+                    IncludeSubdir = Import.IncludeSubdir,
+                    HotFolder = Import.HotFolder,
+                    EnableHotFolder = Import.EnableHotFolder,
+                    OverwritePolicy = Import.OverwritePolicy,
+                    MoveMode = Import.MoveMode
+                },
+                OpenAI = new OpenAISection
+                {
+                    ApiKey = OpenAI.ApiKey,
+                    Model = OpenAI.Model
+                }
+            };
+        }
+
+        #endregion
     }
 
-    // ===== 區段結構（維持舊呼叫介面） =====
+    // === 子區段定義 ===
 
     public sealed class AppSection
     {
-        // 舊程式在 AppSection 要的屬性
         public string StartupUIMode { get; set; } = "home";
+        public string RootDir { get; set; } = "";
+    }
+
+    public sealed class DbSection
+    {
+        public string DbPath { get; set; } = "";
+        public string Path { get => DbPath; set => DbPath = value; } // 相容舊名
     }
 
     public sealed class RoutingSection
@@ -74,34 +184,27 @@ namespace AI.KB.Assistant.Models
         public bool UseProject { get; set; } = true;
         public bool UseYear { get; set; } = true;
         public bool UseMonth { get; set; } = true;
-
-        // 舊碼會取/設 double 門檻
         public double Threshold { get; set; } = 0.75;
-
-        // 舊碼用來放低信心或自動分類資料夾名稱
         public string LowConfidenceFolderName { get; set; } = "_low_conf";
         public string AutoFolderName { get; set; } = "_auto";
+        public string UseType { get; set; } = "rule+llm";
+        public List<string> BlacklistExts { get; set; } = new();
+        public List<string> BlacklistFolderNames { get; set; } = new();
     }
 
     public sealed class ImportSection
     {
         public bool IncludeSubdir { get; set; } = true;
         public string HotFolder { get; set; } = "";
+        public string HotFolderPath { get => HotFolder; set => HotFolder = value; } // 相容舊名
         public bool EnableHotFolder { get; set; } = false;
-
-        // 舊碼需要覆蓋策略
         public OverwritePolicy OverwritePolicy { get; set; } = OverwritePolicy.KeepBoth;
-    }
-
-    public sealed class DbSection
-    {
-        // 舊碼會叫 DbSection.DbPath
-        public string DbPath { get; set; } = "";
+        public string MoveMode { get; set; } = "copy"; // 舊版本相容
     }
 
     public sealed class OpenAISection
     {
-        // 舊碼會透過 SettingsWindow 寫入/讀取
         public string ApiKey { get; set; } = "";
+        public string Model { get; set; } = "gpt-4o-mini";
     }
 }

@@ -1,66 +1,89 @@
 using System;
+using System.IO;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using AI.KB.Assistant.Common;  // ← ToSafeList() 擴充
 using AI.KB.Assistant.Models;
 
 namespace AI.KB.Assistant.Services
 {
-    /// <summary>
-    /// 設定服務封裝：
-    /// - 統一入口存取 AppConfig（AppConfig.Current）
-    /// - 提供 Load/Save 與簡易 Get/Set 輔助
-    /// - 相容舊專案對 ConfigService 的呼叫型式
-    /// </summary>
+    /// <summary>統一管理 config.json 載入/儲存。</summary>
     public static class ConfigService
     {
-        /// <summary>
-        /// 目前設定（等同 AppConfig.Current）
-        /// </summary>
-        public static AppConfig App => AppConfig.Current;
+        // A/B 優先 A：exe 同層；失敗回退到 B：%AppData%\AI.KB.Assistant\
+        private static string ResolveConfigPath()
+        {
+            var exeDir = AppDomain.CurrentDomain.BaseDirectory ?? "";
+            var aPath = Path.Combine(exeDir, "config.json");
+            if (File.Exists(aPath)) return aPath;
 
-        /// <summary>
-        /// 載入設定（若檔案不存在會建立預設並儲存）
-        /// </summary>
-        public static void Load(string? path = null) => AppConfig.Load(path);
+            var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+            var bDir = Path.Combine(appData, "AI.KB.Assistant");
+            Directory.CreateDirectory(bDir);
+            return Path.Combine(bDir, "config.json");
+        }
 
-        /// <summary>
-        /// 儲存設定至檔案
-        /// </summary>
-        public static void Save(string? path = null) => AppConfig.Save(path);
+        private static readonly JsonSerializerOptions JsonOpts = new()
+        {
+            WriteIndented = true,
+            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+        };
 
-        /// <summary>
-        /// 相容舊呼叫：TryLoad(out cfg, path)
-        /// </summary>
-        public static void TryLoad(out AppConfig cfg, string? path = null)
+        public static AppConfig Cfg { get; private set; } = AppConfig.Default;
+
+        private static string _cfgPath = ResolveConfigPath();
+
+        /// <summary>從磁碟讀取 config.json 並套用到 <see cref="Cfg"/>。</summary>
+        public static void Load()
         {
             try
             {
-                AppConfig.Load(path);
-                cfg = AppConfig.Current;
+                _cfgPath = ResolveConfigPath();
+
+                if (!File.Exists(_cfgPath))
+                {
+                    // 第一次沒有檔案就建立預設
+                    Cfg = AppConfig.Default;
+                    Save();
+                    return;
+                }
+
+                var json = File.ReadAllText(_cfgPath);
+                var loaded = JsonSerializer.Deserialize<AppConfig>(json, JsonOpts) ?? AppConfig.Default;
+
+                // 基本防禦 & 正規化
+                loaded.App.RootDir ??= "";
+                loaded.Db.Path ??= "";
+                loaded.Import.HotFolderPath ??= "";
+                loaded.Routing.UseType ??= "rule+llm";
+                loaded.Routing.LowConfidenceFolderName ??= "_low_conf";
+                loaded.Routing.BlacklistExts = loaded.Routing.BlacklistExts.ToSafeList();
+                loaded.Routing.BlacklistFolderNames = loaded.Routing.BlacklistFolderNames.ToSafeList();
+                if (loaded.Routing.Threshold <= 0) loaded.Routing.Threshold = 0.75;
+
+                AppConfig.ReplaceCurrent(loaded);
+                Cfg = AppConfig.Current;
             }
             catch
             {
-                // 發生例外時回預設並覆寫
-                AppConfig.Load(path);
-                cfg = AppConfig.Current;
+                // 讀檔失敗則回預設避免整個 app 掛掉
+                Cfg = AppConfig.Default;
             }
         }
 
-        /// <summary>
-        /// 讀取（便利方法）：selector(AppConfig.Current)
-        /// </summary>
-        public static T Get<T>(Func<AppConfig, T> selector) => selector(App);
-
-        /// <summary>
-        /// 寫入（便利方法）：mutator(AppConfig.Current)；預設會自動 Save
-        /// </summary>
-        public static void Set(Action<AppConfig> mutator, bool save = true)
+        /// <summary>把目前 <see cref="Cfg"/> 寫回磁碟。</summary>
+        public static void Save()
         {
-            mutator(App);
-            if (save) Save();
-        }
+            Directory.CreateDirectory(Path.GetDirectoryName(_cfgPath)!);
 
-        /// <summary>
-        /// 目前使用中的設定檔路徑（轉拋 AppConfig.ConfigPath）
-        /// </summary>
-        public static string ConfigPath => AppConfig.ConfigPath;
+            // 儲存前做一次正規化（避免寫出空白/重複）
+            var norm = Cfg.Clone();
+            norm.Routing.BlacklistExts = norm.Routing.BlacklistExts.ToSafeList();
+            norm.Routing.BlacklistFolderNames = norm.Routing.BlacklistFolderNames.ToSafeList();
+            if (norm.Routing.Threshold <= 0) norm.Routing.Threshold = 0.75;
+
+            var json = JsonSerializer.Serialize(norm, JsonOpts);
+            File.WriteAllText(_cfgPath, json);
+        }
     }
 }

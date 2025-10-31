@@ -1,4 +1,5 @@
 ﻿using System.IO;
+using AI.KB.Assistant.Common;
 using AI.KB.Assistant.Models;
 
 namespace AI.KB.Assistant.Services
