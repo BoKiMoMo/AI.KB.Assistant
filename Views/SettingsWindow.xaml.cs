@@ -408,8 +408,16 @@ namespace AI.KB.Assistant.Views
         }
 
         // === 新增：顯示↔token 轉換 ===
-        private static string ToDisplay(string token)
-            => TokenToDisplay.TryGetValue((token ?? "").Trim().ToLowerInvariant(), out var disp) ? disp : token;
+        private static string ToDisplay(string? token)
+        {
+            if (string.IsNullOrWhiteSpace(token))
+                return string.Empty;
+
+            token = token.Trim().ToLowerInvariant();
+            return TokenToDisplay.TryGetValue(token, out var disp)
+                ? disp ?? token
+                : token;
+        }
 
         private static string FromDisplay(string display)
         {
