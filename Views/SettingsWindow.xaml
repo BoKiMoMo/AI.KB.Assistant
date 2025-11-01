@@ -1,278 +1,264 @@
 ﻿<Window x:Class="AI.KB.Assistant.Views.SettingsWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="設定 - AI.KB Assistant"
-        Height="720" Width="980"
-        WindowStartupLocation="CenterOwner"
-        Background="{DynamicResource App.BackgroundBrush}"
-        Foreground="{DynamicResource App.TextBrush}">
+        Title="設定 - AI.KB Assistant" Width="1000" Height="740"
+        WindowStartupLocation="CenterOwner" ResizeMode="CanResize">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
 
-    <!-- ===== Styles ===== -->
-    <Window.Resources>
-        <!-- 卡片樣式 -->
-        <Style x:Key="Card" TargetType="GroupBox">
-            <Setter Property="Margin" Value="0,0,0,12"/>
-            <Setter Property="Padding" Value="12"/>
-            <Setter Property="Background" Value="{DynamicResource App.PanelBrush}"/>
-            <Setter Property="BorderBrush" Value="{DynamicResource App.BorderBrush}"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="GroupBox">
-                        <DockPanel>
-                            <Border DockPanel.Dock="Top"
-                                    Background="{DynamicResource App.PanelBrush}"
-                                    BorderBrush="{DynamicResource App.BorderBrush}"
-                                    BorderThickness="0,0,0,1"
-                                    Padding="8,6">
-                                <ContentPresenter ContentSource="Header"
-                                                  RecognizesAccessKey="True"
-                                                  Margin="0"
-                                                  />
-                            </Border>
-                            <Border Background="{TemplateBinding Background}"
-                                    BorderBrush="{TemplateBinding BorderBrush}"
-                                    BorderThickness="0">
-                                <ContentPresenter Margin="0"/>
-                            </Border>
-                        </DockPanel>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
+        <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto">
+            <StackPanel Margin="16" Orientation="Vertical">
 
-        <!-- 標籤欄寬 -->
-        <Style x:Key="FormLabel" TargetType="TextBlock">
-            <Setter Property="VerticalAlignment" Value="Center"/>
-            <Setter Property="Margin" Value="0,0,8,0"/>
-            <Setter Property="Width" Value="160"/>
-        </Style>
+                <!-- 路徑設定 -->
+                <GroupBox Header="路徑設定">
+                    <Grid Margin="10">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="180"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="110"/>
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="10"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="10"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
 
-        <!-- 輸入框 -->
-        <Style x:Key="FormInput" TargetType="Control">
-            <Setter Property="MinWidth" Value="280"/>
-        </Style>
+                        <TextBlock Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" Text="Root 目錄"/>
+                        <TextBox   x:Name="TbRootDir" Grid.Row="0" Grid.Column="1" Margin="8,0"/>
+                        <Button    Grid.Row="0" Grid.Column="2" Content="瀏覽…" Click="BtnBrowseRoot_Click"/>
+                        <TextBlock Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
+                       Text="系統的主要資料根目錄；檔案會依照路徑規則搬入此資料夾。"/>
 
-        <Style x:Key="TightButton" TargetType="Button">
-            <Setter Property="Margin" Value="8,0,0,0"/>
-            <Setter Property="Padding" Value="10,6"/>
-            <Setter Property="BorderBrush" Value="{DynamicResource App.BorderBrush}"/>
-            <Setter Property="Background" Value="{DynamicResource App.PanelBrush}"/>
-        </Style>
-    </Window.Resources>
+                        <TextBlock Grid.Row="3" Grid.Column="0" VerticalAlignment="Center" Text="收件夾 (HotFolder)"/>
+                        <TextBox   x:Name="TbHotFolder" Grid.Row="3" Grid.Column="1" Margin="8,0"/>
+                        <Button    Grid.Row="3" Grid.Column="2" Content="瀏覽…" Click="BtnBrowseHot_Click"/>
+                        <TextBlock Grid.Row="4" Grid.Column="1" Grid.ColumnSpan="2" Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
+                       Text="檔案先投入此資料夾；啟用監控時會自動匯入並依規則/AI 分類。"/>
 
-    <DockPanel>
-        <!-- Header -->
-        <Border DockPanel.Dock="Top"
-                Background="{DynamicResource App.PanelBrush}"
-                BorderBrush="{DynamicResource App.BorderBrush}"
-                BorderThickness="0,0,0,1">
-            <Grid Margin="12">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
-                <TextBlock Text="應用程式設定"
-                           FontSize="18" FontWeight="Bold"
-                           VerticalAlignment="Center"/>
-                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                    <Button x:Name="BtnReload" Content="重新載入"
-                            Click="BtnReload_Click" Style="{StaticResource TightButton}"/>
-                    <Button x:Name="BtnCancel" Content="取消"
-                            Click="BtnCancel_Click" Style="{StaticResource TightButton}"/>
-                    <Button x:Name="BtnSave" Content="儲存"
-                            Click="BtnSave_Click" Style="{StaticResource TightButton}"/>
-                </StackPanel>
-            </Grid>
-        </Border>
-
-        <!-- Content -->
-        <ScrollViewer VerticalScrollBarVisibility="Auto">
-            <StackPanel Margin="12" >
-
-                <!-- 1. 路徑設定 -->
-                <GroupBox Header="路徑設定" Style="{StaticResource Card}">
-                    <StackPanel>
-                        <Grid Margin="0,0,0,8">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="170"/>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Text="Root 目的地" Style="{StaticResource FormLabel}"/>
-                            <TextBox x:Name="TbRootDir" Grid.Column="1" MinWidth="420"/>
-                            <Button x:Name="BtnBrowseRoot" Grid.Column="2" Content="瀏覽..."
-                                    Click="BtnBrowseRoot_Click" Style="{StaticResource TightButton}"/>
-                        </Grid>
-
-                        <Grid Margin="0,0,0,8">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="170"/>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Text="收件夾 (HotFolder)" Style="{StaticResource FormLabel}"/>
-                            <TextBox x:Name="TbHotFolder" Grid.Column="1" MinWidth="420"/>
-                            <Button x:Name="BtnBrowseHot" Grid.Column="2" Content="瀏覽..."
-                                    Click="BtnBrowseHot_Click" Style="{StaticResource TightButton}"/>
-                        </Grid>
-
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="170"/>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Text="資料庫 (SQLite)" Style="{StaticResource FormLabel}"/>
-                            <TextBox x:Name="TbDbPath" Grid.Column="1" MinWidth="420"/>
-                            <Button x:Name="BtnBrowseDb" Grid.Column="2" Content="選擇檔案..."
-                                    Click="BtnBrowseDb_Click" Style="{StaticResource TightButton}"/>
-                        </Grid>
-                    </StackPanel>
+                        <TextBlock Grid.Row="6" Grid.Column="0" VerticalAlignment="Center" Text="SQLite 資料庫"/>
+                        <TextBox   x:Name="TbDbPath" Grid.Row="6" Grid.Column="1" Margin="8,0"/>
+                        <Button    Grid.Row="6" Grid.Column="2" Content="選擇檔案…" Click="BtnBrowseDb_Click"/>
+                        <TextBlock Grid.Row="7" Grid.Column="1" Grid.ColumnSpan="2" Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
+                       Text="系統使用的本機輕量級資料庫（.db/.sqlite）；若留空會自動建立於預設路徑。"/>
+                    </Grid>
                 </GroupBox>
 
-                <!-- 2. 匯入策略 -->
-                <GroupBox Header="匯入策略" Style="{StaticResource Card}">
-                    <StackPanel>
-                        <Grid Margin="0,0,0,8">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="170"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Text="包含子資料夾" Style="{StaticResource FormLabel}"/>
-                            <CheckBox x:Name="CbIncludeSubdir" Grid.Column="1" VerticalAlignment="Center" Content="啟用"/>
-                        </Grid>
+                <!-- 匯入與監控 -->
+                <GroupBox Header="匯入與監控 (Import &amp; Monitoring)" Margin="0,12,0,0">
+                    <Grid Margin="10">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="180"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="110"/>
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="10"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="10"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="10"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
 
-                        <Grid Margin="0,0,0,8">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="170"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Text="啟用 HotFolder 監聽" Style="{StaticResource FormLabel}"/>
-                            <CheckBox x:Name="CbEnableHotFolder" Grid.Column="1" VerticalAlignment="Center" Content="啟用"/>
-                        </Grid>
+                        <TextBlock Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" Text="包含子資料夾"/>
+                        <CheckBox  x:Name="CbIncludeSubdir" Grid.Row="0" Grid.Column="1" Content="啟用"/>
+                        <TextBlock Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
+                       Text="勾選後，從 Root/HotFolder 匯入時會一併掃描所有子資料夾。"/>
 
-                        <Grid Margin="0,0,0,8">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="170"/>
-                                <ColumnDefinition Width="220"/>
-                                <ColumnDefinition Width="170"/>
-                                <ColumnDefinition Width="220"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Text="加入方式" Style="{StaticResource FormLabel}"/>
-                            <ComboBox x:Name="CbMoveMode" Grid.Column="1">
-                                <ComboBoxItem Content="只入庫 (StageOnly)"/>
-                                <ComboBoxItem Content="複製 (Copy)"/>
-                                <ComboBoxItem Content="移動 (Move)"/>
-                            </ComboBox>
+                        <TextBlock Grid.Row="3" Grid.Column="0" VerticalAlignment="Center" Text="啟用收件夾即時監控"/>
+                        <CheckBox  x:Name="CbEnableHotFolder" Grid.Row="3" Grid.Column="1" Content="啟用"/>
+                        <TextBlock Grid.Row="4" Grid.Column="1" Grid.ColumnSpan="2" Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
+                       Text="勾選後，檔案放入收件夾即自動觸發匯入（FileSystemWatcher）。"/>
 
-                            <TextBlock Grid.Column="2" Text="檔名衝突策略" Style="{StaticResource FormLabel}"/>
-                            <ComboBox x:Name="CbOverwrite" Grid.Column="3">
-                                <ComboBoxItem Content="略過 (Skip)"/>
-                                <ComboBoxItem Content="覆蓋 (Replace)"/>
-                                <ComboBoxItem Content="改名 (Rename)"/>
-                            </ComboBox>
-                        </Grid>
+                        <TextBlock Grid.Row="6" Grid.Column="0" VerticalAlignment="Center" Text="加入方式 (MoveMode)"/>
+                        <ComboBox  x:Name="CbMoveMode" Grid.Row="6" Grid.Column="1" Margin="8,0,0,0"
+                       SelectedValuePath="Tag" IsEditable="False" SelectedValue="copy">
+                            <ComboBoxItem Tag="copy"  Content="copy / 複製檔案 (Copy files)"/>
+                            <ComboBoxItem Tag="move"  Content="move / 搬移檔案 (Move files)"/>
+                            <ComboBoxItem Tag="link"  Content="link / 建立捷徑 (Create link)"/>
+                        </ComboBox>
+                        <TextBlock Grid.Row="7" Grid.Column="1" Grid.ColumnSpan="2" Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
+                       Text="選擇匯入時的檔案處理：複製/搬移/捷徑。"/>
 
-                        <Grid Margin="0,0,0,8">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="170"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Text="黑名單副檔名（, 分隔）" Style="{StaticResource FormLabel}"/>
-                            <TextBox x:Name="TbBlacklistExts" Grid.Column="1" AcceptsReturn="True" Height="64" TextWrapping="Wrap"/>
-                        </Grid>
-
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="170"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Text="黑名單資料夾（, 分隔）" Style="{StaticResource FormLabel}"/>
-                            <TextBox x:Name="TbBlacklistFolders" Grid.Column="1" AcceptsReturn="True" Height="64" TextWrapping="Wrap"/>
-                        </Grid>
-                    </StackPanel>
+                        <TextBlock Grid.Row="9" Grid.Column="0" VerticalAlignment="Center" Text="覆寫策略 (OverwritePolicy)"/>
+                        <ComboBox  x:Name="CbOverwrite" Grid.Row="9" Grid.Column="1" Margin="8,0,0,0"
+                       SelectedValuePath="Tag" IsEditable="False" SelectedValue="Rename">
+                            <ComboBoxItem Tag="KeepBoth" Content="KeepBoth / 保留兩份"/>
+                            <ComboBoxItem Tag="Rename"   Content="Rename / 自動重新命名"/>
+                            <ComboBoxItem Tag="Replace"  Content="Replace / 直接覆蓋"/>
+                        </ComboBox>
+                        <TextBlock Grid.Row="10" Grid.Column="1" Grid.ColumnSpan="2" Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
+                       Text="搬檔遇到同名檔案時的處理方式，建議先用 Rename 或 KeepBoth，避免覆蓋重要檔案。"/>
+                    </Grid>
                 </GroupBox>
 
-                <!-- 3. 路徑邏輯 -->
-                <GroupBox Header="路徑邏輯" Style="{StaticResource Card}">
-                    <StackPanel>
-                        <Grid Margin="0,0,0,8">
+                <!-- 黑名單 -->
+                <GroupBox Header="黑名單" Margin="0,12,0,0">
+                    <Grid Margin="10">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="180"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="110"/>
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="10"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <TextBlock Grid.Row="0" Grid.Column="0" VerticalAlignment="Top" Text="副檔名黑名單（以 , 或 ; 分隔）"/>
+                        <TextBox   x:Name="TbBlacklistExts" Grid.Row="0" Grid.Column="1" Margin="8,0,0,0"/>
+                        <TextBlock Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
+                       Text="不處理的副檔名，例如：tmp, log, bak。"/>
+
+                        <TextBlock Grid.Row="3" Grid.Column="0" VerticalAlignment="Top" Text="資料夾名稱黑名單（以 , 或 ; 分隔）"/>
+                        <TextBox   x:Name="TbBlacklistFolders" Grid.Row="3" Grid.Column="1" Margin="8,0,0,0"/>
+                        <TextBlock Grid.Row="4" Grid.Column="1" Grid.ColumnSpan="2" Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
+                       Text="不處理的資料夾名稱，例如：_auto、_cache。"/>
+                    </Grid>
+                </GroupBox>
+
+                <!-- 路徑邏輯 -->
+                <GroupBox Header="路徑邏輯" Margin="0,12,0,0">
+                    <Grid Margin="10">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="180"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="110"/>
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <!-- 勾選層級 -->
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="10"/>
+                            <!-- 層級順序 -->
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="10"/>
+                            <!-- UseType -->
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="10"/>
+                            <!-- LowConf -->
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="10"/>
+                            <!-- Threshold -->
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <!-- 勾選層級（含類別） -->
+                        <TextBlock Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" Text="路徑層級"/>
+                        <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal">
+                            <CheckBox x:Name="CbUseYear"      Content="年份層"   Margin="0,0,16,0"/>
+                            <CheckBox x:Name="CbUseMonth"     Content="月份層"   Margin="0,0,16,0"/>
+                            <CheckBox x:Name="CbUseProject"   Content="專案層"   Margin="0,0,16,0"/>
+                            <CheckBox x:Name="CbUseCategory"  Content="類別層"/>
+                        </StackPanel>
+                        <TextBlock Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
+                       Text="勾選的層級才會生效；下方可調整實際資料夾排列順序。"/>
+
+                        <!-- 層級順序（ListBox + 上下移） -->
+                        <TextBlock Grid.Row="3" Grid.Column="0" VerticalAlignment="Top" Text="層級順序（上/下移）"/>
+                        <Grid Grid.Row="3" Grid.Column="1" Margin="8,0,0,0">
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="170"/>
-                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <TextBlock Text="路徑層級" Style="{StaticResource FormLabel}"/>
-                            <StackPanel Grid.Column="1" Orientation="Horizontal" >
-                                <CheckBox x:Name="CbUseYear" Content="年份層" Margin="0,0,12,0"/>
-                                <CheckBox x:Name="CbUseMonth" Content="月份層" Margin="0,0,12,0"/>
-                                <CheckBox x:Name="CbUseProject" Content="專案層" Margin="0,0,12,0"/>
-                                <CheckBox x:Name="CbUseType" Content="類型層"/>
+                            <ListBox x:Name="LbFolderOrder" Grid.Column="0" Height="140"/>
+                            <StackPanel Grid.Column="1" Margin="8,0,0,0">
+                                <Button x:Name="BtnOrderUp"   Content="▲ 上移" Margin="0,0,0,6" Click="BtnOrderUp_Click"/>
+                                <Button x:Name="BtnOrderDown" Content="▼ 下移" Click="BtnOrderDown_Click"/>
                             </StackPanel>
                         </Grid>
+                        <TextBlock Grid.Row="4" Grid.Column="1" Grid.ColumnSpan="2" Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
+                       Text="可用代號：year / month / project / category。未勾選的層級即使在清單中也會被忽略。"/>
 
-                        <Grid Margin="0,0,0,8">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="170"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Text="自動整理資料夾名稱" Style="{StaticResource FormLabel}"/>
-                            <TextBox x:Name="TbAutoFolder" Grid.Column="1"/>
-                        </Grid>
+                        <!-- UseType -->
+                        <TextBlock Grid.Row="6" Grid.Column="0" VerticalAlignment="Center" Text="使用類型 (UseType)"/>
+                        <ComboBox  x:Name="CbUseType" Grid.Row="6" Grid.Column="1" Margin="8,0,0,0"
+                       SelectedValuePath="Tag" IsEditable="False" SelectedValue="rule+llm">
+                            <ComboBoxItem Tag="rule"     Content="rule / 只用規則"/>
+                            <ComboBoxItem Tag="llm"      Content="llm / 只用 AI"/>
+                            <ComboBoxItem Tag="rule+llm" Content="rule+llm / 規則優先＋AI 補強"/>
+                        </ComboBox>
+                        <TextBlock Grid.Row="7" Grid.Column="1" Grid.ColumnSpan="2" Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
+                       Text="分類策略：優先規則（關鍵字/黑名單/路徑邏輯），不足時再詢問 AI 建議。"/>
 
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="170"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Text="低信心資料夾名稱" Style="{StaticResource FormLabel}"/>
-                            <TextBox x:Name="TbLowConfidence" Grid.Column="1"/>
-                        </Grid>
-                    </StackPanel>
+                        <!-- 信心不足資料夾 -->
+                        <TextBlock Grid.Row="9" Grid.Column="0" VerticalAlignment="Center" Text="信心不足資料夾名稱"/>
+                        <TextBox   x:Name="TbLowConfidence" Grid.Row="9" Grid.Column="1" Margin="8,0,0,0"/>
+                        <TextBlock Grid.Row="10" Grid.Column="1" Grid.ColumnSpan="2" Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
+                       Text="AI 或規則無法自動決定時，暫存到此資料夾待人工分類（建議：_pending）。"/>
+
+                        <!-- 門檻 -->
+                        <TextBlock Grid.Row="12" Grid.Column="0" VerticalAlignment="Center" Text="分類信心門檻"/>
+                        <StackPanel Grid.Row="12" Grid.Column="1" Orientation="Horizontal" Margin="8,0,0,0">
+                            <Slider x:Name="SlThreshold" Minimum="0" Maximum="1" Width="240" TickFrequency="0.05" IsSnapToTickEnabled="True"/>
+                            <TextBox x:Name="TbThreshold" Width="64" Margin="8,0,0,0" HorizontalContentAlignment="Center"/>
+                            <TextBlock Margin="8,0,0,0" VerticalAlignment="Center" Text="0.00 ~ 1.00"/>
+                        </StackPanel>
+                        <TextBlock Grid.Row="13" Grid.Column="1" Grid.ColumnSpan="2" Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
+                       Text="當信心分數低於此值時，改送往『信心不足資料夾』；建議 0.60～0.85。"/>
+                    </Grid>
                 </GroupBox>
 
-                <!-- 4. AI 參數 -->
-                <GroupBox Header="AI 參數" Style="{StaticResource Card}">
-                    <StackPanel>
-                        <Grid Margin="0,0,0,8">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="170"/>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="60"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Text="分類信心門檻" Style="{StaticResource FormLabel}"/>
-                            <Slider x:Name="SlThreshold" Grid.Column="1" Minimum="0" Maximum="1" TickFrequency="0.05" IsSnapToTickEnabled="True"/>
-                            <TextBlock Grid.Column="2" VerticalAlignment="Center" Text="{Binding ElementName=SlThreshold, Path=Value, StringFormat={}{0:0.00}}"/>
-                        </Grid>
+                <!-- AI 參數 -->
+                <GroupBox Header="AI 參數" Margin="0,12,0,72">
+                    <Grid Margin="10">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="180"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="110"/>
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="10"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
 
-                        <Grid Margin="0,0,0,8">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="170"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Text="OpenAI API Key" Style="{StaticResource FormLabel}"/>
-                            <PasswordBox x:Name="TbApiKey" Grid.Column="1"/>
-                        </Grid>
+                        <TextBlock Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" Text="OpenAI API Key"/>
+                        <PasswordBox x:Name="TbApiKey" Grid.Row="0" Grid.Column="1" Margin="8,0,0,0"/>
+                        <TextBlock Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
+                       Text="僅在需要 LLM 輔助分類/標籤/摘要時使用；不填寫則僅使用規則模式。"/>
 
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="170"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Text="Model" Style="{StaticResource FormLabel}"/>
-                            <TextBox x:Name="TbModel" Grid.Column="1" Text="gpt-4o-mini"/>
-                        </Grid>
-                    </StackPanel>
+                        <TextBlock Grid.Row="3" Grid.Column="0" VerticalAlignment="Center" Text="Model"/>
+                        <TextBox   x:Name="TbModel" Grid.Row="3" Grid.Column="1" Margin="8,0,0,0"/>
+                        <TextBlock Grid.Row="4" Grid.Column="1" Grid.ColumnSpan="2" Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
+                       Text="模型名稱，如 gpt-4o-mini、gpt-4.1 等；留空採預設。"/>
+                    </Grid>
                 </GroupBox>
 
-                <!-- 底部提示 -->
-                <Border Background="{DynamicResource App.BannerInfoBrush}"
-                        BorderBrush="{DynamicResource App.BorderBrush}"
-                        BorderThickness="1" Padding="10">
-                    <TextBlock Text="提示：儲存後將立即套用，部分設定需回到主畫面重新整理生效。"
-                               TextWrapping="Wrap"/>
-                </Border>
             </StackPanel>
         </ScrollViewer>
-    </DockPanel>
+
+        <!-- 置底按鈕列 -->
+        <Border Grid.Row="1" Background="{DynamicResource {x:Static SystemColors.ControlBrushKey}}" Padding="8,10">
+            <DockPanel LastChildFill="False">
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                    <Button x:Name="BtnReload" Content="重新載入" Margin="0,0,8,0" Click="BtnReload_Click"/>
+                    <Button x:Name="BtnCancel" Content="取消"     Margin="0,0,8,0" Click="BtnCancel_Click"/>
+                    <Button x:Name="BtnSave"   Content="儲存"     IsDefault="True" Click="BtnSave_Click"/>
+                </StackPanel>
+            </DockPanel>
+        </Border>
+    </Grid>
 </Window>

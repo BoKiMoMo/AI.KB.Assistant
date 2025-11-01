@@ -1,66 +1,89 @@
 ﻿using System;
+using System.Diagnostics;
 using System.IO;
 using System.Threading.Tasks;
 using System.Windows;
-using AI.KB.Assistant.Models;
 using AI.KB.Assistant.Services;
 using AI.KB.Assistant.Views;
 
 namespace AI.KB.Assistant
 {
-    /// <summary>
-    /// 相容舊版：啟動模式（僅用於 App 啟動判斷）
-    /// </summary>
-    public enum StartupMode
-    {
-        Detailed,
-        Simple
-    }
-
     public partial class App : Application
     {
+        private DbService? _db;
+        private IntakeService? _intake;
+        private RoutingService? _router;
+        private LlmService? _llm;
+
         protected override async void OnStartup(StartupEventArgs e)
         {
             base.OnStartup(e);
 
-            // 1️⃣ 載入設定（新版統一用 AppConfig.Load）
-            AppConfig.Load();
-            // 若存在 config.json 則讀取，不存在會自動建立預設。
+            try
+            {
+                ConfigService.Load();
+                Log("✅ 設定載入成功。");
 
-            // 2️⃣ 初始化核心服務
-            var db = new DbService();
-            await db.InitializeAsync(); // SQLite 或 JSONL 自動建檔
+                await RebuildServicesAsync();
 
-            var intake = new IntakeService(db);
-            var router = new RoutingService(AppConfig.Current);
-            var llm = new LlmService(AppConfig.Current);
+                ConfigService.ConfigChanged += async (_, __) =>
+                {
+                    try { Log("🔁 Config 變更 → 重建服務…"); await RebuildServicesAsync(); Log("✅ 服務重建完成。"); }
+                    catch (Exception ex) { MessageBox.Show($"重新初始化服務失敗：{ex.Message}", "AI.KB Assistant"); }
+                };
 
-            // 3️⃣ 將服務註冊到全域資源，可供 MainWindow 直接取用
-            Resources["Db"] = db;
-            Resources["Intake"] = intake;
-            Resources["Router"] = router;
-            Resources["Llm"] = llm;
+                new MainWindow().Show();
+                Log("🚀 應用程式啟動完成。");
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"啟動時發生錯誤：{ex.Message}", "AI.KB Assistant");
+                Shutdown(-1);
+            }
+        }
 
-            // 4️⃣ 若有主題系統，可在此即時套用（保留你的註解）
-            // ThemeService.Apply(AppConfig.Current);
-            // ThemeService.ApplyAccent("#3B82F6");
+        private async Task RebuildServicesAsync()
+        {
+            try
+            {
+                try { _db?.Dispose(); } catch { }
+                _db = null; _intake = null; _router = null; _llm = null;
 
-            // 5️⃣ 依啟動模式決定進入畫面
-            var modeText = (AppConfig.Current.App?.StartupUIMode ?? "Detailed").Trim();
-            if (!Enum.TryParse<StartupMode>(modeText, true, out var mode))
-                mode = StartupMode.Detailed;
+                var cfg = ConfigService.Cfg;
 
-            // 6️⃣ 啟動主畫面
-            var main = new MainWindow();
-            main.Show();
+                // DB 路徑保底
+                var appData = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "AI.KB.Assistant");
+                Directory.CreateDirectory(appData);
+                if (string.IsNullOrWhiteSpace(cfg.Db.Path) && string.IsNullOrWhiteSpace(cfg.Db.DbPath))
+                {
+                    var def = Path.Combine(appData, "ai_kb.db");
+                    cfg.Db.Path = def;
+                    cfg.Db.DbPath = def;
+                    ConfigService.Save(); // 記住一次
+                }
 
-            // ✅ TODO: 若要在啟動時自動匯入 HotFolder，可在此加入：
-            // var hot = AppConfig.Current.Import?.HotFolder;
-            // if (!string.IsNullOrWhiteSpace(hot) && Directory.Exists(hot))
-            // {
-            //     var files = Directory.GetFiles(hot);
-            //     await intake.IntakeFilesAsync(files);
-            // }
+                _db = new DbService();
+                await _db.InitializeAsync();
+
+                _intake = new IntakeService(_db);
+                _router = new RoutingService(cfg);
+                _llm = new LlmService(cfg);
+
+                Resources["Db"] = _db;
+                Resources["Intake"] = _intake;
+                Resources["Router"] = _router;
+                Resources["Llm"] = _llm;
+
+                Log($"🧩 服務就緒：DB={cfg.Db.Path}  Root={cfg.App.RootDir}  Hot={cfg.Import.HotFolderPath}");
+            }
+            catch (Exception ex) { MessageBox.Show($"初始化服務時發生錯誤：{ex.Message}", "AI.KB Assistant"); }
+        }
+
+        private static void Log(string msg)
+        {
+            var line = $"[{DateTime.Now:HH:mm:ss}] {msg}";
+            Debug.WriteLine(line);
+            Console.WriteLine(line);
         }
     }
 }

@@ -4,6 +4,10 @@ using System.IO;
 
 namespace AI.KB.Assistant.Models
 {
+    /// <summary>
+    /// 匯入/分類/搬檔流程中的檔案項目。
+    /// 與 RoutingService 對齊：新增 Category / Timestamp 兩個屬性。
+    /// </summary>
     public class Item
     {
         public string Id { get; set; } = Guid.NewGuid().ToString("N");
@@ -11,7 +15,7 @@ namespace AI.KB.Assistant.Models
         /// <summary>完整來源路徑（單一路徑）。</summary>
         public string Path { get; set; } = string.Empty;
 
-        /// <summary>預測或建議路徑（分類預覽使用）。</summary>
+        /// <summary>預測或建議路徑（分類預覽或搬檔結果使用）。</summary>
         public string ProposedPath { get; set; } = string.Empty;
 
         /// <summary>相容舊代碼：等同於 Path。</summary>
@@ -43,7 +47,10 @@ namespace AI.KB.Assistant.Models
             }
         }
 
+        /// <summary>建立時間（預設 UTC Now）。</summary>
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+        /// <summary>更新時間（預設 UTC Now）。</summary>
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
         /// <summary>語意標籤。</summary>
@@ -52,8 +59,25 @@ namespace AI.KB.Assistant.Models
         /// <summary>分類狀態或分類階段。</summary>
         public string? Status { get; set; }
 
-        /// <summary>隸屬專案（用於分類依據）。</summary>
+        /// <summary>隸屬專案（用於路徑層級 Project）。</summary>
         public string? Project { get; set; }
+
+        /// <summary>
+        /// 類別（用於路徑層級 Category；可由規則/AI/人工指定）。
+        /// </summary>
+        public string? Category { get; set; }
+
+        private DateTime? _timestamp;
+
+        /// <summary>
+        /// 內容/檔案代表性時間（Routing 用於 Year/Month）。
+        /// 若未設定，會以 <see cref="CreatedAt"/> 作為 fallback。
+        /// </summary>
+        public DateTime? Timestamp
+        {
+            get => _timestamp ?? CreatedAt;
+            set => _timestamp = value;
+        }
 
         /// <summary>備註或系統註解。</summary>
         public string? Note { get; set; }

@@ -44,12 +44,14 @@ namespace AI.KB.Assistant.Models
                     UseProject = true,
                     UseYear = true,
                     UseMonth = true,
+                    UseCategory = false,               // NEW: 類別層預設關閉
                     Threshold = 0.75,
                     AutoFolderName = "_auto",
                     LowConfidenceFolderName = "_low_conf",
                     UseType = "rule+llm",
                     BlacklistExts = new List<string>(),
-                    BlacklistFolderNames = new List<string>()
+                    BlacklistFolderNames = new List<string>(),
+                    FolderOrder = null                 // NEW: null 代表使用預設順序
                 },
                 Import = new ImportSection
                 {
@@ -138,12 +140,14 @@ namespace AI.KB.Assistant.Models
                     UseProject = Routing.UseProject,
                     UseYear = Routing.UseYear,
                     UseMonth = Routing.UseMonth,
+                    UseCategory = Routing.UseCategory,                          // NEW
                     Threshold = Routing.Threshold,
                     AutoFolderName = Routing.AutoFolderName,
                     LowConfidenceFolderName = Routing.LowConfidenceFolderName,
                     UseType = Routing.UseType,
                     BlacklistExts = Routing.BlacklistExts?.ToList() ?? new List<string>(),
-                    BlacklistFolderNames = Routing.BlacklistFolderNames?.ToList() ?? new List<string>()
+                    BlacklistFolderNames = Routing.BlacklistFolderNames?.ToList() ?? new List<string>(),
+                    FolderOrder = Routing.FolderOrder?.ToList()                 // NEW
                 },
                 Import = new ImportSection
                 {
@@ -184,12 +188,19 @@ namespace AI.KB.Assistant.Models
         public bool UseProject { get; set; } = true;
         public bool UseYear { get; set; } = true;
         public bool UseMonth { get; set; } = true;
+
+        // NEW: 勾選才啟用類別層
+        public bool UseCategory { get; set; } = false;
+
         public double Threshold { get; set; } = 0.75;
         public string LowConfidenceFolderName { get; set; } = "_low_conf";
         public string AutoFolderName { get; set; } = "_auto";
         public string UseType { get; set; } = "rule+llm";
         public List<string> BlacklistExts { get; set; } = new();
         public List<string> BlacklistFolderNames { get; set; } = new();
+
+        // NEW: 可自訂層級順序（token：year, month, project, category）
+        public List<string>? FolderOrder { get; set; } = null;
     }
 
     public sealed class ImportSection

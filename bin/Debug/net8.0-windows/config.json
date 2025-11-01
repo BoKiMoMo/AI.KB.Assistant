@@ -1,0 +1,55 @@
+{
+	"app": {
+		"dbPath": "data.db",
+		"rootDir": "",
+		"projectLock": "",
+		"theme": "Light"
+	},
+	"openAI": {
+		"apiKey": "",
+		"baseUrl": "",
+		"model": "gpt-4o-mini",
+		"enableWhenLowConfidence": false
+	},
+	"import": {
+		"autoOnDrop": true,
+		"includeSubdirectories": true,
+		"hotFolderPath": "",
+		"enableHotFolder": false,
+		"blacklistFolderNames": [ "_DoNotMove", "_blacklist" ],
+		"blacklistExts": [ "tmp", "bak", "dmg", "iso" ],
+		"moveMode": "copy",
+		"overwritePolicy": "rename"
+	},
+	"routing": {
+		"useYear": true,
+		"useMonth": true,
+		"useType": true,
+		"useProject": true,
+		"autoFolderName": "自整理",
+		"extensionGroups": {
+			"Images": [ "png", "jpg", "jpeg", "gif", "bmp", "tiff", "heic", "webp", "avif", "raw", "cr2", "nef", "dng" ],
+			"Vector": [ "ai", "eps", "svg", "pdf" ],
+			"Design": [ "psd", "psb", "xd", "fig", "sketch", "ind", "indd", "idml", "afphoto", "afdesign" ],
+			"Documents": [ "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "odt", "ods", "odp", "rtf", "txt", "md" ],
+			"Videos": [ "mp4", "mov", "avi", "mkv", "webm", "m4v", "wmv", "flv", "mpg", "mpeg", "3gp", "prores" ],
+			"Audio": [ "mp3", "wav", "aac", "m4a", "flac", "ogg", "wma", "aiff", "opus" ],
+			"Projects": [ "prproj", "aep", "aepx", "mogrt", "drp", "drproj", "veg", "imovieproj", "resolve" ],
+			"Subtitles": [ "srt", "ass", "vtt", "sub" ],
+			"3DModels": [ "obj", "fbx", "blend", "stl", "dae", "3ds", "max", "c4d", "glb", "gltf" ],
+			"Fonts": [ "ttf", "otf", "woff", "woff2", "eot", "font" ],
+			"Data": [ "csv", "json", "xml", "yaml", "yml", "parquet", "feather", "npy", "h5", "sav", "mat", "db", "sqlite", "sql", "xmind" ],
+			"BuildFiles": [ "dockerfile", "makefile", "gradle", "cmake", "sln", "csproj", "vcxproj", "xcodeproj", "pbxproj" ],
+			"Package": [ "npmrc", "package.json", "package-lock.json", "yarn.lock", "pnpm-lock.yaml", "requirements.txt", "pipfile", "poetry.lock", "gemfile", "go.mod", "go.sum" ],
+			"Code": [ "cs", "py", "js", "ts", "jsx", "tsx", "vue", "java", "kt", "go", "rs", "cpp", "c", "h", "swift", "php", "rb", "dart", "r", "lua", "pl", "sh", "ps1", "bat", "cmd", "html", "css", "scss", "toml", "ini", "jsonc" ],
+			"Config": [ "env", "config", "cfg", "ini", "toml", "jsonc", "yml", "yaml", "xml", "plist" ],
+			"Archives": [ "zip", "rar", "7z", "tar", "gz", "bz2" ],
+			"Executables": [ "exe", "dll", "app", "pkg", "deb", "rpm", "bin", "run" ],
+			"Notes": [ "md", "markdown", "txt" ],
+			"Others": [ "log", "old", "unknown" ]
+		}
+	},
+	"classification": {
+		"confidenceThreshold": 0.65
+	}
+}

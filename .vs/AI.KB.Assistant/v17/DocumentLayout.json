@@ -1,7 +1,12 @@
 {
   "Version": 1,
-  "WorkspaceRootPath": "D:\\GIT-DEMO\\AI.KB.Assistant\\",
-  "Documents": [],
+  "WorkspaceRootPath": "F:\\C\u002B\u002B \u00D7 \u6280\u8853\u82F1\u6587\u990A\u6210\u8A08\u756B\\AI.KB.Assistant\\",
+  "Documents": [
+    {
+      "AbsoluteMoniker": "D:0:0:{CC8DE200-3788-4DD6-B449-A2021897A0E8}|AI.KB.Assistant.csproj|f:\\c\u002B\u002B \u00D7 \u6280\u8853\u82F1\u6587\u990A\u6210\u8A08\u756B\\ai.kb.assistant\\views\\mainwindow.xaml||{F11ACC28-31D1-4C80-A34B-F4E09D3D753C}",
+      "RelativeMoniker": "D:0:0:{CC8DE200-3788-4DD6-B449-A2021897A0E8}|AI.KB.Assistant.csproj|solutionrelative:views\\mainwindow.xaml||{F11ACC28-31D1-4C80-A34B-F4E09D3D753C}"
+    }
+  ],
   "DocumentGroupContainers": [
     {
       "Orientation": 0,
@@ -9,7 +14,7 @@
       "DocumentGroups": [
         {
           "DockedWidth": 200,
-          "SelectedChildIndex": -1,
+          "SelectedChildIndex": 3,
           "Children": [
             {
               "$type": "Bookmark",
@@ -22,6 +27,18 @@
             {
               "$type": "Bookmark",
               "Name": "ST:0:0:{1c4feeaa-4718-4aa9-859d-94ce25d182ba}"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 0,
+              "Title": "MainWindow.xaml",
+              "DocumentMoniker": "F:\\C\u002B\u002B \u00D7 \u6280\u8853\u82F1\u6587\u990A\u6210\u8A08\u756B\\AI.KB.Assistant\\Views\\MainWindow.xaml",
+              "RelativeDocumentMoniker": "Views\\MainWindow.xaml",
+              "ToolTip": "F:\\C\u002B\u002B \u00D7 \u6280\u8853\u82F1\u6587\u990A\u6210\u8A08\u756B\\AI.KB.Assistant\\Views\\MainWindow.xaml",
+              "RelativeToolTip": "Views\\MainWindow.xaml",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.003549|",
+              "WhenOpened": "2025-11-01T11:46:20.784Z",
+              "EditorCaption": ""
             }
           ]
         }
