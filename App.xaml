@@ -1,8 +1,15 @@
 ﻿<Application x:Class="AI.KB.Assistant.App"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             ShutdownMode="OnMainWindowClose">
 
-    <!-- 不設定 StartupUri；啟動流程在 App.xaml.cs 裡控制 -->
+    <!-- 
+      V7.3 修正：
+      移除了 StartupUri="Views/MainWindow.xaml"，
+      改由 App.xaml.cs 的 OnStartup 事件手動啟動主視窗 (MainWindow)，
+      以確保所有服務 (DbService, ConfigService...) 都在視窗開啟前被註冊。
+    -->
+
     <Application.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>

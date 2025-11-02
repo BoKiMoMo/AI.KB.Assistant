@@ -85,15 +85,24 @@ namespace AI.KB.Assistant.Services
         // ========== Provider Factory ==========
         private static IDbProvider? TryCreateSqlite(string dbPath)
         {
+            // --- 防止 Null 或空字串導致參數警告與例外 ---
+            if (string.IsNullOrWhiteSpace(dbPath))
+                return null;
+
             try
             {
+                // 嘗試載入 Microsoft.Data.Sqlite 組件
                 var asm = AppDomain.CurrentDomain.Load("Microsoft.Data.Sqlite");
                 var connType = asm.GetType("Microsoft.Data.Sqlite.SqliteConnection", throwOnError: true)!;
+
+                // 正規化路徑（避免多餘空白或尾斜線）
+                dbPath = dbPath.Trim();
                 return new SqliteProvider(connType, dbPath);
             }
             catch
             {
-                return null; // 無套件或載入失敗 → 回退 JSONL
+                // 無套件或載入失敗 → 回退 JSONL
+                return null;
             }
         }
 

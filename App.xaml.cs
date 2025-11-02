@@ -1,163 +1,108 @@
 ﻿using System;
-using System.Diagnostics;
 using System.IO;
-using System.Threading.Tasks;
+using System.Threading;
 using System.Windows;
-using System.Windows.Threading;
-using AI.KB.Assistant.Services;
-using AI.KB.Assistant.Views;
+using AI.KB.Assistant.Models;
+using AI.KB.Assistant.Services; // 引用 Services
+using AI.KB.Assistant.Views;    // 引用 Views
 
 namespace AI.KB.Assistant
 {
     public partial class App : Application
     {
-        private DbService? _db;
-        private IntakeService? _intake;
-        private RoutingService? _router;
-        private LlmService? _llm;
+        private const string MutexName = "AI.KB.Assistant.Singleton.Mutex";
+        private Mutex? _mutex;
 
-        protected override async void OnStartup(StartupEventArgs e)
+        protected override void OnStartup(StartupEventArgs e)
         {
-            base.OnStartup(e);
+            // 1. 單實例防重入
+            bool createdNew;
+            _mutex = new Mutex(initiallyOwned: true, name: MutexName, createdNew: out createdNew);
 
-            // --- 確保 Theme.xaml（淺色主題）已載入 ---
-            // TODO: 之後若要支援主題切換，可把此段抽成 ThemeService 並監聽設定改變
-            TryEnsureTheme();
+            if (!createdNew)
+            {
+                MessageBox.Show("AI.KB Assistant 已在背景執行中。", "提示",
+                    MessageBoxButton.OK, MessageBoxImage.Information);
+                Shutdown(0);
+                return;
+            }
 
-            // 全域例外（避免不友善崩潰）
-            this.DispatcherUnhandledException += App_DispatcherUnhandledException;
+            // 2. 全域例外護欄
+            SetupExceptionHandling();
 
+            // ==================== V7.3 修正：服務註冊核心邏輯 ====================
             try
             {
+                // 優先載入設定檔
                 ConfigService.Load();
-                Log("✅ 設定載入成功。");
+                var cfg = ConfigService.Cfg;
 
-                await RebuildServicesAsync(); // 初始化 Db/Intake/Router/Llm
+                // 依序建立服務實例
+                var dbService = new DbService();
+                var routingService = new RoutingService(cfg);
+                var llmService = new LlmService(cfg);
+                var intakeService = new IntakeService(dbService);
+                var hotFolderService = new HotFolderService(dbService);
 
-                // 設定異動 → 安全重建服務
-                ConfigService.ConfigChanged += async (_, __) =>
-                {
-                    try
-                    {
-                        Log("🔁 Config 變更 → 重建服務…");
-                        await RebuildServicesAsync();
-                        Log("✅ 服務重建完成。");
-                    }
-                    catch (Exception ex)
-                    {
-                        MessageBox.Show($"重新初始化服務失敗：{ex.Message}", "AI.KB Assistant");
-                    }
-                };
-
-                new MainWindow().Show();
-                Log("🚀 應用程式啟動完成。");
+                // 將服務註冊到全域資源字典，供 MainWindow 等地方取用
+                Resources.Add("Db", dbService);
+                Resources.Add("Router", routingService);
+                Resources.Add("Llm", llmService);
+                Resources.Add("Intake", intakeService);
+                Resources.Add("HotFolder", hotFolderService);
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"啟動時發生錯誤：{ex.Message}", "AI.KB Assistant");
-                Shutdown(-1);
+                LogCrash("ServiceInitialization", ex);
+                MessageBox.Show($"服務初始化失敗: {ex.Message}", "嚴重錯誤", MessageBoxButton.OK, MessageBoxImage.Error);
+                Shutdown(1);
+                return;
             }
+            // =================================================================
+
+            // 3. 服務都緒後，手動建立並顯示主視窗 (App.xaml 已移除 StartupUri)
+            var mainWindow = new MainWindow();
+            this.MainWindow = mainWindow;
+            mainWindow.Show();
+
+            base.OnStartup(e);
+        }
+
+        private void SetupExceptionHandling()
+        {
+            this.DispatcherUnhandledException += (s, ev) =>
+            {
+                try { LogCrash("DispatcherUnhandledException", ev.Exception); } catch { }
+                MessageBox.Show(ev.Exception.Message, "未處理例外", MessageBoxButton.OK, MessageBoxImage.Error);
+                ev.Handled = true;
+            };
+
+            AppDomain.CurrentDomain.UnhandledException += (s, ev) =>
+            {
+                try { LogCrash("AppDomain.UnhandledException", ev.ExceptionObject as Exception); } catch { }
+            };
         }
 
         protected override void OnExit(ExitEventArgs e)
         {
-            // TODO: 若後續加上 HotFolder 監聽，這裡記得解除監聽
-            try { _llm = null; } catch { }
-            try { _router = null; } catch { }
-            try { _intake = null; } catch { }
-            try { _db?.Dispose(); } catch { }
+            try { _mutex?.ReleaseMutex(); } catch { }
+            _mutex?.Dispose();
+            _mutex = null;
             base.OnExit(e);
         }
 
-        private void App_DispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)
+        private static void LogCrash(string tag, Exception? ex)
         {
-            // TODO: 導入統一 LogService 後改為寫檔
-            MessageBox.Show(e.Exception.Message, "未處理的錯誤");
-            e.Handled = true;
-        }
-
-        /// <summary>
-        /// 依目前設定重建所有服務，並注入至 Application.Resources。
-        /// </summary>
-        private async Task RebuildServicesAsync()
-        {
-            try
-            {
-                // 先釋放舊的（避免把檔案握住）
-                try { _db?.Dispose(); } catch { }
-                _db = null; _intake = null; _router = null; _llm = null;
-
-                var cfg = ConfigService.Cfg;
-
-                // DB 路徑保底（使用 %AppData%\AI.KB.Assistant\ai_kb.db）
-                var appData = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                    "AI.KB.Assistant");
-                Directory.CreateDirectory(appData);
-
-                if (string.IsNullOrWhiteSpace(cfg.Db.Path) && string.IsNullOrWhiteSpace(cfg.Db.DbPath))
-                {
-                    var def = Path.Combine(appData, "ai_kb.db");
-                    cfg.Db.Path = def;
-                    cfg.Db.DbPath = def;
-                    ConfigService.Save(); // 記住一次
-                }
-
-                // 建立服務
-                _db = new DbService();
-                await _db.InitializeAsync(); // SQLite 初始化
-
-                _intake = new IntakeService(_db);
-                _router = new RoutingService(cfg);
-                _llm = new LlmService(cfg); // V7.5 再實做 AI 能力
-
-                // 注入全域
-                Resources["Db"] = _db;
-                Resources["Intake"] = _intake;
-                Resources["Router"] = _router;
-                Resources["Llm"] = _llm;
-
-                Log($"🧩 服務就緒：DB={cfg.Db.Path ?? cfg.Db.DbPath}  Root={cfg.App.RootDir}  Hot={cfg.Import.HotFolderPath}");
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"初始化服務時發生錯誤：{ex.Message}", "AI.KB Assistant");
-            }
-        }
-
-        /// <summary>
-        /// 確保 Themes/Theme.xaml 已在 MergedDictionaries 中（淺色主題）。
-        /// </summary>
-        private void TryEnsureTheme()
-        {
-            try
-            {
-                // 避免重複加入：若已存在同一 Source 就不重複塞
-                var uri = new Uri("Themes/Theme.xaml", UriKind.Relative);
-                bool already = false;
-                foreach (var rd in Resources.MergedDictionaries)
-                {
-                    if (rd.Source != null && rd.Source.OriginalString.Equals("Themes/Theme.xaml", StringComparison.OrdinalIgnoreCase))
-                    {
-                        already = true; break;
-                    }
-                }
-                if (!already)
-                {
-                    Resources.MergedDictionaries.Add(new ResourceDictionary { Source = uri });
-                }
-            }
-            catch
-            {
-                // 若失敗，不要阻擋啟動；視覺會回退為系統預設
-            }
-        }
-
-        private static void Log(string msg)
-        {
-            var line = $"[{DateTime.Now:HH:mm:ss}] {msg}";
-            Debug.WriteLine(line);
-            Console.WriteLine(line);
+            var dir = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "AI.KB.Assistant", "logs");
+            Directory.CreateDirectory(dir);
+            var path = Path.Combine(dir, $"crash_{DateTime.Now:yyyyMMdd_HHmmss}.log");
+            File.AppendAllText(path,
+$@"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {tag}
+{ex}
+----------------------------------------------------
+");
         }
     }
 }

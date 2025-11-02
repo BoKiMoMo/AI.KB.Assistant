@@ -7,6 +7,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -28,11 +29,11 @@ namespace AI.KB.Assistant.Views
             public UiRow(Item it)
             {
                 Item = it;
-                FileName = Path.GetFileName(it.Path);
-                Ext = (Path.GetExtension(it.Path) ?? "").Trim('.').ToLowerInvariant();
+                FileName = Path.GetFileName(it.Path ?? string.Empty);
+                Ext = (Path.GetExtension(it.Path ?? string.Empty) ?? "").Trim('.').ToLowerInvariant();
                 Project = it.Project ?? "";
                 Tags = it.Tags == null ? "" : string.Join(",", it.Tags);
-                SourcePath = it.Path;
+                SourcePath = it.Path ?? "";
                 DestPath = it.ProposedPath ?? "";
                 CreatedAt = it.Timestamp ?? it.UpdatedAt;
                 Status = string.IsNullOrWhiteSpace(it.Status) ? "intaked" : it.Status!;
@@ -51,7 +52,7 @@ namespace AI.KB.Assistant.Views
         private readonly ObservableCollection<UiRow> _rows = new();
         private ListCollectionView? _view;
 
-        // TreeView lazy-load tag
+        // 左樹節點
         private sealed class FolderNode
         {
             public string Name { get; set; } = "";
@@ -74,6 +75,11 @@ namespace AI.KB.Assistant.Views
         private string _sortKey = "CreatedAt";
         private ListSortDirection _sortDir = ListSortDirection.Descending;
 
+        // Log 狀態
+        private readonly StringBuilder _logBuilder = new();
+        private bool _isLogExpanded = true;
+        private double _logHeight = 160;
+
         // Converters expose
         public static readonly IValueConverter StatusToLabelConverterInstance = new StatusToLabelConverter();
         public static readonly IMultiValueConverter StatusToBrushConverterInstance = new StatusToBrushConverter();
@@ -87,23 +93,67 @@ namespace AI.KB.Assistant.Views
             _view = (ListCollectionView)CollectionViewSource.GetDefaultView(_rows);
             ApplySort(_sortKey, _sortDir);
 
-            // Left tree: 事件以 AddHandler 綁（避免 XAML Expanded 屬性造成 MC3072）
-            TvFolders.AddHandler(TreeViewItem.ExpandedEvent, new RoutedEventHandler(TvFolders_Expanded));
-
-            // 設定異動
+            // 設定變更
             ConfigService.ConfigChanged += (_, cfg) =>
             {
-                try { Router?.ApplyConfig(cfg); Llm?.UpdateConfig(cfg); } catch { }
-                _ = RefreshFromDbAsync();
-                LoadFolderRoot(); // 也重載側邊樹
+                // 確保在 UI 執行緒
+                Dispatcher.Invoke(() =>
+                {
+                    try { Router?.ApplyConfig(cfg); Llm?.UpdateConfig(cfg); } catch { }
+                    _ = RefreshFromDbAsync();
+                    LoadFolderRoot(cfg); // 【P3 修正】左樹刷新，直接傳入新設定
+                    Log("偵測到設定變更，已重新載入 Router/Llm 並刷新左側樹。");
+                });
             };
 
             Loaded += async (_, __) =>
             {
+                Log("主視窗 (MainWindow) 已載入。");
+
+                // 左樹 & 清單
                 LoadFolderRoot();
-                if (FindName("RtThresholdValue") is TextBlock t) t.Text = $"{(FindName("RtThreshold") as Slider)?.Value:0.00}";
+                Log("左側樹 (TvFolders) 初始載入完成。");
                 await RefreshFromDbAsync();
             };
+        }
+
+        // ===== Log (V7.4 新增) =====
+        private void Log(string message)
+        {
+            if (string.IsNullOrWhiteSpace(message)) return;
+            var line = $"[{DateTime.Now:HH:mm:ss}] {message.Trim()}\n";
+            _logBuilder.Append(line);
+            if (_logBuilder.Length > 10000)
+                _logBuilder.Remove(0, _logBuilder.Length - 10000);
+
+            if (TxtLog != null)
+            {
+                TxtLog.Text = _logBuilder.ToString();
+                TxtLog.ScrollToEnd();
+            }
+        }
+
+        private void BtnToggleLog_Click(object sender, RoutedEventArgs e)
+        {
+            _isLogExpanded = !_isLogExpanded;
+            if (_isLogExpanded)
+            {
+                LogPanelRow.Height = new GridLength(_logHeight, GridUnitType.Pixel);
+                LogSplitterRow.Height = new GridLength(6);
+                BtnToggleLog.Content = "收合日誌";
+            }
+            else
+            {
+                _logHeight = LogPanelRow.Height.Value; // 保存目前高度
+                LogPanelRow.Height = new GridLength(0);
+                LogSplitterRow.Height = new GridLength(0);
+                BtnToggleLog.Content = "展開日誌";
+            }
+        }
+
+        private void LogSplitter_DragCompleted(object sender, System.Windows.Controls.Primitives.DragCompletedEventArgs e)
+        {
+            _logHeight = Math.Max(60, LogPanelRow.Height.Value); // 最小 60
         }
 
         // ===== DB → UI =====
@@ -112,12 +162,20 @@ namespace AI.KB.Assistant.Views
             try
             {
                 TxtCounterSafe("讀取中…");
+                Log("開始從資料庫重新整理 (RefreshFromDbAsync)...");
                 _rows.Clear();
 
-                if (Db == null) { TxtCounterSafe("DB 尚未初始化"); return; }
+                if (Db == null)
+                {
+                    TxtCounterSafe("DB 尚未初始化");
+                    Log("錯誤：DbService 尚未初始化 (null)。");
+                    return;
+                }
 
                 var items = await Db.QueryAllAsync();
-                foreach (var it in items)
+
+                // 濾掉 Path 空白的無效紀錄，避免出現「空白列」
+                foreach (var it in items.Where(x => !string.IsNullOrWhiteSpace(x.Path)))
                 {
                     if (string.IsNullOrWhiteSpace(it.ProposedPath) && Router != null)
                         it.ProposedPath = Router.PreviewDestPath(it.Path);
@@ -127,11 +185,13 @@ namespace AI.KB.Assistant.Views
 
                 ApplySort(_sortKey, _sortDir);
                 TxtCounterSafe($"共 {_rows.Count} 筆");
+                Log($"資料庫讀取完畢，共載入 {_rows.Count} 筆項目。");
             }
             catch (Exception ex)
             {
                 MessageBox.Show(ex.Message, "重新整理失敗");
                 TxtCounterSafe("讀取失敗");
+                Log($"重新整理失敗: {ex.Message}");
             }
         }
 
@@ -145,11 +205,17 @@ namespace AI.KB.Assistant.Views
         {
             try
             {
-                if (Intake == null || Router == null) { MessageBox.Show("服務尚未初始化（Intake / Router）。"); return; }
+                if (Intake == null || Router == null)
+                {
+                    Log("服務尚未初始化 (Intake / Router)。");
+                    MessageBox.Show("服務尚未初始化（Intake / Router）。");
+                    return;
+                }
 
                 var dlg = new OpenFileDialog { Title = "選擇要加入的檔案", Multiselect = true, CheckFileExists = true };
                 if (dlg.ShowDialog(this) != true) return;
 
+                Log($"手動加入 {dlg.FileNames.Length} 個檔案...");
                 var added = await Intake.IntakeFilesAsync(dlg.FileNames);
                 foreach (var it in added.Where(a => a != null))
                 {
@@ -159,19 +225,35 @@ namespace AI.KB.Assistant.Views
 
                 ApplySort(_sortKey, _sortDir);
                 TxtCounterSafe($"共 {_rows.Count} 筆");
+                Log($"成功加入 {added.Count} 筆新項目。");
             }
-            catch (Exception ex) { MessageBox.Show(ex.Message, "加入檔案失敗"); }
+            catch (Exception ex)
+            {
+                Log($"加入檔案失敗: {ex.Message}");
+                MessageBox.Show(ex.Message, "加入檔案失敗");
+            }
         }
 
         private async void BtnCommit_Click(object sender, RoutedEventArgs e)
         {
             try
             {
-                if (Router == null || Db == null) { MessageBox.Show("服務尚未初始化（Router / Db）。"); return; }
+                if (Router == null || Db == null)
+                {
+                    Log("服務尚未初始化 (Router / Db)。");
+                    MessageBox.Show("服務尚未初始化（Router / Db）。");
+                    return;
+                }
 
                 var selected = GetSelectedUiRows();
-                if (selected.Length == 0) { MessageBox.Show("請先在清單中選取要提交的項目。"); return; }
+                if (selected.Length == 0)
+                {
+                    Log("提交操作已取消 (未選取項目)。");
+                    MessageBox.Show("請先在清單中選取要提交的項目。");
+                    return;
+                }
 
+                Log($"開始提交 {selected.Length} 個項目...");
                 int ok = 0;
                 foreach (var row in selected)
                 {
@@ -190,27 +272,122 @@ namespace AI.KB.Assistant.Views
                     }
                 }
 
-                if (ok > 0) await Db.UpdateItemsAsync(selected.Select(r => r.Item).ToArray());
+                if (ok > 0)
+                {
+                    await Db.UpdateItemsAsync(selected.Select(r => r.Item).ToArray());
+                    Log($"成功提交 {ok} / {selected.Length} 個項目。");
+                }
                 CollectionViewSource.GetDefaultView(_rows)?.Refresh();
                 MessageBox.Show($"完成提交：{ok} / {selected.Length}");
             }
-            catch (Exception ex) { MessageBox.Show(ex.Message, "提交失敗"); }
+            catch (Exception ex)
+            {
+                Log($"提交失敗: {ex.Message}");
+                MessageBox.Show(ex.Message, "提交失敗");
+            }
         }
 
         private async void BtnRefresh_Click(object sender, RoutedEventArgs e) => await RefreshFromDbAsync();
 
-        private void BtnOpenHot_Click(object sender, RoutedEventArgs e) => OpenInExplorer(AppConfig.Current?.Import?.HotFolderPath ?? AppConfig.Current?.Import?.HotFolder);
-        private void BtnOpenRoot_Click(object sender, RoutedEventArgs e) => OpenInExplorer(AppConfig.Current?.Routing?.RootDir ?? AppConfig.Current?.App?.RootDir);
+        private void BtnOpenHot_Click(object sender, RoutedEventArgs e)
+        {
+            var cfg = ConfigService.Cfg;
+            var p = cfg?.Import?.HotFolderPath ?? cfg?.Import?.HotFolder;
+            Log($"開啟收件夾: {p}");
+            OpenInExplorer(p);
+        }
+
+        private void BtnOpenRoot_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                // V7.4 修正：Root 目錄 Bug
+                // 邏輯：優先用 Routing.RootDir (V7.2+)，若為空再回退 App.RootDir (V7.1)
+                var cfg = ConfigService.Cfg;
+                var root = (!string.IsNullOrWhiteSpace(cfg?.Routing?.RootDir))
+                    ? cfg.Routing.RootDir
+                    : cfg?.App?.RootDir;
+                root = (root ?? "").Trim();
+
+                Log($"開啟根目錄: {root}");
+
+                if (string.IsNullOrWhiteSpace(root))
+                {
+                    Log("錯誤：根目錄 (RootDir) 尚未設定。");
+                    MessageBox.Show("Root 目錄尚未設定。請到「設定」頁面指定。");
+                    return;
+                }
+
+                if (File.Exists(root))
+                    root = Path.GetDirectoryName(root)!;
+
+                root = root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+                if (!Directory.Exists(root))
+                {
+                    Log($"錯誤：根目錄不存在: {root}");
+                    MessageBox.Show($"Root 目錄不存在：{root}");
+                    return;
+                }
+
+                OpenInExplorer(root);
+            }
+            catch (Exception ex)
+            {
+                Log($"開啟根目錄失敗: {ex.Message}");
+                MessageBox.Show(ex.Message, "開啟根目錄失敗");
+            }
+        }
+
         private void BtnOpenDb_Click(object sender, RoutedEventArgs e)
         {
-            var p = AppConfig.Current?.Db?.DbPath ?? AppConfig.Current?.Db?.Path;
+            var cfg = ConfigService.Cfg;
+            var p = cfg?.Db?.DbPath ?? cfg?.Db?.Path;
+            Log($"開啟資料庫: {p}");
             if (!string.IsNullOrWhiteSpace(p) && File.Exists(p)) TryStart(p);
             else OpenInExplorer(Path.GetDirectoryName(p ?? string.Empty));
         }
+
         private void BtnOpenSettings_Click(object sender, RoutedEventArgs e)
         {
-            try { new SettingsWindow { Owner = this, WindowStartupLocation = WindowStartupLocation.CenterOwner }.ShowDialog(); }
-            catch (Exception ex) { MessageBox.Show(ex.Message, "開啟設定失敗"); }
+            try
+            {
+                Log("開啟設定視窗...");
+                new SettingsWindow { Owner = this, WindowStartupLocation = WindowStartupLocation.CenterOwner }.ShowDialog();
+            }
+            catch (Exception ex)
+            {
+                Log($"開啟設定失敗: {ex.Message}");
+                MessageBox.Show(ex.Message, "開啟設定失敗");
+            }
+        }
+        private void CmbPathView_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            try
+            {
+                if (sender is not ComboBox cb || cb.SelectedItem is not ComboBoxItem it) return;
+                var tag = (it.Tag as string) ?? "actual";
+                var showPred = string.Equals(tag, "pred", StringComparison.OrdinalIgnoreCase);
+
+                if (ColSourcePath != null && ColDestPath != null)
+                {
+                    if (showPred)
+                    {
+                        _srcWidth = ColSourcePath.Width;
+                        ColSourcePath.Width = 0;
+                        ColDestPath.Width = _dstWidth switch { 0 => 320, _ => _dstWidth };
+                        Log("切換檢視：顯示預計路徑");
+                    }
+                    else
+                    {
+                        _dstWidth = ColDestPath.Width;
+                        ColDestPath.Width = 0;
+                        ColSourcePath.Width = _srcWidth switch { 0 => 300, _ => _srcWidth };
+                        Log("切換檢視：顯示實際路徑");
+                    }
+                }
+            }
+            catch (Exception ex) { MessageBox.Show(ex.Message, "切換檢視失敗"); }
         }
 
         // ===== 排序 =====
@@ -262,7 +439,7 @@ namespace AI.KB.Assistant.Views
             _view.Refresh();
         }
 
-        // ===== 右鍵功能（中清單） =====
+        // ===== 右鍵功能 =====
         private void CmOpenFile_Click(object sender, RoutedEventArgs e)
         {
             var row = GetSelectedUiRows().FirstOrDefault(); if (row == null) return;
@@ -274,21 +451,25 @@ namespace AI.KB.Assistant.Views
             }
             catch (Exception ex) { MessageBox.Show(ex.Message, "開啟檔案失敗"); }
         }
+
         private void CmRevealInExplorer_Click(object sender, RoutedEventArgs e)
         {
             var row = GetSelectedUiRows().FirstOrDefault(); if (row == null) return;
             OpenInExplorer(row.SourcePath);
         }
+
         private void CmCopySourcePath_Click(object sender, RoutedEventArgs e)
         {
             var txt = string.Join(Environment.NewLine, GetSelectedUiRows().Select(r => r.SourcePath));
             if (!string.IsNullOrWhiteSpace(txt)) Clipboard.SetText(txt);
         }
+
         private void CmCopyDestPath_Click(object sender, RoutedEventArgs e)
         {
             var txt = string.Join(Environment.NewLine, GetSelectedUiRows().Select(r => r.DestPath));
             if (!string.IsNullOrWhiteSpace(txt)) Clipboard.SetText(txt);
         }
+
         private async void CmAddTags_Click(object sender, RoutedEventArgs e)
         {
             var rows = GetSelectedUiRows();
@@ -358,10 +539,10 @@ namespace AI.KB.Assistant.Views
                 catch (Exception ex) { MessageBox.Show(ex.Message, "更新標籤失敗"); }
             }
         }
-        private void CmStageToInbox_Click(object sender, RoutedEventArgs e) { /* TODO: V7.4 */ }
-        private void CmClassify_Click(object sender, RoutedEventArgs e) { /* TODO: V7.4 */ }
+        private void CmStageToInbox_Click(object sender, RoutedEventArgs e) { /* 之後 V7.4 */ }
+        private void CmClassify_Click(object sender, RoutedEventArgs e) { /* 之後 V7.4 */ }
         private void CmCommit_Click(object sender, RoutedEventArgs e) => BtnCommit_Click(sender, e);
-        private void CmDeleteRecord_Click(object sender, RoutedEventArgs e) { /* TODO: V7.4 */ }
+        private void CmDeleteRecord_Click(object sender, RoutedEventArgs e) { /* 之後 V7.4 */ }
 
         // ===== 右側資訊欄 =====
         private void MainList_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -371,6 +552,7 @@ namespace AI.KB.Assistant.Views
             {
                 SetRtDetail("", "", "", "", "", "");
                 RtSuggestedProject.ItemsSource = null;
+                if (FindName("RtTags") is TextBox rtTags) rtTags.Text = ""; // 清空標籤
                 return;
             }
 
@@ -392,6 +574,10 @@ namespace AI.KB.Assistant.Views
                 }
 
                 SetRtDetail(row.FileName, row.Ext, size, created, modified, StatusToLabel(row.Status));
+
+                // V7.4 新增：顯示標籤
+                if (FindName("RtTags") is TextBox rtTags)
+                    rtTags.Text = row.Tags;
 
                 // 建議專案
                 var candidates = new List<string>();
@@ -421,15 +607,11 @@ namespace AI.KB.Assistant.Views
         private static IEnumerable<string> ExtractFolders(string? path)
         {
             var result = new List<string>();
-
-            if (string.IsNullOrWhiteSpace(path))
-                return result;
-
+            if (string.IsNullOrWhiteSpace(path)) return result;
             try
             {
                 var dir = Path.GetDirectoryName(path);
-                if (string.IsNullOrWhiteSpace(dir))
-                    return result;
+                if (string.IsNullOrWhiteSpace(dir)) return result;
 
                 var parts = dir
                     .Split(new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar }, StringSplitOptions.RemoveEmptyEntries)
@@ -457,64 +639,125 @@ namespace AI.KB.Assistant.Views
             {
                 if (Db != null) await Db.UpdateItemsAsync(new[] { row.Item });
                 CollectionViewSource.GetDefaultView(_rows)?.Refresh();
+                Log($"已套用專案 '{proj}' 到 {row.FileName}");
             }
-            catch (Exception ex) { MessageBox.Show(ex.Message, "更新專案失敗"); }
+            catch (Exception ex)
+            {
+                Log($"更新專案失敗: {ex.Message}");
+                MessageBox.Show(ex.Message, "更新專案失敗");
+            }
         }
 
-        private void RtThreshold_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
-            => (FindName("RtThresholdValue") as TextBlock)!.Text = $"{e.NewValue:0.00}";
+        // V7.4 新增：套用右側資訊欄的標籤
+        private async void RtBtnApplyTags_Click(object sender, RoutedEventArgs e)
+        {
+            var rows = GetSelectedUiRows();
+            if (rows.Length == 0)
+            {
+                Log("請先在中間清單選取一個或多個項目。");
+                return;
+            }
 
-        // ===== 左側：樹狀 + 麵包屑 =====
-        private void LoadFolderRoot()
+            if (FindName("RtTags") is not TextBox rtTags) return;
+
+            var tagsStr = rtTags.Text ?? "";
+            var tagList = tagsStr.Split(new[] { ',', ';', ' ' }, StringSplitOptions.RemoveEmptyEntries)
+                                 .Select(t => t.Trim())
+                                 .Where(t => !string.IsNullOrWhiteSpace(t))
+                                 .Distinct(StringComparer.OrdinalIgnoreCase)
+                                 .ToList();
+
+            foreach (var r in rows)
+            {
+                r.Item.Tags = tagList;
+                r.Tags = string.Join(",", tagList);
+            }
+
+            try
+            {
+                if (Db != null)
+                {
+                    var count = await Db.UpdateItemsAsync(rows.Select(x => x.Item).ToArray());
+                    Log($"已為 {count} 個項目更新標籤。");
+                    CollectionViewSource.GetDefaultView(_rows)?.Refresh();
+                }
+            }
+            catch (Exception ex)
+            {
+                Log($"更新標籤失敗: {ex.Message}");
+                MessageBox.Show(ex.Message, "更新標籤失敗");
+            }
+        }
+
+        // ===== 左側：樹狀 + 麵包屑 (P1 修正) =====
+        private TreeView? ResolveTv() => (TvFolders ?? FindName("TvFolders") as TreeView);
+
+        // CheckBox 綁定事件
+        private void TreeToggles_Changed(object sender, RoutedEventArgs e)
+        {
+            Log("左側樹顯示切換 (桌面/磁碟)。");
+            LoadFolderRoot();
+        }
+
+        private void LoadFolderRoot(AppConfig? cfg = null) // 【P3 修正】接受傳入的 cfg
         {
             try
             {
-                TvFolders.Items.Clear();
+                // 如果沒有傳入 cfg，才自己從 Service 讀取
+                if (cfg == null)
+                    cfg = ConfigService.Cfg;
+
+                var tv = ResolveTv();
+                if (tv == null) return;
+
+                tv.Items.Clear();
 
                 // 1) ROOT
-                var root = AppConfig.Current?.Routing?.RootDir;
-                if (string.IsNullOrWhiteSpace(root))
-                    root = AppConfig.Current?.App?.RootDir;
+                // V7.4 修正：Root 目錄 Bug
+                var root = (!string.IsNullOrWhiteSpace(cfg?.Routing?.RootDir))
+                    ? cfg.Routing.RootDir
+                    : cfg?.App?.RootDir;
+                root = (root ?? "").Trim();
 
                 if (!string.IsNullOrWhiteSpace(root) && Directory.Exists(root))
                 {
-                    var n = MakeNode(root);
-                    var tvi = MakeTvi(n);
-                    tvi.Header = $"ROOT：{n.Name}";
-                    TvFolders.Items.Add(tvi);
+                    var node = MakeNode(root);
+                    tv.Items.Add(MakeTvi(node, headerOverride: $"ROOT：{node.Name}"));
+                }
+                else if (!string.IsNullOrWhiteSpace(root))
+                {
+                    Log($"警告：ROOT 目錄不存在: {root}");
                 }
 
-                // 2) 桌面（依勾選）
-                if (ChkShowDesktop.IsChecked == true)
+                // 2) 桌面（若有勾選）
+                if (ChkShowDesktop?.IsChecked == true)
                 {
                     var desktop = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
-                    if (!string.IsNullOrWhiteSpace(desktop) && Directory.Exists(desktop))
-                        TvFolders.Items.Add(MakeTvi(new FolderNode { Name = "桌面", FullPath = desktop }));
+                    if (Directory.Exists(desktop))
+                        tv.Items.Add(MakeTvi(MakeNode(desktop), headerOverride: "桌面"));
                 }
 
-                // 3) 磁碟（依勾選）
-                if (ChkShowDrives.IsChecked == true)
+                // 3) 系統磁碟（若有勾選）
+                if (ChkShowDrives?.IsChecked == true)
                 {
-                    foreach (var d in DriveInfo.GetDrives().Where(x => x.DriveType == DriveType.Fixed && x.IsReady))
+                    foreach (var d in DriveInfo.GetDrives().Where(d => d.DriveType == DriveType.Fixed || d.DriveType == DriveType.Removable))
                     {
-                        var name = d.Name.TrimEnd(Path.DirectorySeparatorChar);
-                        TvFolders.Items.Add(MakeTvi(new FolderNode { Name = name, FullPath = name + Path.DirectorySeparatorChar }));
+                        try
+                        {
+                            var label = string.IsNullOrWhiteSpace(d.VolumeLabel) ? d.Name : $"{d.VolumeLabel} ({d.Name.TrimEnd('\\')})";
+                            tv.Items.Add(MakeTvi(new FolderNode { Name = label, FullPath = d.Name }, headerOverride: label));
+                        }
+                        catch (Exception ex)
+                        {
+                            Log($"讀取磁碟 {d.Name} 失敗: {ex.Message}"); // 處理光碟機無光碟等問題
+                        }
                     }
                 }
-
-                // 4) 收件夾（HotFolder）
-                var hot = AppConfig.Current?.Import?.HotFolderPath ?? AppConfig.Current?.Import?.HotFolder;
-                if (!string.IsNullOrWhiteSpace(hot) && Directory.Exists(hot))
-                {
-                    var tvi = MakeTvi(new FolderNode { Name = "收件夾", FullPath = hot });
-                    TvFolders.Items.Add(tvi);
-                }
-
-                // 選擇第一個，以便麵包屑顯示
-                if (TvFolders.Items.Count > 0 && TvFolders.Items[0] is TreeViewItem first)
-                    first.IsSelected = true;
             }
-            catch { /* ignore */ }
+            catch (Exception ex)
+            {
+                Log($"LoadFolderRoot 失敗: {ex.Message}");
+            }
         }
 
         private static FolderNode MakeNode(string path)
@@ -525,47 +768,64 @@ namespace AI.KB.Assistant.Views
             return new FolderNode { Name = name, FullPath = trimmed };
         }
 
-        private TreeViewItem MakeTvi(FolderNode node)
+        // 統一的節點建立工廠
+        private TreeViewItem MakeTvi(FolderNode node, string? headerOverride = null)
         {
-            var tvi = new TreeViewItem { Header = node.Name, Tag = node };
+            var tvi = new TreeViewItem { Header = headerOverride ?? node.Name, Tag = node };
+
             try
             {
-                if (Directory.Exists(node.FullPath) &&
-                    Directory.EnumerateDirectories(node.FullPath).Any())
+                // 使用 Any() 檢查子目錄，比 GetDirectories().Length > 0 更高效
+                if (Directory.Exists(node.FullPath) && Directory.EnumerateDirectories(node.FullPath).Any())
                 {
-                    tvi.Items.Add(new TreeViewItem { Header = "…" }); // dummy
+                    // 先放一個 dummy node，並加上 "__DUMMY__" 標記
+                    tvi.Items.Add(new TreeViewItem { Header = "…", Tag = "__DUMMY__" });
                 }
             }
-            catch { }
+            catch { /* 權限不足，忽略子目錄 */ }
+
+            // 統一綁定展開事件
+            tvi.Expanded += TvFolders_Expanded;
             return tvi;
         }
 
+        // 真正的懶載入：展開時替換 Dummy
         private void TvFolders_Expanded(object sender, RoutedEventArgs e)
         {
             if (e.OriginalSource is not TreeViewItem tvi) return;
-            if (tvi.Items.Count == 1 && tvi.Items[0] is TreeViewItem dummy && (string)dummy.Header == "…")
+
+            // 1. 檢查 Tag 是否為 FolderNode (我們統一的模型)
+            if (tvi.Tag is not FolderNode node) return;
+
+            // 2. 檢查虛擬節點
+            if (tvi.Items.Count != 1) return;
+            if (tvi.Items[0] is not TreeViewItem dummy || (string?)dummy.Tag != "__DUMMY__") return;
+
+            tvi.Items.Clear();
+
+            // 3. 從 FolderNode 取得路徑
+            var path = node.FullPath;
+            try
             {
-                tvi.Items.Clear();
-                if (tvi.Tag is not FolderNode node) return;
-                try
+                foreach (var dir in System.IO.Directory.EnumerateDirectories(path))
                 {
-                    foreach (var sub in Directory.EnumerateDirectories(node.FullPath))
-                    {
-                        var child = MakeTvi(MakeNode(sub));
-                        tvi.Items.Add(child);
-                    }
+                    // 4. 遞迴呼叫 MakeTvi，這會自動綁定下一層的 Expanded 事件
+                    tvi.Items.Add(MakeTvi(MakeNode(dir)));
                 }
-                catch { }
+            }
+            catch (Exception ex)
+            {
+                Log($"載入子目錄失敗 (權限?): {ex.Message}");
             }
         }
 
-        private void TvFolders_SelectedItemChanged(object? sender, RoutedPropertyChangedEventArgs<object> e)
+        private void TvFolders_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
         {
             try
             {
-                if (TvFolders.SelectedItem is not TreeViewItem tvi || tvi.Tag is not FolderNode node) return;
+                if (ResolveTv()?.SelectedItem is not TreeViewItem tvi || tvi.Tag is not FolderNode node) return;
 
-                // 麵包屑：由根到子
+                // 麵包屑
                 var stack = new List<FolderNode>();
                 var cur = tvi;
                 while (cur != null)
@@ -574,48 +834,53 @@ namespace AI.KB.Assistant.Views
                     cur = cur.Parent as TreeViewItem;
                 }
                 stack.Reverse();
+
                 Breadcrumb.ItemsSource = stack;
             }
             catch { }
         }
 
-        private void TreeToggles_Changed(object sender, RoutedEventArgs e) => LoadFolderRoot();
-
         private void Breadcrumb_Click(object sender, RoutedEventArgs e)
         {
-            // TODO：定位到左樹節點（必要時再補）
+            // TODO: 之後補「精準定位到左樹節點」
         }
 
-        // ====== 缺少的事件：提供安全 No-Op 或簡單行為 ======
+        private void CmFolderOpen_Click(object sender, RoutedEventArgs e)
+        {
+            if (ResolveTv()?.SelectedItem is TreeViewItem tvi && tvi.Tag is FolderNode n)
+                OpenInExplorer(n.FullPath);
+        }
+
+        private void CmFolderCopyPath_Click(object sender, RoutedEventArgs e)
+        {
+            if (ResolveTv()?.SelectedItem is TreeViewItem tvi && tvi.Tag is FolderNode n)
+                Clipboard.SetText(n.FullPath);
+        }
+        // ===== 其他保留的 No-Op 事件（為了不破壞你現有 UI 配線） =====
         private void BtnStartClassify_Click(object sender, RoutedEventArgs e)
         {
-            // TODO V7.4: 跑 RoutingService 預測並填入 ProposedPath
+            Log("「檢視分類」按鈕點擊 (V7.4 尚未實作)。");
             _ = RefreshFromDbAsync();
         }
-
         private void BtnEdgeLeft_Click(object sender, RoutedEventArgs e)
         {
             if (LeftPaneColumn.Width.Value > 0) LeftPaneColumn.Width = new GridLength(0);
             else LeftPaneColumn.Width = new GridLength(300);
         }
-
         private void BtnEdgeRight_Click(object sender, RoutedEventArgs e)
         {
             if (RightPaneColumn.Width.Value > 0) RightPaneColumn.Width = new GridLength(0);
             else RightPaneColumn.Width = new GridLength(360);
         }
-
         private void BtnSearchProject_Click(object sender, RoutedEventArgs e) { }
-        private void BtnLockProject_Click(object sender, RoutedEventArgs e) { MessageBox.Show("專案鎖定：尚未實作（V7.4）"); }
-        private void TvFilterBox_TextChanged(object sender, TextChangedEventArgs e) { }
-
-        private void Tree_MoveFolderToInbox_Click(object sender, RoutedEventArgs e)
+        private void BtnLockProject_Click(object sender, RoutedEventArgs e)
         {
-            MessageBox.Show("整份資料夾加入收件夾：尚未實作（V7.4）");
+            Log("專案鎖定功能 (V7.5) 尚未實作。");
+            MessageBox.Show("專案鎖定：尚未實作（V7.5）");
         }
-
+        private void TvFilterBox_TextChanged(object sender, TextChangedEventArgs e) { }
+        private void Tree_MoveFolderToInbox_Click(object sender, RoutedEventArgs e) { MessageBox.Show("整份資料夾加入收件夾：尚未實作（V7.4）"); }
         private void MainTabs_SelectionChanged(object sender, SelectionChangedEventArgs e) { }
-
         private void List_DoubleClick(object sender, MouseButtonEventArgs e)
         {
             if (e.ChangedButton != MouseButton.Left) return;
@@ -628,50 +893,29 @@ namespace AI.KB.Assistant.Views
             }
             catch (Exception ex) { MessageBox.Show(ex.Message, "開啟檔案失敗"); }
         }
-
-        private void BtnGenTags_Click(object sender, RoutedEventArgs e) { MessageBox.Show("產生建議：V7.5 接 AI 後啟用"); }
-        private void BtnSummarize_Click(object sender, RoutedEventArgs e) { MessageBox.Show("摘要：V7.5 接 AI 後啟用"); }
-        private void BtnAnalyzeConfidence_Click(object sender, RoutedEventArgs e) { MessageBox.Show("信心分析：V7.5 接 AI 後啟用"); }
-
-        private void BtnApplyAiTuning_Click(object sender, RoutedEventArgs e)
+        private void BtnGenTags_Click(object sender, RoutedEventArgs e)
         {
-            try
-            {
-                var cfg = ConfigService.Cfg;
-
-                if (FindName("RtThreshold") is Slider s)
-                    cfg.Routing.Threshold = s.Value;
-
-                if (FindName("RtBlacklist") is TextBox tb)
-                {
-                    var list = (tb.Text ?? "")
-                        .Split(new[] { ',', ';', '；', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries)
-                        .Select(x => x.Trim())
-                        .Where(x => !string.IsNullOrWhiteSpace(x))
-                        .Distinct(StringComparer.OrdinalIgnoreCase)
-                        .ToList();
-
-                    cfg.Routing.BlacklistFolderNames = list;
-                }
-
-                ConfigService.Save();
-                MessageBox.Show("已套用。");
-            }
-            catch (Exception ex) { MessageBox.Show(ex.Message, "套用失敗"); }
+            Log("AI 功能 (V7.5) 尚未實作。");
+            MessageBox.Show("產生建議：V7.5 接 AI 後啟用");
+        }
+        private void BtnSummarize_Click(object sender, RoutedEventArgs e)
+        {
+            Log("AI 功能 (V7.5) 尚未實作。");
+            MessageBox.Show("摘要：V7.5 接 AI 後啟用");
+        }
+        private void BtnAnalyzeConfidence_Click(object sender, RoutedEventArgs e)
+        {
+            Log("AI 功能 (V7.5) 尚未實作。");
+            MessageBox.Show("信心分析：V7.5 接 AI 後啟用");
         }
 
-        private void BtnReloadSettings_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                ConfigService.Load();
-                MessageBox.Show("設定已重新載入。");
-            }
-            catch (Exception ex) { MessageBox.Show(ex.Message, "重新載入失敗"); }
-        }
+        // V7.4 修正：移除舊的右側面板事件
+        // private void BtnApplyAiTuning_Click(object sender, RoutedEventArgs e) { ... }
+        // private void BtnReloadSettings_Click(object sender, RoutedEventArgs e) { ... }
 
         // ===== Helpers =====
-        private UiRow[] GetSelectedUiRows() => MainList.SelectedItems.Cast<UiRow>().ToArray();
+        private UiRow[] GetSelectedUiRows()
+            => MainList.SelectedItems.Cast<UiRow>().ToArray();
 
         private static void OpenInExplorer(string? path)
         {
@@ -680,6 +924,7 @@ namespace AI.KB.Assistant.Views
             else if (Directory.Exists(path)) TryStart("explorer.exe", $"\"{path}\"");
             else MessageBox.Show($"找不到路徑：{path}");
         }
+
         private static void TryStart(string fileName, string? args = null)
         {
             try { Process.Start(new ProcessStartInfo { FileName = fileName, Arguments = args ?? "", UseShellExecute = true }); }
@@ -701,6 +946,7 @@ namespace AI.KB.Assistant.Views
         }
 
         // ===== Converters & Comparers =====
+        #region Converters & Comparers
         private sealed class StatusToLabelConverter : IValueConverter
         {
             public object Convert(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
@@ -814,5 +1060,7 @@ namespace AI.KB.Assistant.Views
                 return _dir == ListSortDirection.Ascending ? r : -r;
             }
         }
+        #endregion
     }
 }
+
