@@ -22,11 +22,13 @@
         </Style>
 
         <!-- 統一的欄位標題樣式 (P2 修正) -->
+        <!-- V7.5.11 修正：新增固定高度 30 來解決跳動問題 -->
         <Style x:Key="HeaderClickable" TargetType="GridViewColumnHeader">
             <Setter Property="Foreground" Value="{DynamicResource App.TextBrush}" />
             <Setter Property="Background" Value="{DynamicResource App.PanelBrush}" />
             <Setter Property="FontWeight" Value="Bold"/>
             <Setter Property="HorizontalContentAlignment" Value="Left"/>
+            <Setter Property="Height" Value="30"/>
             <EventSetter Event="Click" Handler="ListHeader_Click"/>
         </Style>
 
@@ -208,7 +210,8 @@
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
                         <!-- 分頁標頭 -->
-                        <RowDefinition Height="Auto"/>
+                        <!-- V7.5.11 修正：搜尋列高度固定為 45px -->
+                        <RowDefinition Height="45"/>
                         <!-- 搜尋/鎖定列 -->
                     </Grid.RowDefinitions>
 
@@ -221,8 +224,8 @@
                         <TabItem Header="等待分類" Tag="pending"/>
                     </TabControl>
 
-                    <!-- 2. V7.4 搜尋/鎖定列 (V7.5.4 修正：加入 MinHeight) -->
-                    <Border Grid.Row="1" Padding="8" MinHeight="45" 
+                    <!-- 2. V7.4 搜尋/鎖定列 (V7.5.11 修正：移除 MinHeight) -->
+                    <Border Grid.Row="1" Padding="8"
                             Background="{DynamicResource App.PanelBrush}"
                             BorderBrush="{DynamicResource App.BorderBrush}" BorderThickness="0,0,0,1">
                         <Grid>
