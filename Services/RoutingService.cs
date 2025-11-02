@@ -19,7 +19,11 @@ namespace AI.KB.Assistant.Services
         {
             if (string.IsNullOrWhiteSpace(srcFullPath)) return srcFullPath;
             var fileName = Path.GetFileName(srcFullPath);
-            var root = _cfg.Routing?.RootDir ?? _cfg.App?.RootDir ?? "";
+
+            // V7.5 Bug 修正：
+            // 1. 設定頁面 (SettingsWindow) 儲存的是 App.RootDir。
+            // 2. 邏輯應改為：優先使用 App.RootDir，若其為空，才回退(fallback)到 Routing.RootDir。
+            var root = (_cfg.App?.RootDir ?? _cfg.Routing?.RootDir ?? "").Trim();
             if (string.IsNullOrWhiteSpace(root)) return srcFullPath;
 
             var item = new Item
@@ -69,7 +73,8 @@ namespace AI.KB.Assistant.Services
         {
             try
             {
-                var root = _cfg.Routing?.RootDir ?? _cfg.App?.RootDir ?? "";
+                // V7.5 Bug 修正：(同 PreviewDestPath)
+                var root = (_cfg.App?.RootDir ?? _cfg.Routing?.RootDir ?? "").Trim();
                 if (string.IsNullOrWhiteSpace(root) || !File.Exists(item.Path)) return null;
 
                 var dest = BuildDestination(root, item, lockedProject, isBlacklist);
@@ -195,6 +200,7 @@ namespace AI.KB.Assistant.Services
             switch (policy?.ToString() ?? "Rename")
             {
                 case "Overwrite":
+                case "Replace": // 相容舊版
                     File.Delete(destFullPath);
                     return destFullPath;
                 case "Skip":
