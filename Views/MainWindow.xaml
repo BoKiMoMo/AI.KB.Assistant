@@ -126,6 +126,21 @@
                 <Button Style="{StaticResource ToolbarBtn}" Content="確認搬檔" Click="BtnCommit_Click"/>
                 <Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" Margin="4,2"/>
                 <Button Style="{StaticResource ToolbarBtn}" Content="⟳ 重新整理" Click="BtnRefresh_Click"/>
+
+                <!-- V7.35 新功能：新增清理收件夾選單 (選項 B+C) -->
+                <Menu Margin="4,2" VerticalAlignment="Center">
+                    <MenuItem Header="🧹 清理收件夾..." Style="{StaticResource ToolbarBtn}">
+                        <!-- 選項 B (主) -->
+                        <MenuItem Header="🗑️ 清除 [已分類] 的實體檔案 (B)" 
+                                  ToolTip="[選項B] 刪除 HotFolder 中已搬移 (Committed) 的實體檔案 (用於「複製」模式)"
+                                  Click="BtnClearCommitted_Click"/>
+                        <!-- 選項 C (輔) -->
+                        <MenuItem Header="🔄 重置 [未處理] 的資料庫狀態 (C)" 
+                                  ToolTip="[選項C] 清除資料庫中所有未處理 (Intaked/Error) 的紀錄，以便下次重新掃描"
+                                  Click="BtnResetInbox_Click"/>
+                    </MenuItem>
+                </Menu>
+
                 <Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" Margin="4,2"/>
                 <Button Style="{StaticResource ToolbarBtn}" Content="🗂 收件夾" Click="BtnOpenHot_Click"/>
                 <Button Style="{StaticResource ToolbarBtn}" Content="📁 根目錄" Click="BtnOpenRoot_Click"/>
@@ -136,6 +151,9 @@
                 <Button Style="{StaticResource ToolbarBtn}" Content="檔案結構" Click="BtnEdgeLeft_Click"/>
                 <Button Style="{StaticResource ToolbarBtn}" Content="詳細資料" Click="BtnEdgeRight_Click"/>
                 <Button Style="{StaticResource ToolbarBtn}" Content="設定" Click="BtnOpenSettings_Click"/>
+                <!-- V7.34 新功能：返回簡易版 -->
+                <Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" Margin="4,2"/>
+                <Button Style="{StaticResource ToolbarBtn}" Content="↩️ 返回簡易版" Click="BtnGoToSimpleMode_Click"/>
             </WrapPanel>
         </Border>
 
@@ -188,7 +206,9 @@
                     </StackPanel>
                 </Border>
 
-                <TreeView x:Name="TvFolders" Margin="6,6,0,0" SelectedItemChanged="TvFolders_SelectedItemChanged" >
+                <!-- V7.34 A-Perf MC3072 修正：移除不合法的 Expanded 屬性 -->
+                <TreeView x:Name="TvFolders" Margin="6,6,0,0" 
+                          SelectedItemChanged="TvFolders_SelectedItemChanged">
                     <TreeView.ContextMenu>
                         <ContextMenu>
                             <MenuItem Header="整份資料夾加入收件匣" Click="Tree_MoveFolderToInbox_Click"/>
@@ -247,9 +267,11 @@
                                 <!-- 1: Project Filter -->
                                 <ColumnDefinition Width="Auto"/>
                                 <!-- 2: Lock Button -->
+                                <!-- V7.34 新功能：隱藏已分類 -->
                                 <ColumnDefinition Width="Auto"/>
-                                <!-- 3: TxtCounter -->
-                                <!-- V7.33 修正：移除 CmbPathView (第 4 欄) -->
+                                <!-- 3: Hide Committed CheckBox -->
+                                <ColumnDefinition Width="Auto"/>
+                                <!-- 4: TxtCounter -->
                             </Grid.ColumnDefinitions>
 
                             <!-- V7.5.11 修正：加入 TextWrapping="NoWrap" -->
@@ -270,11 +292,16 @@
                                           Content="🔒 鎖定專案"
                                           Click="BtnLockProject_Click"/>
 
-                            <TextBlock x:Name="TxtCounter" Grid.Column="3" 
+                            <!-- V7.34 新功能：隱藏已分類 -->
+                            <CheckBox x:Name="ChkHideCommitted" Grid.Column="3"
+                                      Content="隱藏已分類" VerticalAlignment="Center"
+                                      Margin="12,0,0,0"
+                                      Checked="ChkHideCommitted_Changed"
+                                      Unchecked="ChkHideCommitted_Changed"/>
+
+                            <TextBlock x:Name="TxtCounter" Grid.Column="4" 
                                        VerticalAlignment="Center" Margin="12,0,8,0"
                                        Foreground="{DynamicResource App.TextMutedBrush}"/>
-
-                            <!-- V7.33 修正：移除 CmbPathView (下拉選單) -->
 
                         </Grid>
                     </Border>
@@ -333,7 +360,7 @@
                                             HeaderContainerStyle="{StaticResource HeaderClickable}"
                                             Width="320" DisplayMemberBinding="{Binding SourcePath}"/>
 
-                            <!-- V7.33 修正：移除 "預計路徑" 欄位 -->
+
 
                             <GridViewColumn Header="建立時間" 
                                             HeaderContainerStyle="{StaticResource HeaderClickable}"
@@ -444,6 +471,16 @@
                             </StackPanel>
 
                             <TextBlock Text="標籤 (以 , 或 ; 分隔)" Margin="0,12,0,4"/>
+
+                            <!-- V7.34 新功能：快速標籤按鈕 -->
+                            <WrapPanel Margin="0,0,0,8">
+                                <Button Content="★ 最愛" Margin="0,0,6,6" Click="RtQuickTag_Favorite_Click"/>
+                                <Button Content="▶ 進行中" Margin="0,0,6,6" Click="RtQuickTag_InProgress_Click"/>
+                                <Button Content="■ 待處理" Margin="0,0,6,6" Click="RtQuickTag_Backlog_Click"/>
+                                <Button Content="... 等待分類" Margin="0,0,6,6" Click="RtQuickTag_Pending_Click"/>
+                                <Button Content="清空" Margin="12,0,6,6" Click="RtQuickTag_Clear_Click"/>
+                            </WrapPanel>
+
                             <TextBox x:Name="RtTags" AcceptsReturn="True" Height="60" TextWrapping="Wrap"/>
                             <Button Content="套用標籤" Margin="0,8,0,0" HorizontalAlignment="Left"
                                     Click="RtBtnApplyTags_Click"/>
@@ -481,4 +518,4 @@
             </ScrollViewer>
         </Grid>
     </DockPanel>
-</Window>
+</Window> 

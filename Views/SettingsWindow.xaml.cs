@@ -56,6 +56,16 @@ namespace AI.KB.Assistant.Views
             SetTextByNames(cfg.Import?.HotFolder, "TbHotFolder");
             SetTextByNames(cfg.Db?.DbPath, "TbDbPath");
 
+            // V7.34 UI 串接：載入啟動模式
+            string mode = cfg.App?.LaunchMode ?? "Detailed";
+            if (FindName("RadioModeSimple") is RadioButton r_simp && FindName("RadioModeDetailed") is RadioButton r_det)
+            {
+                if (mode == "Simple")
+                    r_simp.IsChecked = true;
+                else
+                    r_det.IsChecked = true;
+            }
+
             // 匯入/監控
             SetBool("CbIncludeSubdir", cfg.Import?.IncludeSubdir == true);
             SetBool("CbEnableHotFolder", cfg.Import?.EnableHotFolder == true);
@@ -130,6 +140,12 @@ namespace AI.KB.Assistant.Views
             cfg.App.RootDir = GetTextByNames("TbRootDir");
             cfg.Import.HotFolder = GetTextByNames("TbHotFolder");
             cfg.Db.DbPath = GetTextByNames("TbDbPath");
+
+            // V7.34 UI 串接：儲存啟動模式
+            if (GetBoolByNames("RadioModeSimple")) // (Helper 函式 GetBoolByNames 也適用於 RadioButton)
+                cfg.App.LaunchMode = "Simple";
+            else
+                cfg.App.LaunchMode = "Detailed";
 
             // 匯入設定
             cfg.Import.IncludeSubdir = GetBoolByNames("CbIncludeSubdir");
@@ -266,6 +282,8 @@ namespace AI.KB.Assistant.Views
                 SetTextByNames(dlg.SelectedPath, "TbHotFolder");
         }
 
+
+
         private void BtnBrowseDb_Click(object sender, RoutedEventArgs e)
         {
             var dlg = new SaveFileDialog
@@ -339,8 +357,13 @@ namespace AI.KB.Assistant.Views
         private bool GetBoolByNames(params string[] names)
         {
             foreach (var n in names ?? Array.Empty<string>())
+            {
                 if (FindName(n) is CheckBox cb)
                     return cb.IsChecked == true;
+                // V7.34 UI 串接：擴充 helper
+                if (FindName(n) is RadioButton rb)
+                    return rb.IsChecked == true;
+            }
             return false;
         }
 

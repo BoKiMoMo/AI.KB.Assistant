@@ -51,6 +51,28 @@
                     </Grid>
                 </GroupBox>
 
+                <!-- V7.34 UI 串接：新增「啟動設定」區塊 -->
+                <GroupBox Header="啟動設定" Margin="0,12,0,0">
+                    <Grid Margin="10">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="180"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <TextBlock Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" Text="啟動模式 (Launch Mode)"/>
+                        <StackPanel Grid.Row="0" Grid.Column="1" Margin="8,0,0,0" VerticalAlignment="Center">
+                            <RadioButton x:Name="RadioModeSimple" Content="簡易模式 (啟動後自動分類並關閉)" Tag="Simple" GroupName="LaunchMode" Margin="0,5,0,0"/>
+                            <RadioButton x:Name="RadioModeDetailed" Content="詳細模式 (標準介面，手動管理)" Tag="Detailed" GroupName="LaunchMode" Margin="0,5,0,0"/>
+                        </StackPanel>
+                        <TextBlock Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" Margin="8,4,0,0" Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
+                       Text="選擇 App 啟動時要進入的介面。"/>
+                    </Grid>
+                </GroupBox>
+
                 <!-- 匯入與監控 -->
                 <GroupBox Header="匯入與監控 (Import &amp; Monitoring)" Margin="0,12,0,0">
                     <Grid Margin="10">

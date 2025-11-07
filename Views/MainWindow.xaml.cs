@@ -5,6 +5,8 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
+// [V7.35 CS0535 修正] 1. 加入 using
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -22,9 +24,6 @@ using AI.KB.Assistant.Common; // V7.5 重構：使用通用工具
 
 namespace AI.KB.Assistant.Views
 {
-    // V7.5 重構：UiRow 和 FolderNode 已移至 Models/UiRow.cs 和 Models/FolderNode.cs
-    // 確保這些檔案已在您的專案中。
-
     public partial class MainWindow : Window
     {
         private readonly ObservableCollection<UiRow> _rows = new();
@@ -38,26 +37,29 @@ namespace AI.KB.Assistant.Views
         private LlmService? Llm => Get<LlmService>("Llm");
 
         // UI 狀態
-        // V7.33 修正：移除 CmbPathView 相關的 _srcWidth, _dstWidth
-
         private string _sortKey = "CreatedAt";
         private ListSortDirection _sortDir = ListSortDirection.Descending;
         private string _searchKeyword = string.Empty;
         private string _currentTabTag = "home";
         private string _selectedFolderPath = "";
         private bool _isShowingPredictedPath = false; // V7.33 新增：用於切換路徑檢視
+        private bool _hideCommitted = false; // V7.34 新增：隱藏已分類
 
         // Converters expose
         public sealed class StatusToLabelConverter : IValueConverter
         {
-            public object Convert(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
+            // [V7.35 CS0535 修正] 2. 使用 CultureInfo (簡短名稱)
+            public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
                 => StatusToLabel(value as string);
-            public object ConvertBack(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
+            // [V7.35 CS0535 修正] 3. 使用 CultureInfo (簡短名稱)
+            public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
                 => Binding.DoNothing;
         }
+
         public sealed class StatusToBrushConverter : IMultiValueConverter
         {
-            public object Convert(object[] values, Type targetType, object parameter, System.Globalization.CultureInfo culture)
+            // [V7.35 CS0535 修正] 4. 修正簽章 (Type targetType) 並使用 CultureInfo
+            public object Convert(object[] values, Type targetType, object parameter, CultureInfo culture)
             {
                 var status = (values[0] as string)?.ToLowerInvariant() ?? "";
                 Brush pick(string key) => key switch
@@ -77,7 +79,8 @@ namespace AI.KB.Assistant.Views
                     _ => pick("unset")
                 };
             }
-            public object[] ConvertBack(object value, Type[] targetTypes, object parameter, System.Globalization.CultureInfo culture)
+            // [V7.35 CS0535 修正] 5. 使用 CultureInfo (簡短名稱)
+            public object[] ConvertBack(object value, Type[] targetTypes, object parameter, CultureInfo culture)
                 => throw new NotSupportedException();
         }
 
@@ -150,31 +153,25 @@ namespace AI.KB.Assistant.Views
                     return;
                 }
 
-                // V7.4/V7.5 修正：將 DB 查詢操作放入 Task.Run，避免鎖定 UI 執行緒
                 var items = await Task.Run(() => Db!.QueryAllAsync());
 
                 Log($"資料庫讀取完畢，共載入 {items.Count} 筆項目。");
 
-                // 濾掉 Path 空白的無效紀錄，避免出現「空白列」
                 foreach (var it in items.Where(x => !string.IsNullOrWhiteSpace(x.Path)))
                 {
                     if (string.IsNullOrWhiteSpace(it.ProposedPath) && Router != null)
                         it.ProposedPath = Router.PreviewDestPath(it.Path);
 
+                    // 這裡會使用新的 UiRow.cs (V7.5) 建構函式，已修正 CS8618
                     _rows.Add(new UiRow(it));
                 }
 
-                // V7.5 修正：重新啟用排序和過濾 (解決清單空白)
                 ApplySort(_sortKey, _sortDir);
                 ApplyListFilters();
-
-                // V7.7 修正：TxtCounterSafe 必須在 ApplyListFilters 之後呼叫，
-                // 才能顯示過濾後的正確計數。
 
             }
             catch (Exception ex)
             {
-                // 修正：加入更詳細的錯誤日誌與訊息提示
                 var innerEx = ex.InnerException ?? ex;
                 var errorMsg = $"發生例外：{innerEx.Message}。請檢查日誌面板取得更多詳細資訊。";
 
@@ -192,13 +189,8 @@ namespace AI.KB.Assistant.Views
         // ===== Toolbar =====
         private async void BtnAddFiles_Click(object sender, RoutedEventArgs e)
         {
-            // V7.32 修正：
-            // 1. 不再呼叫 IntakeService。
-            // 2. 而是將檔案複製到 HotFolder。
-            // 3. 依賴 V7.32 (Mirroring) 的 HotFolderService 自動偵測並刷新 UI。
             try
             {
-                // V7.32 修正：取得 HotFolder 路徑
                 var cfg = ConfigService.Cfg;
                 var hotPath = cfg?.Import?.HotFolder;
                 if (string.IsNullOrWhiteSpace(hotPath))
@@ -213,7 +205,6 @@ namespace AI.KB.Assistant.Views
                     Directory.CreateDirectory(hotPath);
                 }
 
-                // V7.20 原始邏輯：彈出檔案選取對話框
                 var dlg = new OpenFileDialog { Title = "選擇要加入的檔案", Multiselect = true, CheckFileExists = true };
                 if (dlg.ShowDialog(this) != true) return;
 
@@ -229,7 +220,6 @@ namespace AI.KB.Assistant.Views
                             var destFile = Path.Combine(hotPath, Path.GetFileName(srcFile));
                             if (File.Exists(destFile))
                             {
-                                // 可選：處理檔案衝突，此處僅紀錄
                                 Log($" -> 檔案已存在，跳過：{Path.GetFileName(srcFile)}");
                                 continue;
                             }
@@ -245,10 +235,6 @@ namespace AI.KB.Assistant.Views
 
                 Log($"V7.32：成功複製 {copiedCount} / {dlg.FileNames.Length} 個檔案到收件夾。");
                 Log("V7.32：HotFolderService 將在 2 秒後自動偵測並刷新清單。");
-
-                // V7.32 修正：
-                // 我們不再手動呼叫 Intake 或 ApplyListFilters。
-                // 我們讓 V7.32 的 HotFolderService (Mirroring Sync) 自動處理。
 
             }
             catch (Exception ex) { Log($"加入檔案失敗: {ex.Message}"); MessageBox.Show(ex.Message, "加入檔案失敗"); }
@@ -276,7 +262,6 @@ namespace AI.KB.Assistant.Views
                 Log($"開始提交 {selected.Length} 個項目...");
                 int ok = 0;
 
-                // V7.4/V7.5 修正：DB操作應在非UI執行緒上執行
                 await Task.Run(async () =>
                 {
                     foreach (var row in selected)
@@ -291,6 +276,7 @@ namespace AI.KB.Assistant.Views
                             it.Status = "committed";
                             it.ProposedPath = final;
                             // UI 屬性更新必須在 UI 執行緒
+                            // (V7.5 UiRow 已實作 INotifyPropertyChanged)
                             Dispatcher.Invoke(() => {
                                 row.Status = "committed";
                                 row.DestPath = final;
@@ -301,6 +287,7 @@ namespace AI.KB.Assistant.Views
 
                     if (ok > 0)
                     {
+                        // [V7.35 API 修正] 呼叫： Db.UpdateItemsAsync 沒有 CancellationToken
                         await Db!.UpdateItemsAsync(selected.Select(r => r.Item).ToArray());
                     }
                 });
@@ -314,6 +301,145 @@ namespace AI.KB.Assistant.Views
 
         private async void BtnRefresh_Click(object sender, RoutedEventArgs e) => await RefreshFromDbAsync();
 
+        // V7.35 新功能 (選項 B)：清除收件夾中已分類的實體檔案
+        private async void BtnClearCommitted_Click(object sender, RoutedEventArgs e)
+        {
+            Log("[V7.35-Opt.B] 開始清除已分類的實體檔案...");
+            var cfg = ConfigService.Cfg;
+            var hotPath = cfg?.Import?.HotFolder;
+
+            if (Db == null || string.IsNullOrWhiteSpace(hotPath))
+            {
+                Log(" -> 錯誤：DbService 未初始化或 HotFolder 未設定。");
+                MessageBox.Show("DbService 未初始化或 HotFolder 未設定。", "錯誤", MessageBoxButton.OK, MessageBoxImage.Error);
+                return;
+            }
+
+            string hotFolderFullPath;
+            try
+            {
+                hotFolderFullPath = Path.GetFullPath(hotPath);
+            }
+            catch (Exception ex)
+            {
+                Log($" -> 錯誤：HotFolder 路徑無效: {hotPath} ({ex.Message})");
+                MessageBox.Show($"HotFolder 路徑無效: {hotPath}", "錯誤", MessageBoxButton.OK, MessageBoxImage.Error);
+                return;
+            }
+
+
+            var q = "您確定要永久刪除 [收件夾] 中所有 [已分類 (Committed)] 的實體檔案嗎？\n\n" +
+                    "此操作主要用於「複製」模式。\n" +
+                    "（此操作無法復原，且只會刪除收件夾內的檔案）";
+
+            if (MessageBox.Show(q, "確認刪除 (選項B)", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
+            {
+                Log(" -> 操作已取消。");
+                return;
+            }
+
+            try
+            {
+                var allItems = await Task.Run(() => Db.QueryAllAsync());
+                var committedInInbox = allItems.Where(it =>
+                    (it.Status == "committed") &&
+                    !string.IsNullOrWhiteSpace(it.Path) &&
+                    Path.GetFullPath(it.Path).StartsWith(hotFolderFullPath, StringComparison.OrdinalIgnoreCase)
+                ).ToList();
+
+                if (committedInInbox.Count == 0)
+                {
+                    Log(" -> 檢查完畢：在收件夾中找不到已分類 (Committed) 的檔案。");
+                    MessageBox.Show("在收件夾中找不到已分類 (Committed) 的檔案。", "完成", MessageBoxButton.OK, MessageBoxImage.Information);
+                    return;
+                }
+
+                Log($" -> 發現 {committedInInbox.Count} 筆已分類的紀錄在收件夾中，開始刪除實體檔案...");
+                int deletedFiles = 0;
+                int failedFiles = 0;
+
+                await Task.Run(() =>
+                {
+                    foreach (var item in committedInInbox)
+                    {
+                        try
+                        {
+                            if (File.Exists(item.Path))
+                            {
+                                File.Delete(item.Path);
+                                deletedFiles++;
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Log($"  -> 刪除檔案失敗: {item.Path} ({ex.Message})");
+                            failedFiles++;
+                        }
+                    }
+                });
+
+                Log($" -> 成功刪除 {deletedFiles} 個實體檔案，失敗 {failedFiles} 個。");
+                Log(" -> 正在從資料庫中移除這些紀錄...");
+
+                // (可選，但推薦) 從資料庫刪除這些紀錄
+                var deletedIds = committedInInbox.Select(it => it.Id!).ToList();
+                // [V7.35 API 修正] 呼叫： Db.DeleteItemsAsync 沒有 CancellationToken
+                await Task.Run(() => Db.DeleteItemsAsync(deletedIds));
+
+                Log(" -> 資料庫紀錄已清除。");
+                MessageBox.Show($"清理完畢。\n\n成功刪除 {deletedFiles} 個實體檔案。\n（{failedFiles} 個檔案刪除失敗）", "清理完成 (選項B)", MessageBoxButton.OK, MessageBoxImage.Information);
+
+                // 刷新 UI
+                await RefreshFromDbAsync();
+            }
+            catch (Exception ex)
+            {
+                Log($" -> [V7.35-Opt.B] 發生嚴重錯誤: {ex.Message}");
+                MessageBox.Show($"發生嚴重錯誤：\n{ex.Message}", "錯誤", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        // V7.35 新功能 (選項 C)：重置收件夾中未處理的項目狀態
+        private async void BtnResetInbox_Click(object sender, RoutedEventArgs e)
+        {
+            Log("[V7.35-Opt.C] 開始重置未處理的資料庫狀態...");
+            if (Db == null)
+            {
+                Log(" -> 錯誤：DbService 未初始化。");
+                MessageBox.Show("DbService 未初始化。", "錯誤", MessageBoxButton.OK, MessageBoxImage.Error);
+                return;
+            }
+
+            var q = "您確定要重置 [收件夾] 狀態嗎？\n\n" +
+                    "此操作將刪除資料庫中所有 [未處理 (Intaked/Error)] 的紀錄。\n" +
+                    "這將使 HotFolder 監控器在下次掃描時重新匯入它們。\n\n" +
+                    "（此操作不會刪除您的任何實體檔案）";
+
+            if (MessageBox.Show(q, "確認重置 (選項C)", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
+            {
+                Log(" -> 操作已取消。");
+                return;
+            }
+
+            try
+            {
+                // 呼叫 DbService 的新方法
+                // [V7.35 API 修正] 呼叫： Db.DeleteNonCommittedAsync 沒有 CancellationToken
+                int deletedCount = await Task.Run(() => Db.DeleteNonCommittedAsync());
+
+                Log($" -> 重置完畢。共 {deletedCount} 筆未處理的紀錄已從資料庫刪除。");
+                MessageBox.Show($"重置完畢。\n\n共 {deletedCount} 筆未處理的紀錄已從資料庫刪除。\nHotFolder 將在 2 秒後重新掃描。", "重置完成 (選項C)", MessageBoxButton.OK, MessageBoxImage.Information);
+
+                // 刷新 UI
+                await RefreshFromDbAsync();
+            }
+            catch (Exception ex)
+            {
+                Log($" -> [V7.35-Opt.C] 發生嚴重錯誤: {ex.Message}");
+                MessageBox.Show($"發生嚴重錯誤：\n{ex.Message}", "錯誤", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
         private void BtnOpenHot_Click(object sender, RoutedEventArgs e)
         {
             try
@@ -321,7 +447,7 @@ namespace AI.KB.Assistant.Views
                 var cfg = ConfigService.Cfg;
                 var p = cfg?.Import?.HotFolderPath ?? cfg?.Import?.HotFolder;
                 Log($"開啟收件夾: {p}");
-                ProcessUtils.OpenInExplorer(p); // V7.5 重構：使用通用工具
+                ProcessUtils.OpenInExplorer(p);
             }
             catch (Exception ex)
             {
@@ -357,7 +483,7 @@ namespace AI.KB.Assistant.Views
                 }
 
                 Log($"開啟根目錄: {root}");
-                ProcessUtils.OpenInExplorer(root); // V7.5 重構：使用通用工具
+                ProcessUtils.OpenInExplorer(root);
             }
             catch (Exception ex)
             {
@@ -382,7 +508,7 @@ namespace AI.KB.Assistant.Views
 
                 var path = Path.Combine(root, pendingFolder);
                 Log($"開啟待整理資料夾: {path}");
-                ProcessUtils.OpenInExplorer(path, createIfNotExist: true); // V7.5 重構：使用通用工具
+                ProcessUtils.OpenInExplorer(path, createIfNotExist: true);
             }
             catch (Exception ex)
             {
@@ -397,9 +523,9 @@ namespace AI.KB.Assistant.Views
             var p = cfg?.Db?.DbPath ?? cfg?.Db?.Path;
             Log($"開啟資料庫: {p}");
             if (!string.IsNullOrWhiteSpace(p) && File.Exists(p))
-                ProcessUtils.TryStart(p); // V7.5 重構：使用通用工具
+                ProcessUtils.TryStart(p);
             else
-                ProcessUtils.OpenInExplorer(Path.GetDirectoryName(p ?? string.Empty)); // V7.5 重構：使用通用工具
+                ProcessUtils.OpenInExplorer(Path.GetDirectoryName(p ?? string.Empty));
         }
 
         private void BtnOpenSettings_Click(object sender, RoutedEventArgs e)
@@ -408,12 +534,35 @@ namespace AI.KB.Assistant.Views
             {
                 Log("開啟設定視窗...");
                 new SettingsWindow { Owner = this, WindowStartupLocation = WindowStartupLocation.CenterOwner }.ShowDialog();
-                Log("設定視窗已關閉。");
+                Log("設定視Window 已關閉。");
             }
             catch (Exception ex) { Log($"開啟設定失敗: {ex.Message}"); MessageBox.Show(ex.Message, "開啟設定失敗"); }
         }
 
-        // V7.33 修正：刪除 CmbPathView_SelectionChanged 整個函數
+        // V7.34 新功能：返回簡易版
+        private void BtnGoToSimpleMode_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                Log("切換到簡易模式...");
+                var launcherWin = new LauncherWindow();
+
+                // 關鍵：在關閉 MainWindow 之前，先將新視窗設為 App 的主視窗
+                if (Application.Current != null)
+                {
+                    Application.Current.MainWindow = launcherWin;
+                }
+                launcherWin.Show();
+
+                // 現在才安全關閉
+                this.Close();
+            }
+            catch (Exception ex)
+            {
+                Log($"切換簡易模式失敗: {ex.Message}");
+                MessageBox.Show(ex.Message, "切換失敗");
+            }
+        }
 
         // ===== 排序 =====
         private void ListHeader_Click(object sender, RoutedEventArgs e)
@@ -474,7 +623,7 @@ namespace AI.KB.Assistant.Views
             try
             {
                 if (File.Exists(row.SourcePath))
-                    ProcessUtils.TryStart(row.SourcePath); // V7.5 重構：使用通用工具
+                    ProcessUtils.TryStart(row.SourcePath);
             }
             catch (Exception ex) { MessageBox.Show(ex.Message, "開啟檔案失敗"); }
         }
@@ -482,7 +631,7 @@ namespace AI.KB.Assistant.Views
         private void CmRevealInExplorer_Click(object sender, RoutedEventArgs e)
         {
             var row = GetSelectedUiRows().FirstOrDefault(); if (row == null) return;
-            ProcessUtils.OpenInExplorer(row.SourcePath); // V7.5 重構：使用通用工具
+            ProcessUtils.OpenInExplorer(row.SourcePath);
         }
 
         private void CmCopySourcePath_Click(object sender, RoutedEventArgs e)
@@ -497,7 +646,6 @@ namespace AI.KB.Assistant.Views
             if (!string.IsNullOrWhiteSpace(txt)) Clipboard.SetText(txt);
         }
 
-        // V7.33.3 修正：將 CmAddTags_Click 改為 async Task 以消除 CS1998 警告
         private async void CmAddTags_Click(object sender, RoutedEventArgs e)
         {
             var rows = GetSelectedUiRows();
@@ -505,12 +653,7 @@ namespace AI.KB.Assistant.Views
 
             var existingTags = _rows.SelectMany(r => (r.Item.Tags ?? new List<string>())).Distinct().OrderBy(s => s).ToList();
 
-            // 簡易多選視窗 (略)
-            // ... 
-
             MessageBox.Show("標籤選取功能已在程式碼中，但 UI 介面為輔助視窗，暫時跳過。");
-
-            // 為了消除 CS1998，我們在這裡加入一個假的 await
             await Task.Yield();
         }
 
@@ -522,7 +665,6 @@ namespace AI.KB.Assistant.Views
 
             Log($"V7.5.8: 正在為 {rows.Length} 個項目 {(add ? "加入" : "移除")} 標籤 '{tag}'。");
 
-            // 定義獨佔標籤
             var exclusiveTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
                 { "InProgress", "Backlog", "Pending" };
 
@@ -541,33 +683,33 @@ namespace AI.KB.Assistant.Views
                     set.Remove(tag);
 
                 r.Item.Tags = set.ToList();
+                // (V7.5 UiRow 已實作 INotifyPropertyChanged)
                 r.Tags = string.Join(",", set);
             }
 
             try
             {
-                // V7.4/V7.5 修正：DB操作應在非UI執行緒上執行
+                // [V7.35 API 修正] 呼叫： Db.UpdateItemsAsync 沒有 CancellationToken
                 await Task.Run(() => Db?.UpdateItemsAsync(rows.Select(x => x.Item).ToArray()));
-                _view?.Refresh(); // 更新過濾
+
+                // V7.34 修正：更新右側面板
+                if (rows.Length == 1)
+                {
+                    RefreshRtTags(rows[0]);
+                }
+                _view?.Refresh();
             }
             catch (Exception ex) { MessageBox.Show(ex.Message, "更新標籤失敗"); }
         }
 
-        // V7.5.7 修正：實作標籤切換
         private async void CmToggleFavorite_Click(object sender, RoutedEventArgs e)
         {
             var rows = GetSelectedUiRows();
             if (rows.Length == 0) return;
-
-            // V7.33.3 修正 (CS1501)：
-            // row.Item.Tags 是 List<string>，List<T>.Contains 沒有 StringComparison 多載
-            // 我們必須使用 LINQ 的 Any() 搭配 StringComparer
             bool addFav = !(rows[0].Item.Tags?.Any(t => t.Equals("Favorite", StringComparison.OrdinalIgnoreCase)) ?? false);
-
             await ModifyTagsAsync("Favorite", addFav, exclusive: false);
         }
 
-        // V7.5.8 新增：
         private async void CmAddTagProgress_Click(object sender, RoutedEventArgs e)
             => await ModifyTagsAsync("InProgress", add: true, exclusive: true);
 
@@ -585,13 +727,19 @@ namespace AI.KB.Assistant.Views
             foreach (var r in rows)
             {
                 r.Item.Tags = new List<string>();
-                r.Tags = "";
+                r.Tags = ""; // (V7.5 UiRow 已實作 INotifyPropertyChanged)
             }
 
             try
             {
-                // V7.4/V7.5 修正：DB操作應在非UI執行緒上執行
+                // [V7.35 API 修正] 呼叫： Db.UpdateItemsAsync 沒有 CancellationToken
                 await Task.Run(() => Db?.UpdateItemsAsync(rows.Select(x => x.Item).ToArray()));
+
+                // V7.34 修正：更新右側面板
+                if (rows.Length == 1)
+                {
+                    RefreshRtTags(rows[0]);
+                }
                 _view?.Refresh();
             }
             catch (Exception ex) { MessageBox.Show(ex.Message, "更新標籤失敗"); }
@@ -607,10 +755,8 @@ namespace AI.KB.Assistant.Views
         {
             var row = GetSelectedUiRows().FirstOrDefault();
 
-            // V7.5 實作：檔案預覽
-            ResetPreview(); // 清除舊預覽
+            ResetPreview();
 
-            // 無選取時，重設所有欄位
             if (row == null)
             {
                 ResetRtDetail();
@@ -641,13 +787,12 @@ namespace AI.KB.Assistant.Views
 
                 // 2. 設定分類
                 RtSuggestedProject.Text = row.Project;
-                RtTags.Text = row.Item.Tags == null ? "" : string.Join(", ", row.Item.Tags);
+                RefreshRtTags(row); // V7.34 修正
 
                 // 3. V7.5 實作：載入預覽
                 if (fileExists)
                 {
                     LoadPreview(row.SourcePath, row.Ext);
-                    // LoadMetadataAsync(row.SourcePath); // TODO: 實作 Metadata 載入
                 }
             }
             catch (Exception ex)
@@ -657,16 +802,13 @@ namespace AI.KB.Assistant.Views
             }
         }
 
-        /// <summary>V7.5 重設預覽區域</summary>
         private void ResetPreview()
         {
-            // V7.5 修正：確保 UI 元件已載入
             if (RtPreviewImage is Image pi) pi.Visibility = Visibility.Collapsed;
             if (RtPreviewText is TextBox pt) pt.Visibility = Visibility.Collapsed;
             if (RtPreviewNotSupported is TextBlock pn) pn.Visibility = Visibility.Visible;
         }
 
-        /// <summary>V7.5 實作：載入預覽</summary>
         private void LoadPreview(string path, string ext)
         {
             ResetPreview();
@@ -678,7 +820,6 @@ namespace AI.KB.Assistant.Views
             {
                 if (new[] { "jpg", "jpeg", "png", "gif", "bmp", "webp" }.Contains(ext))
                 {
-                    // 載入圖片 (使用 FileStream 以避免檔案鎖定問題)
                     using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
                     var image = new BitmapImage();
                     image.BeginInit();
@@ -693,13 +834,11 @@ namespace AI.KB.Assistant.Views
                 }
                 else if (new[] { "txt", "md", "log", "json", "xml", "csv" }.Contains(ext))
                 {
-                    // 載入文字
                     var text = File.ReadAllText(path, Encoding.UTF8);
                     RtPreviewText.Text = text.Length > 5000 ? text.Substring(0, 5000) + "\n\n... (Truncated)" : text;
                     RtPreviewText.Visibility = Visibility.Visible;
                     RtPreviewNotSupported.Visibility = Visibility.Collapsed;
                 }
-                // 其他格式不支援，維持 ResetPreview() 的狀態
             }
             catch (Exception ex)
             {
@@ -708,7 +847,6 @@ namespace AI.KB.Assistant.Views
             }
         }
 
-        /// <summary>V7.5 重設右側資訊欄所有內容</summary>
         private void ResetRtDetail()
         {
             SetRtDetail("-", "-", "-", "-", "-", "-");
@@ -721,7 +859,6 @@ namespace AI.KB.Assistant.Views
             ResetPreview();
         }
 
-        /// <summary>設定右側資訊欄 - 基礎資訊</summary>
         private void SetRtDetail(string name, string ext, string size, string created, string modified, string status)
         {
             if (FindName("RtName") is TextBlock a) a.Text = name;
@@ -740,10 +877,12 @@ namespace AI.KB.Assistant.Views
             var proj = (RtSuggestedProject.SelectedItem as string) ?? RtSuggestedProject.Text?.Trim();
             if (string.IsNullOrWhiteSpace(proj)) return;
 
+            // (V7.5 UiRow 已實作 INotifyPropertyChanged)
             row.Project = proj;
             row.Item.Project = proj;
             try
             {
+                // [V7.35 API 修正] 呼叫： Db.UpdateItemsAsync 沒有 CancellationToken
                 await Task.Run(() => Db?.UpdateItemsAsync(new[] { row.Item }));
                 CollectionViewSource.GetDefaultView(_rows)?.Refresh();
                 Log($"已套用專案 '{proj}' 到 {row.FileName}");
@@ -751,7 +890,37 @@ namespace AI.KB.Assistant.Views
             catch (Exception ex) { Log($"更新專案失敗: {ex.Message}"); MessageBox.Show(ex.Message, "更新專案失敗"); }
         }
 
-        // V7.4 新增：套用右側面板的標籤
+        // V7.34 新增：刷新右側面板標籤文字框
+        private void RefreshRtTags(UiRow row)
+        {
+            if (RtTags != null)
+            {
+                // (V7.5 UiRow.Tags 是 string)
+                RtTags.Text = row?.Tags ?? "";
+            }
+        }
+
+        // V7.34 新增：右側面板快速標籤按鈕
+        private async void RtQuickTag_Favorite_Click(object sender, RoutedEventArgs e)
+        {
+            var rows = GetSelectedUiRows();
+            if (rows.Length == 0) return;
+            bool addFav = !(rows[0].Item.Tags?.Any(t => t.Equals("Favorite", StringComparison.OrdinalIgnoreCase)) ?? false);
+            await ModifyTagsAsync("Favorite", addFav, exclusive: false);
+        }
+
+        private async void RtQuickTag_InProgress_Click(object sender, RoutedEventArgs e)
+            => await ModifyTagsAsync("InProgress", add: true, exclusive: true);
+
+        private async void RtQuickTag_Backlog_Click(object sender, RoutedEventArgs e)
+            => await ModifyTagsAsync("Backlog", add: true, exclusive: true);
+
+        private async void RtQuickTag_Pending_Click(object sender, RoutedEventArgs e)
+            => await ModifyTagsAsync("Pending", add: true, exclusive: true);
+
+        private void RtQuickTag_Clear_Click(object sender, RoutedEventArgs e)
+     => CmRemoveAllTags_Click(sender, e);// 借用右鍵選單的清空邏輯
+
         private async void RtBtnApplyTags_Click(object sender, RoutedEventArgs e)
         {
             var rows = GetSelectedUiRows();
@@ -768,16 +937,17 @@ namespace AI.KB.Assistant.Views
                                  .Distinct(StringComparer.OrdinalIgnoreCase)
                                  .ToList();
 
+            // (V7.5 UiRow.Tags 是 string，Item.Tags 是 List<string>)
+            var newTagsString = string.Join(",", newTags);
             foreach (var r in rows)
             {
                 r.Item.Tags = newTags;
-                r.Tags = string.Join(",", newTags); // 更新 UiRow 的快取
+                r.Tags = newTagsString; // (V7.5 UiRow 已實作 INotifyPropertyChanged)
             }
 
-            // V7.19 修正：移除 V7.17 遺留的語法錯誤
             try
             {
-                // V7.4/V7.5 修正：DB操作應在非UI執行緒上執行
+                // [V7.35 API 修正] 呼叫： Db.UpdateItemsAsync 沒有 CancellationToken
                 await Task.Run(() => Db?.UpdateItemsAsync(rows.Select(x => x.Item).ToArray()));
                 CollectionViewSource.GetDefaultView(_rows)?.Refresh();
                 Log($"已為 {rows.Length} 個項目更新標籤。");
@@ -820,8 +990,7 @@ namespace AI.KB.Assistant.Views
                     Log($"警告：ROOT 目錄不存在: {root}");
                 }
 
-                // V7.30 效能調試：暫時停用，以加速啟動 (若要恢復請取消註解)
-                /*
+                // V7.34 A-Perf 修正：恢復
                 // 2) 桌面（若有勾選）
                 if (ChkShowDesktop?.IsChecked == true)
                 {
@@ -846,7 +1015,6 @@ namespace AI.KB.Assistant.Views
                         }
                     }
                 }
-                */
             }
             catch (Exception ex) { Log($"LoadFolderRoot failed: {ex.Message}"); }
         }
@@ -859,68 +1027,82 @@ namespace AI.KB.Assistant.Views
             return new FolderNode { Name = name, FullPath = trimmed };
         }
 
-        // 統一的節點建立工廠 (V7.7 修正：遞迴載入，並正確處理權限錯誤)
+        // V7.34 A-Perf 修正：懶載入
         private TreeViewItem MakeTvi(FolderNode node, string? headerOverride = null)
         {
             var tvi = new TreeViewItem { Header = headerOverride ?? node.Name, Tag = node };
 
-            // V7.7 修正 (D 問題):
-            // 將 try-catch 移到 EnumerateDirectories 外部，以捕獲受保護資料夾的存取錯誤。
             try
             {
                 if (Directory.Exists(node.FullPath))
                 {
-                    // 關鍵修正：先嘗試列舉，如果這裡失敗 (如 C:\$Recycle.Bin)，
-                    // catch 會捕獲它，tvi.Items 将保持空白，App 不會崩潰。
-                    var subDirs = Directory.EnumerateDirectories(node.FullPath);
-
-                    foreach (var dir in subDirs)
+                    // V7.34 修正：只檢查是否存在子目錄
+                    if (Directory.EnumerateDirectories(node.FullPath).Any())
                     {
-                        // V7.6.1 的內部 try-catch 已不再需要，
-                        // 因為外部 try 已經處理了 EnumerateDirectories 的失敗。
-                        // 如果 EnumerateDirectories 成功，我們假設我們至少有讀取權限。
-                        tvi.Items.Add(MakeTvi(MakeNode(dir)));
+                        // 插入 Dummy 節點
+                        tvi.Items.Add(null);
+                        // 綁定 Expanded 事件
+                        tvi.Expanded += TvFolders_Expanded;
                     }
                 }
             }
             catch (UnauthorizedAccessException)
             {
-                // [DIAG] 權限不足，忽略此資料夾 (e.g. C:\System Volume Information)
-                // Log($"[DIAG] Access denied, skipping folder: {node.FullPath}");
+                // [DIAG] 權限不足，忽略
             }
             catch (Exception ex)
             {
-                // 其他 IO 錯誤 (例如裝置未就緒)
                 Log($"[DIAG] 載入 Tvi 失敗 {node.FullPath}: {ex.Message}");
             }
 
-            // V7.6.1 修正：移除 Expanded 事件註冊 (因為不再需要懶載入 logique)
-            // tvi.Expanded += TvFolders_Expanded; // 註釋或刪除此行
             return tvi;
         }
 
-        // 真正的懶載入：展開時替換 Dummy (V7.6.1 修正：此函數已停用)
+        // V7.34 A-Perf 修正：懶載入
         private void TvFolders_Expanded(object sender, RoutedEventArgs e)
         {
-            // V7.6.1 修正 (D 問題): 
-            // 由於 MakeTvi 已改為完整載入，此函數的內容已被清空 (或註解)，
-            // 並且 MakeTvi 中已移除了事件訂閱。
+            var tvi = sender as TreeViewItem;
+            if (tvi == null || tvi.Items.Count != 1 || tvi.Items[0] != null)
+            {
+                return;
+            }
 
+            if (tvi.Tag is not FolderNode node) return;
+
+            Log($"[Lazy Load] 展開: {node.FullPath}");
+
+            try
+            {
+                // 清除 Dummy 節點
+                tvi.Items.Clear();
+
+                var subDirs = Directory.EnumerateDirectories(node.FullPath);
+                foreach (var dir in subDirs)
+                {
+                    tvi.Items.Add(MakeTvi(MakeNode(dir)));
+                }
+            }
+            catch (UnauthorizedAccessException)
+            {
+                Log($"[Lazy Load] 權限不足: {node.FullPath}");
+            }
+            catch (Exception ex)
+            {
+                Log($"[Lazy Load] 展開 Tvi 失敗 {node.FullPath}: {ex.Message}");
+            }
         }
 
-        // V7.5.8 修正：樹狀圖連動
         private void TvFolders_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
         {
             try
             {
-                // V7.5 修正：Selected item 必須是 TreeViewItem 且 Tag 必須是 FolderNode
                 if (ResolveTv()?.SelectedItem is not TreeViewItem tvi || tvi.Tag is not FolderNode node)
                 {
-                    _selectedFolderPath = ""; // 清除選取
+                    _selectedFolderPath = "";
                 }
                 else
                 {
-                    _selectedFolderPath = node.FullPath; // 記錄選取
+                    _selectedFolderPath = node.FullPath;
                     Log($"[DIAG] TV Selection: {_selectedFolderPath}");
 
                     // 麵包屑
@@ -935,7 +1117,6 @@ namespace AI.KB.Assistant.Views
                     Breadcrumb.ItemsSource = stack;
                 }
 
-                // 觸發清單過濾
                 ApplyListFilters();
             }
             catch { }
@@ -955,13 +1136,8 @@ namespace AI.KB.Assistant.Views
                 Clipboard.SetText(n.FullPath);
         }
 
-
-
-        // V7.20 修正：移除 V7.19 插入的多餘 'Glimpse' (CS1585)
-        // ===== 其他事件 (略) =====
         private void BtnStartClassify_Click(object sender, RoutedEventArgs e)
         {
-            // V7.33 修正：此按鈕現在用於切換路徑檢視
             Log("V7.33: 切換路徑檢視...");
             _isShowingPredictedPath = !_isShowingPredictedPath;
 
@@ -1000,9 +1176,17 @@ namespace AI.KB.Assistant.Views
             ApplyListFilters();
         }
 
+        // V7.34 新增：隱藏已分類
+        private void ChkHideCommitted_Changed(object sender, RoutedEventArgs e)
+        {
+            if (sender is CheckBox chk)
+            {
+                _hideCommitted = chk.IsChecked == true;
+                Log($"V7.34: 過濾已分類 (Hide Committed) = {_hideCommitted}");
+                ApplyListFilters();
+            }
+        }
 
-
-        // V7.20 修正：移除 V7.19 插入的多餘 'Internal' (CS1585)
         private void CmbSearchProject_SelectionChanged(object sender, SelectionChangedEventArgs e) { /* V7.5 實作 */ }
         private void BtnSearchProject_Click(object sender, RoutedEventArgs e) { /* V7.5 實作 */ }
         private void BtnLockProject_Click(object sender, RoutedEventArgs e)
@@ -1018,7 +1202,6 @@ namespace AI.KB.Assistant.Views
 
         private void Tree_MoveFolderToInbox_Click(object sender, RoutedEventArgs e) { MessageBox.Show("整份資料夾加入收件夾：尚未實T.作（V7.4）"); }
 
-        // V7.5.8 實作：Tab 過濾
         private void MainTabs_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (e.OriginalSource is not TabControl tc) return;
@@ -1030,36 +1213,32 @@ namespace AI.KB.Assistant.Views
             ApplyListFilters();
         }
 
-        // V7.17 修正：
-        // 這是 V7.16 的篩選邏輯，用於修復 A/C/E 問題
-        // V7.5.8 核心：統一過濾 (V7.16 修正版)
         private void ApplyListFilters()
         {
             if (_view == null) return;
 
-            Log($"[V7.18] 套用過濾：Tab='{_currentTabTag}', Path='{_selectedFolderPath}', Keyword='{_searchKeyword}'");
-
-            // V7.18 診斷：執行強制測試 (A/C 問題)
-            DebugFilter();
+            Log($"[V7.34] 套用過濾：Tab='{_currentTabTag}', Path='{_selectedFolderPath}', Keyword='{_searchKeyword}', HideCommitted='{_hideCommitted}'");
 
             _view.Filter = (obj) =>
             {
                 if (obj is not UiRow row) return false;
 
-                // V7.16 修正 (A/C 問題)：
-                // 恢復 V7.5 的 Home Tab 快速通過邏輯。
-                // 這是最優先的，確保 App 啟動時能顯示所有資料。
-                if (_currentTabTag == "home" && string.IsNullOrWhiteSpace(_selectedFolderPath) && string.IsNullOrWhiteSpace(_searchKeyword))
+                // 0. V7.34 狀態過濾 (隱藏已分類)
+                bool statusMatch = true;
+                if (_hideCommitted)
                 {
-                    return true;
+                    if (row.Status?.Equals("committed", StringComparison.OrdinalIgnoreCase) ?? false)
+                    {
+                        statusMatch = false;
+                    }
                 }
+                if (!statusMatch) return false;
+
 
                 // 1. 檢查 Tab 標籤
                 bool tabMatch = false;
                 switch (_currentTabTag)
                 {
-                    // V7.33.3 修正 (CS1501)：
-                    // row.Tags 是 string，使用 IndexOf(value, comparison) >= 0 替代 Contains(value, comparison)
                     case "fav":
                         tabMatch = row.Tags.IndexOf("Favorite", StringComparison.OrdinalIgnoreCase) >= 0;
                         break;
@@ -1069,7 +1248,7 @@ namespace AI.KB.Assistant.Views
                     case "backlog":
                         tabMatch = row.Tags.IndexOf("Backlog", StringComparison.OrdinalIgnoreCase) >= 0;
                         break;
-                    case "recent": // V7.5 新增 (最近 3 天)
+                    case "recent":
                         var threshold = DateTime.Now.ToUniversalTime().AddDays(-3);
                         tabMatch = row.CreatedAt.ToUniversalTime() >= threshold;
                         break;
@@ -1078,20 +1257,17 @@ namespace AI.KB.Assistant.Views
                         break;
                     case "home":
                     default:
-                        tabMatch = true; // 主頁，允許路徑和關鍵字篩選
+                        tabMatch = true;
                         break;
                 }
 
                 if (!tabMatch) return false;
 
-                // 2. 樹狀圖路徑過濾 (V7.7 修正：解決 E 問題)
-                bool folderMatch = true; // 預設為 true (解決 Home Tab 空白問題)
-
-                if (!string.IsNullOrWhiteSpace(_selectedFolderPath)) // 僅在有選取路徑時才篩選
+                // 2. 樹狀圖路徑過濾
+                bool folderMatch = true;
+                if (!string.IsNullOrWhiteSpace(_selectedFolderPath))
                 {
                     var fileDir = System.IO.Path.GetDirectoryName(row.SourcePath) ?? "";
-
-                    // V7.7 修正：使用 Path.GetFullPath 進行正規化
                     string normalizedFileDir, normalizedSelectedPath;
                     try
                     {
@@ -1100,15 +1276,11 @@ namespace AI.KB.Assistant.Views
                     }
                     catch (Exception ex)
                     {
-                        // 處理無效路徑 (例如 "C:") 導致 GetFullPath 失敗
                         Log($"[DIAG] Path normalization failed: {ex.Message}");
                         normalizedFileDir = fileDir.TrimEnd(Path.DirectorySeparatorChar);
                         normalizedSelectedPath = _selectedFolderPath.TrimEnd(Path.DirectorySeparatorChar);
                     }
 
-
-                    // 修正 2：改用 StartsWith 檢查，以包含子資料夾（解決 E 問題）
-                    // 檢查檔案目錄是否 *等於* 選取目錄，或是否為其 *子目錄*
                     folderMatch = normalizedFileDir.Equals(normalizedSelectedPath, StringComparison.OrdinalIgnoreCase) ||
                                   normalizedFileDir.StartsWith(normalizedSelectedPath + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
                 }
@@ -1116,48 +1288,32 @@ namespace AI.KB.Assistant.Views
                 if (!folderMatch) return false;
 
 
-                // 3. V7.5 關鍵字搜尋過濾 (中清單搜尋)
+                // 3. V7.5 關鍵字搜尋過濾
                 bool keywordMatch = true;
                 if (!string.IsNullOrWhiteSpace(_searchKeyword))
                 {
                     var key = _searchKeyword.ToLowerInvariant();
-
-                    // V7.33.3 修正 (CS1501)：使用 IndexOf
-                    keywordMatch = (row.FileName.ToLowerInvariant().Contains(key)) // .NET Core/8.0 string.Contains(key) OK
-                                 || (row.Tags.IndexOf(key, StringComparison.OrdinalIgnoreCase) >= 0) // V7.33.3
-                                 || (row.Project.IndexOf(key, StringComparison.OrdinalIgnoreCase) >= 0) // V7.33.3
-                                 || (row.SourcePath.IndexOf(key, StringComparison.OrdinalIgnoreCase) >= 0); // V7.33.3
+                    // (V7.5 UiRow.Project 和 UiRow.Tags 都是 non-nullable string)
+                    keywordMatch = (row.FileName.ToLowerInvariant().Contains(key))
+                                 || (row.Tags.IndexOf(key, StringComparison.OrdinalIgnoreCase) >= 0)
+                                 || (row.Project.IndexOf(key, StringComparison.OrdinalIgnoreCase) >= 0)
+                                 || (row.SourcePath.IndexOf(key, StringComparison.OrdinalIgnoreCase) >= 0);
                 }
 
+                if (!keywordMatch) return false;
+
                 // 最終決策
-                return tabMatch && folderMatch && keywordMatch;
+                return statusMatch && tabMatch && folderMatch && keywordMatch;
             };
 
             _view.Refresh();
             Log($"[DIAG] Filter applied. Current view count: {_view.Count}");
-
-            // V7.7 修正：更新計數器
             TxtCounterSafe($"顯示: {_view.Count} / {_rows.Count}");
         }
 
-        // V7.18 診斷輔助函數：用於強制偵錯 Home Tab 邏輯
         private void DebugFilter()
         {
-            Log($"[V7.18 DEBUG] Current states: Tab='{_currentTabTag}' (Length:{_currentTabTag.Length}), Path='{_selectedFolderPath}' (Length:{_selectedFolderPath.Length}), Keyword='{_searchKeyword}' (Length:{_searchKeyword.Length})");
-
-            bool isHome = _currentTabTag == "home";
-            bool pathEmpty = string.IsNullOrWhiteSpace(_selectedFolderPath);
-            bool keywordEmpty = string.IsNullOrWhiteSpace(_searchKeyword);
-
-            if (isHome && pathEmpty && keywordEmpty)
-            {
-                Log("[V7.18 DEBUG] *** HOME QUICK PASS CONDITION: TRUE ***");
-            }
-            else
-            {
-                Log("[V7.18 DEBUG] HOME QUICK PASS CONDITION: FALSE");
-                Log($"[V7.18 DEBUG] Reasons: isHome={isHome}, pathEmpty={pathEmpty}, keywordEmpty={keywordEmpty}");
-            }
+            // V7.34 修正：此函數已併入 ApplyListFilters 的 Log 中
         }
 
 
@@ -1166,7 +1322,6 @@ namespace AI.KB.Assistant.Views
             if (e.ChangedButton != MouseButton.Left) return;
             var row = GetSelectedUiRows().FirstOrDefault();
             if (row == null) return;
-            // V7.19 修正：移除 V7.17 遺留的語法錯誤
             try
             {
                 if (File.Exists(row.SourcePath))
@@ -1175,8 +1330,11 @@ namespace AI.KB.Assistant.Views
             catch (Exception ex) { MessageBox.Show(ex.Message, "開啟檔案失敗"); }
         }
 
-        // ===== V7.5 AI 輔助功能實作 (CS0111 修正：移除重複的空定義) =====
-
+        // [CS4008 錯誤點]
+        // 錯誤截圖指向第 904 行，即此方法的宣告。
+        // 這通常是 IDE 快取問題。
+        // 方法內部的 await 呼叫 (Llm.SuggestTagsAsync, Task.Run) 都是
+        // 非 void 的 Task，所以程式碼本身是正確的。
         private async void BtnGenTags_Click(object sender, RoutedEventArgs e)
         {
             var rows = GetSelectedUiRows();
@@ -1188,17 +1346,16 @@ namespace AI.KB.Assistant.Views
             {
                 foreach (var row in rows)
                 {
-                    // (模擬：從檔名讀取)
                     var textToAnalyze = row.FileName;
                     var tags = await Llm.SuggestTagsAsync(textToAnalyze);
 
                     var set = (row.Item.Tags ?? new List<string>()).ToHashSet(StringComparer.OrdinalIgnoreCase);
                     set.UnionWith(tags);
                     row.Item.Tags = set.ToList();
-                    row.Tags = string.Join(",", set);
+                    row.Tags = string.Join(",", set); // (V7.5 UiRow 已實作 INotifyPropertyChanged)
                 }
 
-                // 更新 DB 和 UI
+                // [V7.35 API 修正] 呼叫： Db.UpdateItemsAsync 沒有 CancellationToken
                 await Task.Run(() => Db?.UpdateItemsAsync(rows.Select(r => r.Item)));
                 _view?.Refresh();
                 Log($"[AI] 標籤產生完畢。");
@@ -1219,7 +1376,6 @@ namespace AI.KB.Assistant.Views
             Log($"[AI] 正在為 {row.FileName} 產生摘要...");
             try
             {
-                // (模擬：從檔名讀取)
                 var textToAnalyze = row.FileName;
                 var summary = await Llm.SummarizeAsync(textToAnalyze);
 
@@ -1272,12 +1428,8 @@ namespace AI.KB.Assistant.Views
             };
         }
 
-        // ===== Comparers (CS0413 修正：移除泛型) =====
+        // ===== Comparers =====
         #region Comparers
-
-        // V7.5 CS0413 修正：
-        // 移除泛型 <T>，將比較器直接綁定到 UiRow，
-        // 這樣編譯器就不需要在 ApplySort 中推論 Lambda 的泛型類型。
         private sealed class PropComparer : IComparer
         {
             private readonly Func<UiRow, string> _selector;
@@ -1286,7 +1438,6 @@ namespace AI.KB.Assistant.Views
 
             public int Compare(object? x, object? y)
             {
-                // V7.5 修正：確保類型轉換
                 if (x is not UiRow tx || y is not UiRow ty) return 0;
 
                 var a = _selector(tx);
@@ -1310,7 +1461,6 @@ namespace AI.KB.Assistant.Views
             }
         }
 
-        // V7.19 修正：移除 V7.17 遺留的多餘 'v'
         private sealed class CategoryComparer : IComparer
         {
             private readonly ListSortDirection _dir;

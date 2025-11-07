@@ -3,19 +3,15 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using AI.KB.Assistant.Services; // V7.34 修正：移除 using
 
 namespace AI.KB.Assistant.Models
 {
     /// <summary>
-    /// 全域設定檔 (A 模式：config.json 與 .exe 同資料夾)
+    /// 全域設定檔 (V7.34 重構：移除所有靜態邏輯，改由 ConfigService 統一管理)
     /// </summary>
     public sealed class AppConfig
     {
-        // === 全域靜態屬性 ===
-        public static AppConfig Current { get; private set; } = Default;
-        public static AppConfig Default => CreateDefault();
-        public static string ConfigPath => Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "config.json");
-
         // === 區段設定 ===
         public AppSection App { get; set; } = new();
         public DbSection Db { get; set; } = new();
@@ -23,102 +19,40 @@ namespace AI.KB.Assistant.Models
         public ImportSection Import { get; set; } = new();
         public OpenAISection OpenAI { get; set; } = new();
 
-        #region === 載入 / 儲存 ===
+        #region === 載入 / 儲存 (V7.34 註解：以下方法已棄用，邏輯移至 ConfigService) ===
+
+        /*
+        // V7.34 棄用：邏輯移至 ConfigService
+        public static AppConfig Current { get; private set; } = Default;
+        public static AppConfig Default => CreateDefault();
+        public static string ConfigPath => Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "config.json");
 
         public static AppConfig CreateDefault()
         {
-            return new AppConfig
-            {
-                App = new AppSection
-                {
-                    StartupUIMode = "home",
-                    RootDir = ""
-                },
-                Db = new DbSection
-                {
-                    DbPath = Path.Combine(AppContext.BaseDirectory, "ai_kb.db")
-                },
-                Routing = new RoutingSection
-                {
-                    RootDir = "",
-                    UseProject = true,
-                    UseYear = true,
-                    UseMonth = true,
-                    UseCategory = false,               // NEW: 類別層預設關閉
-                    Threshold = 0.75,
-                    AutoFolderName = "_auto",
-                    LowConfidenceFolderName = "_low_conf",
-                    UseType = "rule+llm",
-                    BlacklistExts = new List<string>(),
-                    BlacklistFolderNames = new List<string>(),
-                    FolderOrder = null                 // NEW: null 代表使用預設順序
-                },
-                Import = new ImportSection
-                {
-                    IncludeSubdir = true,
-                    HotFolder = "",
-                    EnableHotFolder = false,
-                    OverwritePolicy = OverwritePolicy.KeepBoth,
-                    MoveMode = "copy"
-                },
-                OpenAI = new OpenAISection
-                {
-                    ApiKey = "",
-                    Model = "gpt-4o-mini"
-                }
-            };
+            // ... (邏輯已搬到 ConfigService) ...
         }
 
         public static AppConfig Load(string? path = null)
         {
-            var p = string.IsNullOrWhiteSpace(path) ? ConfigPath : path!;
-            if (!File.Exists(p))
-            {
-                Current = Default;
-                Save(p);
-                return Current;
-            }
-
-            try
-            {
-                var json = File.ReadAllText(p);
-                var cfg = JsonSerializer.Deserialize<AppConfig>(json, new JsonSerializerOptions
-                {
-                    PropertyNameCaseInsensitive = true
-                });
-                Current = cfg ?? Default;
-            }
-            catch
-            {
-                Current = Default;
-            }
-            return Current;
+            // ... (邏輯已搬到 ConfigService) ...
         }
 
         public static void Save(string? path = null)
         {
-            var p = string.IsNullOrWhiteSpace(path) ? ConfigPath : path!;
-            var dir = Path.GetDirectoryName(p);
-            if (!string.IsNullOrWhiteSpace(dir) && !Directory.Exists(dir))
-                Directory.CreateDirectory(dir);
-
-            var json = JsonSerializer.Serialize(Current, new JsonSerializerOptions { WriteIndented = true });
-            File.WriteAllText(p, json);
+            // ... (邏輯已搬到 ConfigService) ...
         }
-
-        /// <summary>將目前設定直接寫入 config.json。</summary>
+        
         public void SaveAsCurrent()
         {
-            Current = this;
-            Save();
+            // ... (邏輯已搬到 ConfigService) ...
         }
-
-        /// <summary>以新設定替換目前實例（不自動儲存）。</summary>
+        
         public static void ReplaceCurrent(AppConfig cfg)
         {
             if (cfg != null)
                 Current = cfg;
         }
+        */
 
         /// <summary>建立淺拷貝副本（避免 UI 改動直接影響記憶體內設定）。</summary>
         public AppConfig Clone()
@@ -128,7 +62,8 @@ namespace AI.KB.Assistant.Models
                 App = new AppSection
                 {
                     StartupUIMode = App.StartupUIMode,
-                    RootDir = App.RootDir
+                    RootDir = App.RootDir,
+                    LaunchMode = App.LaunchMode // V7.34 UI 串接：新增
                 },
                 Db = new DbSection
                 {
@@ -174,6 +109,10 @@ namespace AI.KB.Assistant.Models
     {
         public string StartupUIMode { get; set; } = "home";
         public string RootDir { get; set; } = "";
+
+        // V7.34 UI 串接：新增
+        // "Simple" 或 "Detailed"
+        public string? LaunchMode { get; set; }
     }
 
     public sealed class DbSection

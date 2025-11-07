@@ -1,13 +1,14 @@
 ﻿using System;
 using System.IO;
 using System.Threading;
-using System.Threading.Tasks; // V7.6 修正：確保引入 Task 命名空間
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Threading;
 using AI.KB.Assistant.Models;
 using AI.KB.Assistant.Services;
 using AI.KB.Assistant.Views;
 using AI.KB.Assistant.Common;
+using System.Diagnostics; // V7.34 偵錯
 
 namespace AI.KB.Assistant
 {
@@ -16,7 +17,7 @@ namespace AI.KB.Assistant
         private const string MutexName = "AI.KB.Assistant.Singleton.Mutex";
         private Mutex? _mutex;
 
-        // V7.6 FIX: 將 OnStartup 設為 async void，解決 UI 執行緒阻塞死結問題
+        // V7.6 FIX: 將 OnStartup 設為 async void
         protected override async void OnStartup(StartupEventArgs e)
         {
             // 1. 單實例防重入
@@ -34,18 +35,18 @@ namespace AI.KB.Assistant
             // 2. 全域例外護欄
             SetupExceptionHandling();
 
-            // ==================== V7.6 修正：服務註冊核心邏輯 ====================
+            // ==================== V7.34 啟動核心邏輯 ====================
             DbService dbService;
             HotFolderService hotFolderService = null!;
-
-            // V7.7 增強日誌
-            Console.WriteLine("[APP INIT V7.7] OnStartup started.");
+            AppConfig cfg; // V7.34 修正：在此宣告
 
             try
             {
-                Console.WriteLine("[APP INIT V7.7] ConfigService.Load() starting...");
-                ConfigService.Load();
-                var cfg = ConfigService.Cfg;
+                // V7.34 啟動崩潰修正：
+                // 將 ConfigService.Load() 移入 try...catch 區塊。
+                ConfigService.Load(); // V7.34 重構：此方法現在指向 %AppData%
+                cfg = ConfigService.Cfg;
+
                 Console.WriteLine("[APP INIT V7.7] ConfigService.Load() OK.");
 
                 // 1. 依序建立服務實例
@@ -54,7 +55,6 @@ namespace AI.KB.Assistant
                 Console.WriteLine("[APP INIT V7.7] new DbService() OK.");
 
                 Console.WriteLine("[APP INIT V7.7] dbService.InitializeAsync() starting...");
-                // FIX: 使用 await 替代 GetAwaiter().GetResult()，消除死結
                 await dbService.InitializeAsync();
                 Console.WriteLine("[APP INIT V7.7] dbService.InitializeAsync() OK.");
 
@@ -63,7 +63,6 @@ namespace AI.KB.Assistant
                 var llmService = new LlmService(cfg);
                 var intakeService = new IntakeService(dbService);
 
-                // FIX: HotFolderService 依賴 IntakeService 和 RoutingService
                 hotFolderService = new HotFolderService(intakeService, routingService);
                 Console.WriteLine("[APP INIT V7.7] Other services OK.");
 
@@ -78,25 +77,60 @@ namespace AI.KB.Assistant
             catch (Exception ex)
             {
                 Console.WriteLine($"[APP INIT V7.7] FATAL CRASH: {ex.Message}");
-                LogCrash("ServiceInitialization", ex); // <== 關鍵的日誌寫入
-                // 顯示內部錯誤，而不是 TargetInvocationException
+                LogCrash("ServiceInitialization", ex);
                 var innerEx = ex.InnerException ?? ex;
-                MessageBox.Show($"服務初始化失敗: {innerEx.Message}", "嚴重錯誤", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show($"服務初始化失敗 (請檢查 %AppData% 設定檔權限): {innerEx.Message}", "嚴重錯誤", MessageBoxButton.OK, MessageBoxImage.Error);
                 Shutdown(1);
                 return;
             }
             // =================================================================
 
-            // 3. 服務都緒後，手動建立並顯示主視窗
-            var mainWindow = new MainWindow();
-            this.MainWindow = mainWindow;
-            mainWindow.Show();
-            Console.WriteLine("[APP INIT V7.7] MainWindow.Show() called.");
+            // 4. 檢查首次啟動 (V7.34 UI 串接)
+            if (IsFirstRunOrConfigInvalid(cfg))
+            {
+                MessageBox.Show("歡迎使用 AI.KB Assistant！\n\n系統偵測到您是首次啟動，或核心路徑尚未設定。\n請先完成初始設定。", "歡迎", MessageBoxButton.OK, MessageBoxImage.Information);
 
-            // FIX: 在主視窗顯示後，啟動 HotFolder 監控
+                var settingsWindow = new SettingsWindow();
+                settingsWindow.ShowDialog();
+
+                // 重新載入設定，再次檢查
+                ConfigService.Load();
+                cfg = ConfigService.Cfg;
+                if (IsFirstRunOrConfigInvalid(cfg))
+                {
+                    MessageBox.Show("核心路徑 (Root 目錄 / 收件夾) 尚未設定。\nApp 即將關閉。", "設定未完成", MessageBoxButton.OK, MessageBoxImage.Warning);
+
+                    // V7.34 崩潰修正 (NullReferenceException)
+                    // 在 OnStartup 中，應使用 this.Shutdown() 而不是 Application.Current.Shutdown()
+                    this.Shutdown();
+                    return;
+                }
+            }
+
+            // 5. 服務都緒後，依據設定檔啟動視窗 (V7.34 UI 串接)
+            Window startupWindow;
+            // V7.34 修正：預設啟動模式改為 "simple"
+            var mode = cfg?.App?.LaunchMode?.ToLowerInvariant() ?? "simple";
+
+            if (mode == "detailed")
+            {
+                startupWindow = new MainWindow();
+                Console.WriteLine("[APP INIT V7.34] Starting in DETAILED mode (MainWindow).");
+            }
+            else
+            {
+                startupWindow = new LauncherWindow();
+                Console.WriteLine("[APP INIT V7.34] Starting in SIMPLE mode (LauncherWindow).");
+            }
+
+            this.MainWindow = startupWindow;
+            startupWindow.Show();
+            Console.WriteLine("[APP INIT V7.34] MainWindow.Show() called.");
+
+
+            // 6. 啟動 HotFolder 監控 (V7.6 修正)
             try
             {
-                // V7.6 修正：確保只有在 HotFolderService 存在時才呼叫 StartMonitoring
                 hotFolderService.StartMonitoring();
                 Console.WriteLine("[APP INIT V7.7] HotFolderService started.");
             }
@@ -105,9 +139,26 @@ namespace AI.KB.Assistant
                 LogCrash("HotFolderService.StartMonitoring.Failed", ex);
                 MessageBox.Show($"HotFolder 監控啟動失敗: {ex.Message}", "警告", MessageBoxButton.OK, MessageBoxImage.Warning);
             }
+        }
 
-            // V7.6 修正：因為 OnStartup 是 async void，不需要呼叫 base.OnStartup(e);
-            // base.OnStartup(e); // 應該被移除或註釋掉
+        /// <summary>
+        /// V7.34 檢查是否為首次執行 (或設定檔不完整)
+        /// </summary>
+        private bool IsFirstRunOrConfigInvalid(AppConfig cfg)
+        {
+            // V7.34 邏輯修正：
+            // 1. 檢查 cfg 本身是否為 null
+            // 2. 檢查 App 區段是否為 null
+            // 3. 檢查 Import 區段是否為 null
+            if (cfg == null || cfg.App == null || cfg.Import == null)
+            {
+                // 如果設定檔嚴重損毀或無法載入，強制要求重新設定
+                return true;
+            }
+
+            // 只要 RootDir 或 HotFolder 任何一個為空，就視為設定不完整
+            return string.IsNullOrWhiteSpace(cfg.App.RootDir) ||
+                   string.IsNullOrWhiteSpace(cfg.Import.HotFolder);
         }
 
         private void SetupExceptionHandling()
@@ -139,16 +190,24 @@ namespace AI.KB.Assistant
         // V7.15 修正：改為 public，以便 DbService 可以呼叫
         public static void LogCrash(string tag, Exception? ex)
         {
-            var dir = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "AI.KB.Assistant", "logs");
-            Directory.CreateDirectory(dir);
-            var path = Path.Combine(dir, $"crash_{DateTime.Now:yyyyMMdd_HHmmss}.log");
-            File.AppendAllText(path,
-$@"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {tag}
+            try
+            {
+                var dir = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "AI.KB.Assistant", "logs");
+                Directory.CreateDirectory(dir);
+                var path = Path.Combine(dir, $"crash_{DateTime.Now:yyyyMMdd_HHmmss}.log");
+                File.AppendAllText(path,
+    $@"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {tag}
 {ex}
 ----------------------------------------------------
 ");
+            }
+            catch (Exception loggingEx)
+            {
+                // 如果連寫入日誌都失敗，至少在 Debug 視窗顯示
+                Debug.WriteLine($"CRASH LOGGING FAILED: {loggingEx.Message}");
+            }
         }
     }
 }

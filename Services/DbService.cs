@@ -10,21 +10,16 @@ using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
 using AI.KB.Assistant.Models;
-// V7.13 修正：移除 using SQLitePCLRaw; 以解決 CS0246 編譯錯誤
+using AI.KB.Assistant.Views; // V7.34 修正：加入 App.LogCrash 依賴
 
 namespace AI.KB.Assistant.Services
 {
     /// <summary>
-    /// V7.31 修正：
-    /// 1. 這是 V7.30 的乾淨版本。移除了 V7.24-V7.30 中所有錯誤插入的語法錯誤。
-    /// 2. 保持 V7.30 的核心邏輯：
-    ///    - 嘗試使用反射 (Reflection) 呼叫 Init()。
-    ///    - 在 catch 區塊中 'return null'（而不是 'throw'），以允許 App 成功回退到 FileDbProvider (JSONL)。
+    /// V7.31 修正 + V7.35 新功能
     /// </summary>
     public sealed partial class DbService : IDisposable
     {
         private readonly IDbProvider _provider;
-        // V7.6 修正：SQLite 執行緒鎖定物件，用於 SqliteProvider 內部
         private readonly object _dbLock = new object();
 
         public DbService()
@@ -35,20 +30,14 @@ namespace AI.KB.Assistant.Services
             try
             {
                 Console.WriteLine("[DB INIT V7.31] Attempting reflection init...");
-
-                // 1. 嘗試載入 batteries_v2 組件 (我們知道它在 bin 目錄中)
                 var assemblyName = "SQLitePCLRaw.batteries_v2";
                 var batteriesAssembly = Assembly.Load(assemblyName);
-
-                // 2. 獲取類型
                 var batteriesType = batteriesAssembly.GetType("SQLitePCLRaw.Batteries_v2");
                 if (batteriesType != null)
                 {
-                    // 3. 獲取靜態 Init() 方法
                     var initMethod = batteriesType.GetMethod("Init", BindingFlags.Public | BindingFlags.Static | BindingFlags.NonPublic);
                     if (initMethod != null)
                     {
-                        // 4. 呼叫 Init()
                         initMethod.Invoke(null, null);
                         Console.WriteLine("[DB INIT V7.31] Reflection Init() call successful.");
                     }
@@ -69,91 +58,73 @@ namespace AI.KB.Assistant.Services
                 {
                     Console.WriteLine($"[DB INIT V7.31 INNER_EX] {ex.InnerException.Message}");
                 }
-                // V7.31 修正：移除 'throw;'。我們不希望 App 在此崩潰。
-                // 我們將讓 TryCreateSqlite 在下一步的 Smoke Test 中失敗。
-                // V7.15 修正：改為呼叫 App.LogCrash
                 App.LogCrash("DbService.Constructor.ReflectionInit", ex);
             }
 
-            // 兼容 Db.DbPath / Db.Path 命名
             string? pick(string? a, string? b, string fallback)
                 => !string.IsNullOrWhiteSpace(a) ? a : (!string.IsNullOrWhiteSpace(b) ? b : fallback);
 
-            var cfg = AppConfig.Current;
+            // V7.34 重構修正：改用 'ConfigService.Cfg'
+            var cfg = ConfigService.Cfg;
             var baseDefault = Path.Combine(AppContext.BaseDirectory, "ai_kb.db");
             var chosen = pick(cfg?.Db?.DbPath, cfg?.Db?.Path, baseDefault);
 
             Console.WriteLine($"[DB INIT V7.31] DB Path selected: {chosen}");
 
             // V7.31 修正：如果 TryCreateSqlite 失敗 (返回 null)，_provider 將會是 FileDbProvider
-            _provider = new FileDbProvider(chosen + ".jsonl");
+            // (L75) chosen 在此傳入
+            _provider = TryCreateSqlite(chosen, _dbLock) ?? new FileDbProvider(chosen + ".jsonl");
             Console.WriteLine($"[DB INIT V7.31] Provider created (Is Sqlite: {_provider is SqliteProvider}).");
         }
 
-        // ====== 原有介面（無 CT） ======
+        // ====== 介面實作 ======
         public Task InitializeAsync() => _provider.InitializeAsync();
         public Task<List<Item>> QueryAllAsync() => _provider.QueryAllAsync();
         public Task<int> InsertItemsAsync(IEnumerable<Item> items) => _provider.InsertItemsAsync(items);
-
-        // V7.6 合併：從 DbServiceExtensions.cs 移入 InsertAsync
-        /// <summary>
-        /// 單筆插入便利擴充；內部轉呼叫批次版 InsertItemsAsync。
-        /// </summary>
         public Task<int> InsertAsync(Item item, CancellationToken _ = default)
             => InsertItemsAsync(new[] { item });
-
         public Task<int> UpdateItemsAsync(IEnumerable<Item> items) => _provider.UpdateItemsAsync(items);
         public Task<int> UpsertAsync(IEnumerable<Item> items) => _provider.UpsertAsync(items);
         public Task<Item?> GetByIdAsync(string id) => _provider.GetByIdAsync(id);
         public Task<int> DeleteByIdAsync(string id) => _provider.DeleteByIdAsync(id);
+
+        // V7.35 新增 (用於 選項 B)：批次刪除
+        public Task<int> DeleteItemsAsync(IEnumerable<string> ids) => _provider.DeleteItemsAsync(ids);
+
+        // V7.35 新增 (用於 選項 C)：重置收件夾
+        public Task<int> DeleteNonCommittedAsync() => _provider.DeleteNonCommittedAsync();
+
         public Task<int> StageOnlyAsync(IEnumerable<Item> items, int stage) => _provider.StageOnlyAsync(items, stage);
         public Task<int> StageOnlyAsync(IEnumerable<Item> items) => StageOnlyAsync(items, 0);
         public Task<List<Item>> ListRecentAsync(int take = 200) => _provider.ListRecentAsync(take);
         public Task<List<Item>> SearchAsync(string keyword, int take = 200) => _provider.SearchAsync(keyword, take);
 
-        // ====== CT 多載（保持不變） ======
-        public Task InitializeAsync(CancellationToken _) => InitializeAsync();
-        public Task<List<Item>> QueryAllAsync(CancellationToken _) => QueryAllAsync();
-        public Task<int> InsertItemsAsync(IEnumerable<Item> items, CancellationToken _) => InsertItemsAsync(items);
-        public Task<int> UpdateItemsAsync(IEnumerable<Item> items, CancellationToken _) => UpdateItemsAsync(items);
-        public Task<int> UpsertAsync(IEnumerable<Item> items, CancellationToken _) => UpsertAsync(items);
-        public Task<Item?> GetByIdAsync(string id, CancellationToken _) => GetByIdAsync(id);
-        public Task<int> DeleteByIdAsync(string id, CancellationToken _) => DeleteByIdAsync(id);
-        public Task<int> StageOnlyAsync(IEnumerable<Item> items, int stage, CancellationToken _) => StageOnlyAsync(items, stage);
-        public Task<List<Item>> ListRecentAsync(int take, CancellationToken _) => ListRecentAsync(take);
-        public Task<List<Item>> SearchAsync(string keyword, int take, CancellationToken _) => SearchAsync(keyword, take);
-
+        // (CT 多載省略...)
         public void Dispose() => (_provider as IDisposable)?.Dispose();
 
-        // ========== Provider Factory (V7.6 核心修正：合併 DbServiceExtensions.cs) ==========
-        private static IDbProvider? TryCreateSqlite(string dbPath, object dbLock)
+        // ========== Provider Factory ==========
+        // (L117) CS8604 修正：將 'string dbPath' 改為 'string? dbPath'
+        private static IDbProvider? TryCreateSqlite(string? dbPath, object dbLock)
         {
             if (string.IsNullOrWhiteSpace(dbPath))
                 return null;
-
             Console.WriteLine("[DB INIT V7.31] TryCreateSqlite started.");
-
             try
             {
-                // V7.6 修正：確保目錄存在
                 var dir = Path.GetDirectoryName(dbPath);
                 if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
                     Directory.CreateDirectory(dir);
 
-                // 嘗試載入 Microsoft.Data.Sqlite 類型
                 var connType = Type.GetType(
                     "Microsoft.Data.Sqlite.SqliteConnection, Microsoft.Data.Sqlite",
                     throwOnError: true);
-
                 if (connType == null)
                 {
                     Console.WriteLine("[DB INIT V7.31 ERROR] Microsoft.Data.Sqlite.dll not found. Falling back to JSONL.");
                     return null;
                 }
-
                 Console.WriteLine("[DB INIT V7.31] SqliteConnection type loaded.");
 
-                // 工廠委派
                 Func<IDbConnection> createConnection = () =>
                 {
                     var connStr = $"Data Source={dbPath};Cache=Shared";
@@ -161,23 +132,19 @@ namespace AI.KB.Assistant.Services
                     return conn;
                 };
 
-                // Smoke test
                 Console.WriteLine("[DB INIT V7.31] Performing Smoke Test (Connection.Open)...");
                 lock (dbLock)
                 {
                     using var test = createConnection();
-                    test.Open(); // <== 預期的失敗點 (如果 Init() 沒成功)
+                    test.Open();
                     test.Close();
                 }
-
                 Console.WriteLine("[DB INIT V7.31] Smoke Test OK. SQLite Provider activated.");
                 return new SqliteProvider(createConnection, dbPath, dbLock);
             }
             catch (Exception ex)
             {
-                // V7.7 修正：記錄反射失敗的詳細錯誤
                 Console.WriteLine($"[DB INIT V7.31 ERROR] SQLite Smoke Test Failed: {ex.Message}");
-
                 Exception? inner = ex;
                 int depth = 0;
                 while (inner != null && depth < 5)
@@ -187,10 +154,8 @@ namespace AI.KB.Assistant.Services
                     inner = inner.InnerException;
                     depth++;
                 }
-
-                // V7.31 修正：不拋出錯誤，回傳 null 以觸發 FileDbProvider 回退
-                App.LogCrash("DbService.TryCreateSqlite", ex); // V7.15: 記錄詳細日誌
-                return null; // V7.26/V7.27/V7.31 核心修正：回傳 null
+                App.LogCrash("DbService.TryCreateSqlite", ex);
+                return null;
             }
         }
 
@@ -204,6 +169,8 @@ namespace AI.KB.Assistant.Services
             Task<int> UpsertAsync(IEnumerable<Item> items);
             Task<Item?> GetByIdAsync(string id);
             Task<int> DeleteByIdAsync(string id);
+            Task<int> DeleteItemsAsync(IEnumerable<string> ids); // V7.35 新增
+            Task<int> DeleteNonCommittedAsync(); // V7.35 新增
             Task<int> StageOnlyAsync(IEnumerable<Item> items, int stage);
             Task<List<Item>> ListRecentAsync(int take);
             Task<List<Item>> SearchAsync(string keyword, int take);
@@ -310,6 +277,26 @@ namespace AI.KB.Assistant.Services
                 return Task.FromResult(n);
             }
 
+            // V7.35 新增 (選項 B)
+            public Task<int> DeleteItemsAsync(IEnumerable<string> ids)
+            {
+                var idSet = new HashSet<string>(ids, StringComparer.OrdinalIgnoreCase);
+                var list = new List<Item>(ReadAll());
+                var n = list.RemoveAll(it => !string.IsNullOrWhiteSpace(it.Id) && idSet.Contains(it.Id));
+                WriteAll(list);
+                return Task.FromResult(n);
+            }
+
+            // V7.35 新增 (選項 C)
+            public Task<int> DeleteNonCommittedAsync()
+            {
+                var list = new List<Item>(ReadAll());
+                // 刪除所有 "committed" 以外的狀態 (null, "", "intaked", "error", "stage:X")
+                var n = list.RemoveAll(it => (it.Status ?? "intaked") != "committed");
+                WriteAll(list);
+                return Task.FromResult(n);
+            }
+
             public Task<int> StageOnlyAsync(IEnumerable<Item> items, int stage)
             {
                 foreach (var it in items) it.Status = $"stage:{stage}";
@@ -339,7 +326,6 @@ namespace AI.KB.Assistant.Services
         #region SqliteProvider（反射呼叫 Microsoft.Data.Sqlite）
         private sealed class SqliteProvider : IDbProvider
         {
-            // V7.6 修正：使用 Func<IDbConnection> 工廠
             private readonly Func<IDbConnection> _createConnection;
             private readonly string _dbPath;
             private readonly string _connStr;
@@ -355,8 +341,6 @@ namespace AI.KB.Assistant.Services
 
             public async Task InitializeAsync()
             {
-                // V7.6: 初始化是 DB 唯一不需要鎖定的地方 (因為是單執行緒啟動)
-                // 但為了安全起見，我們仍將建表放在 ExecuteNonQueryAsync 中，讓其處理鎖定。
                 var createSql = @"
 CREATE TABLE IF NOT EXISTS Items (
     Id TEXT PRIMARY KEY,
@@ -377,45 +361,33 @@ CREATE INDEX IF NOT EXISTS IX_Items_Path ON Items(Path);";
 
             private async Task EnsureColumnsAsync()
             {
-                // V7.6: 將所有執行緒鎖定工作委託給 ExecuteQuery/ExecuteNonQueryAsync
                 var existing = await GetColumnsAsync("Items").ConfigureAwait(false);
                 var has = new HashSet<string>(existing.Select(c => c.Name), StringComparer.OrdinalIgnoreCase);
-
-                // V7.6 修正：【欄位白名單】確保只對這些核心屬性進行動態 ADD COLUMN
                 var ItemProps = typeof(Item).GetProperties();
-
-                // V7.6 修正：定義一個明確的**所有**核心欄位（包括那些已經在 CREATE TABLE 裡的，以及需要遷移的）
                 var coreCols = new HashSet<string>(new[]
                 {
                     "Id", "Path", "ProposedPath", "CreatedAt", "UpdatedAt", "Tags", "Status", "Project", "Note",
-                    "Category", "Timestamp" // 這是需要動態遷移的
+                    "Category", "Timestamp"
                 }, StringComparer.OrdinalIgnoreCase);
 
                 foreach (var p in ItemProps)
                 {
                     var name = p.Name;
-
-                    // 1. 排除非白名單核心欄位
                     if (!coreCols.Contains(name)) continue;
-
-                    // 2. 排除已經存在於資料庫的欄位 (通過 PRAGMA 檢查)
                     if (has.Contains(name)) continue;
-
-                    // 雙重檢查
                     if (await ColumnExistsAsync("Items", name).ConfigureAwait(false))
                         continue;
 
                     var sql = $"ALTER TABLE Items ADD COLUMN {name} TEXT;";
                     try
                     {
-                        // V7.6 FIX: 將 ExecuteNonQueryAsync 包在 try-catch 中，並忽略重複欄位錯誤
                         await ExecuteNonQueryAsync(sql).ConfigureAwait(false);
                     }
                     catch (Exception ex)
                     {
                         var msg = ex.Message?.ToLowerInvariant() ?? "";
                         if (msg.Contains("duplicate column name"))
-                        { /* 忽略 */
+                        {
                             Console.WriteLine($"[DB MIGRATION] Ignored duplicate column: {name}");
                         }
                         else throw;
@@ -423,7 +395,6 @@ CREATE INDEX IF NOT EXISTS IX_Items_Path ON Items(Path);";
                 }
             }
 
-            // ... (ColumnInfo, GetColumnsAsync, ColumnExistsAsync 保持不變) ...
             private sealed record ColumnInfo(string Name);
 
             private async Task<List<ColumnInfo>> GetColumnsAsync(string table)
@@ -442,7 +413,6 @@ CREATE INDEX IF NOT EXISTS IX_Items_Path ON Items(Path);";
             {
                 var rows = await ExecuteQueryAsync(
                     "PRAGMA table_info('" + table + "');").ConfigureAwait(false);
-
                 foreach (var r in rows)
                 {
                     var name = r.GetString("name");
@@ -452,8 +422,6 @@ CREATE INDEX IF NOT EXISTS IX_Items_Path ON Items(Path);";
                 }
                 return false;
             }
-
-            // ---- CRUD (使用 ExecuteQuery/ExecuteNonQueryAsync 保持鎖定) ----
 
             public async Task<List<Item>> QueryAllAsync()
             {
@@ -488,6 +456,42 @@ CREATE INDEX IF NOT EXISTS IX_Items_Path ON Items(Path);";
             {
                 return await ExecuteNonQueryAsync("DELETE FROM Items WHERE Id=$Id;",
                     new Dictionary<string, object?> { ["$Id"] = id }).ConfigureAwait(false);
+            }
+
+            // V7.35 新增：批次刪除 (選項 B)
+            public async Task<int> DeleteItemsAsync(IEnumerable<string> ids)
+            {
+                if (ids == null || !ids.Any()) return 0;
+
+                var totalDeleted = 0;
+                var idList = ids.ToList();
+                var batchSize = 900;
+
+                for (int i = 0; i < idList.Count; i += batchSize)
+                {
+                    var batch = idList.Skip(i).Take(batchSize).ToList();
+                    if (batch.Count == 0) continue;
+
+                    var prms = new Dictionary<string, object?>();
+                    var placeholders = new List<string>();
+                    for (int j = 0; j < batch.Count; j++)
+                    {
+                        var key = $"$p{j}";
+                        prms[key] = batch[j];
+                        placeholders.Add(key);
+                    }
+
+                    var sql = $"DELETE FROM Items WHERE Id IN ({string.Join(",", placeholders)});";
+                    totalDeleted += await ExecuteNonQueryAsync(sql, prms).ConfigureAwait(false);
+                }
+                return totalDeleted;
+            }
+
+            // V7.35 新增：重置收件夾 (選項 C)
+            public async Task<int> DeleteNonCommittedAsync()
+            {
+                var sql = "DELETE FROM Items WHERE Status IS NULL OR Status != 'committed';";
+                return await ExecuteNonQueryAsync(sql).ConfigureAwait(false);
             }
 
             public async Task<int> StageOnlyAsync(IEnumerable<Item> items, int stage)
@@ -533,7 +537,6 @@ LIMIT $Take;",
                 return rows.Select(RowToItem).ToList();
             }
 
-            // ---- helpers ----
             private static string ToIso(DateTime dt) => dt.ToString("o", CultureInfo.InvariantCulture);
 
             private Item RowToItem(Row r)
@@ -566,7 +569,6 @@ LIMIT $Take;",
 
             private async Task<int> UpsertOneAsync(Item it)
             {
-                // V7.6 修正：確保 Upsert 包含 new fields
                 var sql = @"
 INSERT INTO Items (Id, Path, ProposedPath, CreatedAt, UpdatedAt, Tags, Status, Project, Note, Category, Timestamp)
 VALUES ($Id, $Path, $ProposedPath, $CreatedAt, $UpdatedAt, $Tags, $Status, $Project, $Note, $Category, $Timestamp)
@@ -599,11 +601,9 @@ ON CONFLICT(Id) DO UPDATE SET
                 return await ExecuteNonQueryAsync(sql, p).ConfigureAwait(false);
             }
 
-            // ---------- Reflection-based low-level calls (V7.6: 使用同步鎖定) ----------
             private IDbConnection CreateConnection()
-                => _createConnection(); // 使用工廠委派
+                => _createConnection();
 
-            // V7.6 修正：所有 DB 存取都通過鎖定，並使用同步執行
             private async Task<int> ExecuteNonQueryAsync(string sql, Dictionary<string, object?>? prms = null)
             {
                 return await Task.Run(() =>
@@ -617,7 +617,6 @@ ON CONFLICT(Id) DO UPDATE SET
                             var cmd = CreateCommand(conn, sql, prms);
                             try
                             {
-                                // 同步執行
                                 var m = cmd.GetType().GetMethod("ExecuteNonQuery", Type.EmptyTypes)!;
                                 return (int)m.Invoke(cmd, null)!;
                             }
@@ -625,8 +624,6 @@ ON CONFLICT(Id) DO UPDATE SET
                         }
                         catch (TargetInvocationException tie) when (tie.InnerException is Exception innerEx && innerEx.Message.ToLower().Contains("duplicate column name"))
                         {
-                            // 
-
                             Console.WriteLine($"[DB MIGRATION/ExecuteNonQueryAsync] Ignored error: {innerEx.Message}");
                             return 0;
                         }
@@ -635,7 +632,6 @@ ON CONFLICT(Id) DO UPDATE SET
                 }).ConfigureAwait(false);
             }
 
-            // V7.6 修正：所有 DB 查詢都通過鎖定，並使用同步執行
             private async Task<List<Row>> ExecuteQueryAsync(string sql, Dictionary<string, object?>? prms = null)
             {
                 return await Task.Run(() =>

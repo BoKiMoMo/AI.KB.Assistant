@@ -1,12 +1,12 @@
-﻿using System;
+﻿using AI.KB.Assistant.Models;
+using AI.KB.Assistant.Views; // 為了存取 MainWindow
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
-using AI.KB.Assistant.Models;
-using AI.KB.Assistant.Views; // 為了存取 MainWindow
 
 namespace AI.KB.Assistant.Services
 {
@@ -30,6 +30,37 @@ namespace AI.KB.Assistant.Services
         private readonly SemaphoreSlim _scanSemaphore = new SemaphoreSlim(1, 1);
 
         private Timer? _debounceTimer;
+
+        // V7.34 新增：手動觸發簡易模式同步
+        /// <summary>
+        /// V7.34 新增：手動觸發一次鏡像同步 (供簡易模式使用)
+        /// </summary>
+        public async Task TriggerManualSync()
+        {
+            // 1. 取得鎖 (與 OnTimerElapsed 相同)
+            // 這裡使用 WaitAsync() 而不是 WaitAsync(0)，
+            // 確保如果計時器正在掃描，我们会等待它完成後再執行。
+            Log("手動觸發：正在等待掃描鎖...");
+            await _scanSemaphore.WaitAsync();
+            Log("手動觸發：已取得掃描鎖。");
+
+            try
+            {
+                // 2. 執行核心同步邏輯
+                await ScanAndSyncHotFolderAsync();
+            }
+            catch (Exception ex)
+            {
+                Log($" -> 手動鏡像同步失敗 (TriggerManualSync)。錯誤: {ex.Message}");
+            }
+            finally
+            {
+                // 3. 確保釋放鎖
+                _scanSemaphore.Release();
+                Log("手動觸發：已釋放掃描鎖。");
+            }
+        }
+
 
         public HotFolderService(IntakeService intake, RoutingService router)
         {
@@ -175,13 +206,39 @@ namespace AI.KB.Assistant.Services
 
             lock (_lock) // 讀取 _cfg (這個鎖 _lock 和 _scanLock 不同，是安全的)
             {
-                if (_watcher == null || !_watcher.EnableRaisingEvents) return; // 監控已停止
-                hotPath = _watcher.Path;
-                searchOption = _cfg.Import?.IncludeSubdir == true ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
-                blacklistExts = _cfg.Routing?.BlacklistExts?.ToHashSet(StringComparer.OrdinalIgnoreCase) ?? new HashSet<string>();
+                // V7.34 偵錯：修正 null 引用
+                if (_cfg?.Import == null || _cfg?.Routing == null)
+                {
+                    Log("[Sync] 鏡像同步失敗：_cfg (Import/Routing) 為 null。");
+                    return;
+                }
+
+                // V7.34 偵錯：修正 FSW 監控模式下的 null 引用
+                if (_watcher == null || !_watcher.EnableRaisingEvents)
+                {
+                    // 在手動觸發模式 (LauncherWindow) 下，_watcher 可能是 null，
+                    // 我們需要從 _cfg 重新取得路徑
+                    hotPath = _cfg.Import.HotFolder;
+                    if (string.IsNullOrWhiteSpace(hotPath))
+                    {
+                        Log("[Sync] 鏡像同步失敗：HotFolder 路徑未設定。");
+                        return;
+                    }
+                    Log("[Sync] 監控器未執行，使用手動觸發模式路徑。");
+                }
+                else
+                {
+                    // 正常監控模式
+                    hotPath = _watcher.Path;
+                }
+
+                searchOption = _cfg.Import.IncludeSubdir == true ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
+                blacklistExts = _cfg.Routing.BlacklistExts?.ToHashSet(StringComparer.OrdinalIgnoreCase) ?? new HashSet<string>();
             }
 
-            Log("計時器觸發：開始鏡像同步 (Mirror-Sync) HotFolder...");
+            Log("計時器觸發/手動觸發：開始鏡像同步 (Mirror-Sync) HotFolder...");
+            Log($"[Sync] 掃描路徑: {hotPath}");
+            Log($"[Sync] 掃描模式: {searchOption}");
             bool needsRefresh = false;
 
             // 1. 取得磁碟上的所有檔案 (Disk Files)
@@ -307,15 +364,24 @@ namespace AI.KB.Assistant.Services
         }
 
         // === UI 互動輔助 (V7.4 保持不變) ===
+        // V7.34 偵錯修正：Log 方法
         private void Log(string message)
         {
             try
             {
                 Application.Current?.Dispatcher?.Invoke(() =>
                 {
+                    var msg = $"[HotFolder] {message}";
+
+                    // 嘗試寫入 MainWindow (詳細模式)
                     if (Application.Current.MainWindow is Views.MainWindow mw)
                     {
-                        mw.Log($"[HotFolder] {message}");
+                        mw.Log(msg);
+                    }
+                    // 嘗試寫入 LauncherWindow (簡易模式)
+                    else if (Application.Current.MainWindow is Views.LauncherWindow lw)
+                    {
+                        lw.Log(msg);
                     }
                 });
             }
@@ -330,6 +396,7 @@ namespace AI.KB.Assistant.Services
 
                 await Application.Current.Dispatcher.InvokeAsync(async () =>
                 {
+                    // 刷新只適用於 MainWindow
                     if (Application.Current.MainWindow is Views.MainWindow mw)
                     {
                         await mw.RefreshFromDbAsync();
@@ -339,6 +406,7 @@ namespace AI.KB.Assistant.Services
             catch (TaskCanceledException) { }
         }
 
+        //Check the conversation history to identify the root cause of the issue and provide a comprehensive solution and follow up.
         // === 保留舊版方法 (V7.2) ===
         // V7.4 修正：轉呼叫 _intake
         public Task<int> StageOnlyAsync(IEnumerable<Item> items, int stage) => _intake.StageOnlyAsync(items, stage);

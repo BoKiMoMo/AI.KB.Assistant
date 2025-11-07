@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic; // V7.34 修正：加入
 using System.IO;
 using System.Text;
 using System.Text.Json;
@@ -10,15 +11,60 @@ namespace AI.KB.Assistant.Services
 {
     /// <summary>
     /// 統一管理 config.json（固定儲存在 %AppData%\AI.KB.Assistant\config.json）。
-    /// 特點：
-    /// 1) 讀寫均加鎖，避免同時存取造成競態
-    /// 2) 儲存/載入前做正規化，避免寫出空白或重複值
-    /// 3) 僅在內容有變更時才觸發 ConfigChanged，避免重建服務風暴
+    /// V7.34 重構：
+    /// 1) 將 AppConfig.CreateDefault() 邏輯移至此處。
+    /// 2) 修正 Load()，使其正確呼叫 CreateDefault()。
     /// </summary>
     public static class ConfigService
     {
+        // V7.34 修正：搬移 CreateDefault() 邏輯到 ConfigService 內部
+        private static AppConfig CreateDefault()
+        {
+            return new AppConfig
+            {
+                App = new AppSection
+                {
+                    StartupUIMode = "home",
+                    RootDir = "",
+                    LaunchMode = "simple" // V7.34 邏輯修正：預設為 "simple"
+                },
+                Db = new DbSection
+                {
+                    DbPath = Path.Combine(AppContext.BaseDirectory, "ai_kb.db")
+                },
+                Routing = new RoutingSection
+                {
+                    RootDir = "",
+                    UseProject = true,
+                    UseYear = true,
+                    UseMonth = true,
+                    UseCategory = false,
+                    Threshold = 0.75,
+                    AutoFolderName = "_auto",
+                    LowConfidenceFolderName = "_low_conf",
+                    UseType = "rule+llm",
+                    BlacklistExts = new List<string>(),
+                    BlacklistFolderNames = new List<string>(),
+                    FolderOrder = null
+                },
+                Import = new ImportSection
+                {
+                    IncludeSubdir = true,
+                    HotFolder = "",
+                    EnableHotFolder = false,
+                    OverwritePolicy = OverwritePolicy.KeepBoth,
+                    MoveMode = "copy"
+                },
+                OpenAI = new OpenAISection
+                {
+                    ApiKey = "",
+                    Model = "gpt-4o-mini"
+                }
+            };
+        }
+
         /// <summary>目前設定（永遠非 null）</summary>
-        public static AppConfig Cfg { get; private set; } = AppConfig.Default;
+        public static AppConfig Cfg { get; private set; } = CreateDefault(); // V7.34 修正
 
         /// <summary>任何成功的 Load()/Save() 都會廣播</summary>
         public static event EventHandler<AppConfig>? ConfigChanged;
@@ -42,7 +88,7 @@ namespace AI.KB.Assistant.Services
         /// <summary>將設定正規化（填預設、清理清單、閾值下限）</summary>
         private static AppConfig Normalize(AppConfig src)
         {
-            var cfg = src ?? AppConfig.Default;
+            var cfg = src ?? CreateDefault(); // V7.34 修正
 
             cfg.App.RootDir ??= "";
             cfg.Db.Path ??= "";
@@ -74,7 +120,7 @@ namespace AI.KB.Assistant.Services
                     if (!File.Exists(ConfigPath))
                     {
                         // 首次無檔 → 建立預設並寫檔
-                        loaded = Normalize(AppConfig.Default.Clone());
+                        loaded = Normalize(CreateDefault().Clone()); // V7.34 修正
                         var jsonNew = SnapshotJson(loaded);
                         File.WriteAllText(ConfigPath, jsonNew, Encoding.UTF8);
                         ApplyIfChanged(loaded, jsonNew);
@@ -83,7 +129,7 @@ namespace AI.KB.Assistant.Services
 
                     var json = File.ReadAllText(ConfigPath, Encoding.UTF8);
                     // 任何反序列化失敗都回到 Default
-                    loaded = JsonSerializer.Deserialize<AppConfig>(json, JsonOpts) ?? AppConfig.Default;
+                    loaded = JsonSerializer.Deserialize<AppConfig>(json, JsonOpts) ?? CreateDefault(); // V7.34 修正
                     loaded = Normalize(loaded);
 
                     var snap = SnapshotJson(loaded);
@@ -92,7 +138,7 @@ namespace AI.KB.Assistant.Services
                 catch
                 {
                     // 讀檔出錯 → 回預設（仍做一次去重廣播）
-                    var fallback = Normalize(AppConfig.Default.Clone());
+                    var fallback = Normalize(CreateDefault().Clone()); // V7.34 修正
                     var snap = SnapshotJson(fallback);
                     ApplyIfChanged(fallback, snap);
                 }
@@ -139,7 +185,7 @@ namespace AI.KB.Assistant.Services
         {
             lock (_sync)
             {
-                Cfg = AppConfig.Default;
+                Cfg = CreateDefault(); // V7.34 修正
                 Save();
             }
         }
@@ -154,8 +200,8 @@ namespace AI.KB.Assistant.Services
                 return;
             }
 
-            AppConfig.ReplaceCurrent(next);
-            Cfg = AppConfig.Current;
+            // V7.34 修正：移除對 AppConfig.ReplaceCurrent 的靜態呼叫
+            Cfg = next;
 
             _lastSnapshotJson = nextJson;
             try { ConfigChanged?.Invoke(null, Cfg); } catch { /* 外部事件失敗不影響流程 */ }
