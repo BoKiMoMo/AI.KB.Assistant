@@ -8,8 +8,9 @@ using AI.KB.Assistant.Models;
 namespace AI.KB.Assistant.Services
 {
     /// <summary>
-    /// 檔案 → Item → DB 的入口。
-    /// 注意：不做搬檔；搬檔交由 RoutingService。
+    /// V7.32 更新：
+    /// 1. 加入 DeleteItemsAsync，以支援 HotFolderService 的鏡像 (Mirroring) 邏輯。
+    /// 2. 保持 IntakeFile/FilesAsync 不變，供「手動加入」按鈕的 V7.20 邏輯使用 (雖然 V7.32 已停用)。
     /// </summary>
     public sealed class IntakeService
     {
@@ -60,6 +61,21 @@ namespace AI.KB.Assistant.Services
         public Task<List<Item>> QueryAllAsync(CancellationToken ct = default) => _db.QueryAllAsync(ct);
         public Task<int> InsertItemsAsync(IEnumerable<Item> items, CancellationToken ct = default) => _db.InsertItemsAsync(items, ct);
         public Task<int> UpdateItemsAsync(IEnumerable<Item> items, CancellationToken ct = default) => _db.UpdateItemsAsync(items, ct);
+
+        // V7.32 新增：允許 HotFolderService 刪除項目
+        /// <summary>
+        /// (V7.32) 批次刪除項目 (依 ID)
+        /// </summary>
+        public async Task<int> DeleteItemsAsync(IEnumerable<string> ids, CancellationToken ct = default)
+        {
+            var n = 0;
+            foreach (var id in ids)
+            {
+                n += await _db.DeleteByIdAsync(id, ct).ConfigureAwait(false);
+            }
+            return n;
+        }
+
         public Task<int> StageOnlyAsync(IEnumerable<Item> items, int stage, CancellationToken ct = default) => _db.StageOnlyAsync(items, stage, ct);
     }
 }

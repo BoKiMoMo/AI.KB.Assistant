@@ -158,11 +158,13 @@
         <!-- 主體 -->
         <Grid>
             <Grid.ColumnDefinitions>
-                <ColumnDefinition x:Name="LeftPaneColumn" Width="300" MinWidth="200"/>
+                <!-- V7.5.11 修正 Bug 1: 移除 MinWidth -->
+                <ColumnDefinition x:Name="LeftPaneColumn" Width="300"/>
                 <ColumnDefinition Width="6"/>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="6"/>
-                <ColumnDefinition x:Name="RightPaneColumn" Width="360" MinWidth="300"/>
+                <!-- V7.5.11 修正 Bug 1: 移除 MinWidth -->
+                <ColumnDefinition x:Name="RightPaneColumn" Width="360"/>
             </Grid.ColumnDefinitions>
 
             <!-- 左側：檔案樹 (V7.4 介面) -->
@@ -201,12 +203,20 @@
             <GridSplitter Grid.Column="1" Width="6" Background="{DynamicResource App.BorderBrush}" HorizontalAlignment="Stretch"/>
 
             <!-- 
-            V7.5.10 架構修正：
-            將 TabControl 拆分，TabPanel 放上面，Content (MainList/Log) 放外面。
-            這修復了 CS0103 (名稱不存在) 的編譯錯誤。
+            V7.5.11 修正 Bug 2: 
+            將最外層容器從 DockPanel 改為 Grid，才能讓 ListView 的水平捲軸正常運作
             -->
-            <DockPanel Grid.Column="2">
-                <Grid DockPanel.Dock="Top">
+            <Grid Grid.Column="2">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <!-- Tabs + Search Grid -->
+                    <RowDefinition Height="*"/>
+                    <!-- List -->
+                    <RowDefinition Height="Auto"/>
+                    <!-- Log -->
+                </Grid.RowDefinitions>
+
+                <Grid Grid.Row="0">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
                         <!-- 分頁標頭 -->
@@ -221,6 +231,7 @@
                         <TabItem Header="我的最愛" Tag="fav"/>
                         <TabItem Header="進行中" Tag="progress"/>
                         <TabItem Header="待處理" Tag="backlog"/>
+                        <TabItem Header="最近加入" Tag="recent"/>
                         <TabItem Header="等待分類" Tag="pending"/>
                     </TabControl>
 
@@ -238,8 +249,7 @@
                                 <!-- 2: Lock Button -->
                                 <ColumnDefinition Width="Auto"/>
                                 <!-- 3: TxtCounter -->
-                                <ColumnDefinition Width="Auto"/>
-                                <!-- 4: CmbPathView (View Switcher) -->
+                                <!-- V7.33 修正：移除 CmbPathView (第 4 欄) -->
                             </Grid.ColumnDefinitions>
 
                             <!-- V7.5.11 修正：加入 TextWrapping="NoWrap" -->
@@ -264,121 +274,108 @@
                                        VerticalAlignment="Center" Margin="12,0,8,0"
                                        Foreground="{DynamicResource App.TextMutedBrush}"/>
 
-                            <ComboBox x:Name="CmbPathView" Grid.Column="4" Width="120"
-                                      SelectedIndex="0"
-                                      SelectionChanged="CmbPathView_SelectionChanged"
-                                      Style="{StaticResource ToolbarBtn}">
-                                <ComboBoxItem Content="顯示實際路徑" Tag="actual"/>
-                                <ComboBoxItem Content="顯示預計路徑" Tag="pred"/>
-                            </ComboBox>
+                            <!-- V7.33 修正：移除 CmbPathView (下拉選單) -->
+
                         </Grid>
                     </Border>
                 </Grid>
 
-                <!-- 3. 主清單與 Log (V7.5.10 移至 DockPanel 底層) -->
-                <Grid>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="*"/>
-                        <!-- 清單 -->
-                        <RowDefinition Height="Auto"/>
-                        <!-- Log 面板 -->
-                    </Grid.RowDefinitions>
+                <!-- 3. 主清單 -->
+                <!-- V7.5.12 修正：使用附加屬性 ScrollViewer.HorizontalScrollBarVisibility -->
+                <!-- V7.33.4 修正：移除 VerticalAlignment="Top" 解決 ScrollBar 位置錯誤 Bug -->
+                <ListView x:Name="MainList" Grid.Row="1"
+                          SelectionMode="Extended"
+                          SelectionChanged="MainList_SelectionChanged"
+                          MouseDoubleClick="List_DoubleClick"
+                          ScrollViewer.HorizontalScrollBarVisibility="Auto">
 
-                    <!-- V7.3 P2 修正：移除 HeaderTemplate -->
-                    <ListView x:Name="MainList" Grid.Row="0"
-                              SelectionMode="Extended"
-                              SelectionChanged="MainList_SelectionChanged"
-                              MouseDoubleClick="List_DoubleClick">
+                    <ListView.View>
+                        <GridView x:Name="MainGridView" AllowsColumnReorder="True">
 
-                        <ListView.View>
-                            <GridView x:Name="MainGridView" AllowsColumnReorder="True">
+                            <GridViewColumn Header="檔名" 
+                                            HeaderContainerStyle="{StaticResource HeaderClickable}"
+                                            Width="240" DisplayMemberBinding="{Binding FileName}"/>
 
-                                <GridViewColumn Header="檔名" 
-                                                HeaderContainerStyle="{StaticResource HeaderClickable}"
-                                                Width="240" DisplayMemberBinding="{Binding FileName}"/>
+                            <GridViewColumn Header="副檔名" 
+                                            HeaderContainerStyle="{StaticResource HeaderClickable}"
+                                            Width="90" DisplayMemberBinding="{Binding Ext}"/>
 
-                                <GridViewColumn Header="副檔名" 
-                                                HeaderContainerStyle="{StaticResource HeaderClickable}"
-                                                Width="90" DisplayMemberBinding="{Binding Ext}"/>
+                            <GridViewColumn Header="狀態" 
+                                            HeaderContainerStyle="{StaticResource HeaderClickable}"
+                                            Width="120">
+                                <GridViewColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Orientation="Horizontal">
+                                            <Ellipse Width="8" Height="8" Margin="0,0,6,0">
+                                                <Ellipse.Fill>
+                                                    <MultiBinding Converter="{x:Static local:MainWindow.StatusToBrushConverterInstance}">
+                                                        <Binding Path="Status"/>
+                                                    </MultiBinding>
+                                                </Ellipse.Fill>
+                                            </Ellipse>
+                                            <TextBlock Text="{Binding Status, Converter={x:Static local:MainWindow.StatusToLabelConverterInstance}}"/>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </GridViewColumn.CellTemplate>
+                            </GridViewColumn>
 
-                                <GridViewColumn Header="狀態" 
-                                                HeaderContainerStyle="{StaticResource HeaderClickable}"
-                                                Width="120">
-                                    <GridViewColumn.CellTemplate>
-                                        <DataTemplate>
-                                            <StackPanel Orientation="Horizontal">
-                                                <Ellipse Width="8" Height="8" Margin="0,0,6,0">
-                                                    <Ellipse.Fill>
-                                                        <MultiBinding Converter="{x:Static local:MainWindow.StatusToBrushConverterInstance}">
-                                                            <Binding Path="Status"/>
-                                                        </MultiBinding>
-                                                    </Ellipse.Fill>
-                                                </Ellipse>
-                                                <TextBlock Text="{Binding Status, Converter={x:Static local:MainWindow.StatusToLabelConverterInstance}}"/>
-                                            </StackPanel>
-                                        </DataTemplate>
-                                    </GridViewColumn.CellTemplate>
-                                </GridViewColumn>
+                            <GridViewColumn Header="專案" 
+                                            HeaderContainerStyle="{StaticResource HeaderClickable}"
+                                            Width="180" DisplayMemberBinding="{Binding Project}"/>
 
-                                <GridViewColumn Header="專案" 
-                                                HeaderContainerStyle="{StaticResource HeaderClickable}"
-                                                Width="180" DisplayMemberBinding="{Binding Project}"/>
+                            <!-- V7.33.2 修正：加回 "標籤" 欄位 -->
+                            <GridViewColumn Header="標籤" 
+                                            HeaderContainerStyle="{StaticResource HeaderClickable}"
+                                            Width="180" DisplayMemberBinding="{Binding Tags}"/>
 
-                                <GridViewColumn Header="標籤" 
-                                                HeaderContainerStyle="{StaticResource HeaderClickable}"
-                                                Width="180" DisplayMemberBinding="{Binding Tags}"/>
+                            <!-- V7.33 修正：標題改為 "路徑"，並由 BtnStartClassify_Click (V7.33) 控制綁定 -->
+                            <GridViewColumn Header="路徑" x:Name="ColSourcePath"
+                                            HeaderContainerStyle="{StaticResource HeaderClickable}"
+                                            Width="320" DisplayMemberBinding="{Binding SourcePath}"/>
 
-                                <GridViewColumn Header="路徑" x:Name="ColSourcePath"
-                                                HeaderContainerStyle="{StaticResource HeaderClickable}"
-                                                Width="320" DisplayMemberBinding="{Binding SourcePath}"/>
+                            <!-- V7.33 修正：移除 "預計路徑" 欄位 -->
 
-                                <GridViewColumn Header="預計路徑" x:Name="ColDestPath"
-                                                HeaderContainerStyle="{StaticResource HeaderClickable}"
-                                                Width="340" DisplayMemberBinding="{Binding DestPath}"/>
+                            <GridViewColumn Header="建立時間" 
+                                            HeaderContainerStyle="{StaticResource HeaderClickable}"
+                                            Width="160" DisplayMemberBinding="{Binding CreatedAt}"/>
 
-                                <!-- V7.5.5 修正：移除此處的錯誤偵錯文字 -->
-                                <GridViewColumn Header="建立時間" 
-                                                HeaderContainerStyle="{StaticResource HeaderClickable}"
-                                                Width="160" DisplayMemberBinding="{Binding CreatedAt}"/>
+                        </GridView>
+                    </ListView.View>
 
-                            </GridView>
-                        </ListView.View>
+                    <!-- 中清單右鍵選單 (V7.5.8 修正) -->
+                    <ListView.ContextMenu>
+                        <ContextMenu>
+                            <MenuItem Header="開啟檔案" Click="CmOpenFile_Click"/>
+                            <MenuItem Header="在檔案總管顯示" Click="CmRevealInExplorer_Click"/>
+                            <Separator/>
+                            <MenuItem Header="複製來源路徑" Click="CmCopySourcePath_Click"/>
+                            <MenuItem Header="複製預計目的地" Click="CmCopyDestPath_Click"/>
+                            <Separator/>
+                            <MenuItem Header="★ 加入/移出 我的最愛" Click="CmToggleFavorite_Click"/>
+                            <MenuItem Header="標記為：進行中" Click="CmAddTagProgress_Click"/>
+                            <MenuItem Header="標記為：待處理" Click="CmAddTagBacklog_Click"/>
+                            <MenuItem Header="標記為：等待分類" Click="CmAddTagPending_Click"/>
+                            <MenuItem Header="移除所有標籤" Click="CmRemoveAllTags_Click"/>
+                            <Separator/>
+                            <MenuItem Header="確認搬檔（Commit）" Click="CmCommit_Click"/>
+                            <Separator/>
+                            <MenuItem Header="刪除資料列（僅 DB）" Click="CmDeleteRecord_Click"/>
+                        </ContextMenu>
+                    </ListView.ContextMenu>
+                </ListView>
 
-                        <!-- 中清單右鍵選單 (V7.5.8 修正) -->
-                        <ListView.ContextMenu>
-                            <ContextMenu>
-                                <MenuItem Header="開啟檔案" Click="CmOpenFile_Click"/>
-                                <MenuItem Header="在檔案總管顯示" Click="CmRevealInExplorer_Click"/>
-                                <Separator/>
-                                <MenuItem Header="複製來源路徑" Click="CmCopySourcePath_Click"/>
-                                <MenuItem Header="複製預計目的地" Click="CmCopyDestPath_Click"/>
-                                <Separator/>
-                                <MenuItem Header="★ 加入/移出 我的最愛" Click="CmToggleFavorite_Click"/>
-                                <MenuItem Header="標記為：進行中" Click="CmAddTagProgress_Click"/>
-                                <MenuItem Header="標記為：待處理" Click="CmAddTagBacklog_Click"/>
-                                <MenuItem Header="標記為：等待分類" Click="CmAddTagPending_Click"/>
-                                <MenuItem Header="移除所有標籤" Click="CmRemoveAllTags_Click"/>
-                                <Separator/>
-                                <MenuItem Header="確認搬檔（Commit）" Click="CmCommit_Click"/>
-                                <Separator/>
-                                <MenuItem Header="刪除資料列（僅 DB）" Click="CmDeleteRecord_Click"/>
-                            </ContextMenu>
-                        </ListView.ContextMenu>
-                    </ListView>
-
-                    <!-- V7.5 介面：Log 面板改為 Expander -->
-                    <Expander Grid.Row="1" Header="日誌 (Log)" IsExpanded="True"
-                              BorderBrush="{DynamicResource App.BorderBrush}" BorderThickness="0,1,0,0">
-                        <!-- V7.5.8 修正：固定 LogBox 高度為 150 -->
-                        <TextBox x:Name="LogBox" IsReadOnly="True" 
-                                 Height="150"
-                                 Background="{DynamicResource App.LogBrush}"
-                                 Foreground="{DynamicResource App.TextMutedBrush}"
-                                 FontFamily="Consolas" FontSize="12"
-                                 VerticalScrollBarVisibility="Auto"/>
-                    </Expander>
-                </Grid>
-            </DockPanel>
+                <!-- 4. Log 面板 -->
+                <Expander Grid.Row="2" Header="日誌 (Log)" IsExpanded="True"
+                          BorderBrush="{DynamicResource App.BorderBrush}" BorderThickness="0,1,0,0">
+                    <!-- V7.5.8 修正：固定 LogBox 高度為 150 -->
+                    <TextBox x:Name="LogBox" IsReadOnly="True" 
+                             Height="150"
+                             Background="{DynamicResource App.LogBrush}"
+                             Foreground="{DynamicResource App.TextMutedBrush}"
+                             FontFamily="Consolas" FontSize="12"
+                             VerticalScrollBarVisibility="Auto"/>
+                </Expander>
+            </Grid>
 
             <GridSplitter Grid.Column="3" Width="6" Background="{DynamicResource App.BorderBrush}" HorizontalAlignment="Stretch"/>
 
@@ -462,12 +459,9 @@
                                      TextWrapping="Wrap"
                                      Background="Transparent" BorderThickness="0"
                                      Visibility="Collapsed"/>
-                            <!-- V7.5.3 修正：將無效註解改為合法的 XAML 註解 -->
-                            <!-- V7.5.3 修正錯字 App.TextMutedBrush -->
                             <TextBlock x:Name="RtPreviewNotSupported" Text="(此檔案格式不支援預覽)" 
                                        VerticalAlignment="Center" HorizontalAlignment="Center"
                                        Foreground="{DynamicResource App.TextMutedBrush}"/>
-                            <!-- V7.5.5 修正：移除此處的錯誤偵錯文字 -->
                         </Grid>
                     </Expander>
 
@@ -485,11 +479,6 @@
 
                 </StackPanel>
             </ScrollViewer>
-
-            <!-- V7.5.2 修正：移除多餘的 GridSplitter -->
-            <!-- <GridSplitter Grid.Column="5" Width="6" Background="{DynamicResource App.BorderBrush}" HorizontalAlignment="Stretch"/> -->
-
         </Grid>
     </DockPanel>
 </Window>
-
