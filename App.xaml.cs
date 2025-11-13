@@ -8,7 +8,8 @@ using AI.KB.Assistant.Models;
 using AI.KB.Assistant.Services;
 using AI.KB.Assistant.Views;
 using AI.KB.Assistant.Common;
-using System.Diagnostics; // V7.34 偵錯
+using System.Diagnostics;
+using SQLitePCL; // [V14.1 新增] 引用 SQLitePCL (v3.x)
 
 namespace AI.KB.Assistant
 {
@@ -17,10 +18,9 @@ namespace AI.KB.Assistant
         private const string MutexName = "AI.KB.Assistant.Singleton.Mutex";
         private Mutex? _mutex;
 
-        // V7.6 FIX: 將 OnStartup 設為 async void
+        // V14.1 (V9.1)
         protected override async void OnStartup(StartupEventArgs e)
         {
-            // 1. 單實例防重入
             bool createdNew;
             _mutex = new Mutex(initiallyOwned: true, name: MutexName, createdNew: out createdNew);
 
@@ -32,51 +32,70 @@ namespace AI.KB.Assistant
                 return;
             }
 
-            // 2. 全域例外護欄
             SetupExceptionHandling();
 
-            // ==================== V7.34 啟動核心邏輯 ====================
+            // ==================== V14.1 啟動核心邏輯 ====================
+
+            // [V14.1 關鍵修正]
+            // 強制初始化 SQLitePCLRaw (v3.x) 的 C++ 函式庫 (e_sqlite3.dll)。
+            // 這必須在 DbService (V14.0) [cite: `Services/DbService.cs (V14.0)`] (它依賴 Microsoft.Data.Sqlite) 
+            // 被 new() 之前呼叫，以解決 V13.x 的 InvalidOperationException 崩潰 [cite: `image_1684aa.png`]。
+            try
+            {
+                SQLitePCL.Batteries.Init();
+                Console.WriteLine("[APP INIT V14.1] SQLitePCL.Batteries.Init() (v3.x) OK.");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[APP INIT V14.1] FATAL CRASH: SQLitePCL.Batteries.Init() failed: {ex.Message}");
+                LogCrash("SQLitePCL.Batteries.Init.Failed", ex);
+                MessageBox.Show($"SQLitePCL (v3.x) 核心初始化失敗: {ex.Message}", "嚴重錯誤", MessageBoxButton.OK, MessageBoxImage.Error);
+                Shutdown(1);
+                return;
+            }
+
+
             DbService dbService;
             HotFolderService hotFolderService = null!;
-            AppConfig cfg; // V7.34 修正：在此宣告
+            AppConfig cfg;
 
             try
             {
-                // V7.34 啟動崩潰修正：
-                // 將 ConfigService.Load() 移入 try...catch 區塊。
-                ConfigService.Load(); // V7.34 重構：此方法現在指向 %AppData%
+                // ConfigService V9.0/V9.1 已在靜態建構函式中自動 Load()
                 cfg = ConfigService.Cfg;
+                Console.WriteLine("[APP INIT V14.1] ConfigService.Load() OK.");
 
-                Console.WriteLine("[APP INIT V7.7] ConfigService.Load() OK.");
+                Console.WriteLine("[APP INIT V14.1] new DbService() starting...");
+                dbService = new DbService(); // V14.0 [cite: `Services/DbService.cs (V14.0)`] (已移除 v2.x 反射)
+                Console.WriteLine("[APP INIT V14.1] new DbService() OK.");
 
-                // 1. 依序建立服務實例
-                Console.WriteLine("[APP INIT V7.7] new DbService() starting...");
-                dbService = new DbService();
-                Console.WriteLine("[APP INIT V7.7] new DbService() OK.");
-
-                Console.WriteLine("[APP INIT V7.7] dbService.InitializeAsync() starting...");
+                Console.WriteLine("[APP INIT V14.1] dbService.InitializeAsync() starting...");
                 await dbService.InitializeAsync();
-                Console.WriteLine("[APP INIT V7.7] dbService.InitializeAsync() OK.");
+                Console.WriteLine("[APP INIT V14.1] dbService.InitializeAsync() OK.");
 
-                Console.WriteLine("[APP INIT V7.7] Other services starting...");
+                Console.WriteLine("[APP INIT V14.1] Other services starting...");
                 var routingService = new RoutingService(cfg);
-                var llmService = new LlmService(cfg);
+
+                // [V9.0 修正 CS1503] LlmService V7.6 建構函式不需參數
+                var llmService = new LlmService();
+
                 var intakeService = new IntakeService(dbService);
 
-                hotFolderService = new HotFolderService(intakeService, routingService);
-                Console.WriteLine("[APP INIT V7.7] Other services OK.");
+                // [V9.0 修正 CS1503] HotFolderService V8.1/V9.0 建構函式需要 DbService
+                hotFolderService = new HotFolderService(intakeService, dbService);
 
-                // 2. 將服務註冊到全域資源字典
+                Console.WriteLine("[APP INIT V14.1] Other services OK.");
+
                 Resources.Add("Db", dbService);
                 Resources.Add("Router", routingService);
                 Resources.Add("Llm", llmService);
                 Resources.Add("Intake", intakeService);
                 Resources.Add("HotFolder", hotFolderService);
-                Console.WriteLine("[APP INIT V7.7] Services registered.");
+                Console.WriteLine("[APP INIT V14.1] Services registered.");
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[APP INIT V7.7] FATAL CRASH: {ex.Message}");
+                Console.WriteLine($"[APP INIT V14.1] FATAL CRASH (ServiceInitialization): {ex.Message}");
                 LogCrash("ServiceInitialization", ex);
                 var innerEx = ex.InnerException ?? ex;
                 MessageBox.Show($"服務初始化失敗 (請檢查 %AppData% 設定檔權限): {innerEx.Message}", "嚴重錯誤", MessageBoxButton.OK, MessageBoxImage.Error);
@@ -85,7 +104,6 @@ namespace AI.KB.Assistant
             }
             // =================================================================
 
-            // 4. 檢查首次啟動 (V7.34 UI 串接)
             if (IsFirstRunOrConfigInvalid(cfg))
             {
                 MessageBox.Show("歡迎使用 AI.KB Assistant！\n\n系統偵測到您是首次啟動，或核心路徑尚未設定。\n請先完成初始設定。", "歡迎", MessageBoxButton.OK, MessageBoxImage.Information);
@@ -93,46 +111,39 @@ namespace AI.KB.Assistant
                 var settingsWindow = new SettingsWindow();
                 settingsWindow.ShowDialog();
 
-                // 重新載入設定，再次檢查
                 ConfigService.Load();
                 cfg = ConfigService.Cfg;
                 if (IsFirstRunOrConfigInvalid(cfg))
                 {
                     MessageBox.Show("核心路徑 (Root 目錄 / 收件夾) 尚未設定。\nApp 即將關閉。", "設定未完成", MessageBoxButton.OK, MessageBoxImage.Warning);
-
-                    // V7.34 崩潰修正 (NullReferenceException)
-                    // 在 OnStartup 中，應使用 this.Shutdown() 而不是 Application.Current.Shutdown()
                     this.Shutdown();
                     return;
                 }
             }
 
-            // 5. 服務都緒後，依據設定檔啟動視窗 (V7.34 UI 串接)
             Window startupWindow;
-            // V7.34 修正：預設啟動模式改為 "simple"
-            var mode = cfg?.App?.LaunchMode?.ToLowerInvariant() ?? "simple";
+            var mode = cfg.App.LaunchMode.ToLowerInvariant();
 
             if (mode == "detailed")
             {
                 startupWindow = new MainWindow();
-                Console.WriteLine("[APP INIT V7.34] Starting in DETAILED mode (MainWindow).");
+                Console.WriteLine("[APP INIT V14.1] Starting in DETAILED mode (MainWindow).");
             }
             else
             {
                 startupWindow = new LauncherWindow();
-                Console.WriteLine("[APP INIT V7.34] Starting in SIMPLE mode (LauncherWindow).");
+                Console.WriteLine("[APP INIT V14.1] Starting in SIMPLE mode (LauncherWindow).");
             }
 
             this.MainWindow = startupWindow;
             startupWindow.Show();
-            Console.WriteLine("[APP INIT V7.34] MainWindow.Show() called.");
+            Console.WriteLine("[APP INIT V14.1] MainWindow.Show() called.");
 
-
-            // 6. 啟動 HotFolder 監控 (V7.6 修正)
             try
             {
+                // [V9.0 修正 CS1061] 
                 hotFolderService.StartMonitoring();
-                Console.WriteLine("[APP INIT V7.7] HotFolderService started.");
+                Console.WriteLine("[APP INIT V14.1] HotFolderService started.");
             }
             catch (Exception ex)
             {
@@ -141,22 +152,8 @@ namespace AI.KB.Assistant
             }
         }
 
-        /// <summary>
-        /// V7.34 檢查是否為首次執行 (或設定檔不完整)
-        /// </summary>
         private bool IsFirstRunOrConfigInvalid(AppConfig cfg)
         {
-            // V7.34 邏輯修正：
-            // 1. 檢查 cfg 本身是否為 null
-            // 2. 檢查 App 區段是否為 null
-            // 3. 檢查 Import 區段是否為 null
-            if (cfg == null || cfg.App == null || cfg.Import == null)
-            {
-                // 如果設定檔嚴重損毀或無法載入，強制要求重新設定
-                return true;
-            }
-
-            // 只要 RootDir 或 HotFolder 任何一個為空，就視為設定不完整
             return string.IsNullOrWhiteSpace(cfg.App.RootDir) ||
                    string.IsNullOrWhiteSpace(cfg.Import.HotFolder);
         }
@@ -176,9 +173,9 @@ namespace AI.KB.Assistant
             };
         }
 
+       // Enqueues cleanup operations to be performed on exit
         protected override void OnExit(ExitEventArgs e)
         {
-            // V7.4 修正：確保 HotFolderService 被釋放
             (Resources["HotFolder"] as IDisposable)?.Dispose();
 
             try { _mutex?.ReleaseMutex(); } catch { }
@@ -187,7 +184,6 @@ namespace AI.KB.Assistant
             base.OnExit(e);
         }
 
-        // V7.15 修正：改為 public，以便 DbService 可以呼叫
         public static void LogCrash(string tag, Exception? ex)
         {
             try
@@ -205,7 +201,6 @@ namespace AI.KB.Assistant
             }
             catch (Exception loggingEx)
             {
-                // 如果連寫入日誌都失敗，至少在 Debug 視窗顯示
                 Debug.WriteLine($"CRASH LOGGING FAILED: {loggingEx.Message}");
             }
         }

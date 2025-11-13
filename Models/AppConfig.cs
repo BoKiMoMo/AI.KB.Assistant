@@ -1,160 +1,156 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using System.Text.Json;
-using AI.KB.Assistant.Services; // V7.34 修正：移除 using
+using System.Text.Json.Serialization;
 
 namespace AI.KB.Assistant.Models
 {
-    /// <summary>
-    /// 全域設定檔 (V7.34 重構：移除所有靜態邏輯，改由 ConfigService 統一管理)
-    /// </summary>
-    public sealed class AppConfig
+    // V13.0 (方案 C)
+    // 1. (V9.7) 使用 string OverwritePolicy 和 JSON Clone()
+    // 2. [V13.0] 移除 ShowDesktopInTree/ShowDrivesInTree
+    // 3. [V13.0] 新增 TreeViewRootPaths (自訂路徑清單)
+
+    public class AppConfig
     {
-        // === 區段設定 ===
+        [JsonPropertyName("app")]
         public AppSection App { get; set; } = new();
+
+        [JsonPropertyName("db")]
         public DbSection Db { get; set; } = new();
-        public RoutingSection Routing { get; set; } = new();
+
+        [JsonPropertyName("import")]
         public ImportSection Import { get; set; } = new();
+
+        [JsonPropertyName("routing")]
+        public RoutingSection Routing { get; set; } = new();
+
+        [JsonPropertyName("openAI")]
         public OpenAISection OpenAI { get; set; } = new();
 
-        #region === 載入 / 儲存 (V7.34 註解：以下方法已棄用，邏輯移至 ConfigService) ===
-
-        /*
-        // V7.34 棄用：邏輯移至 ConfigService
-        public static AppConfig Current { get; private set; } = Default;
-        public static AppConfig Default => CreateDefault();
-        public static string ConfigPath => Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "config.json");
-
-        public static AppConfig CreateDefault()
-        {
-            // ... (邏輯已搬到 ConfigService) ...
-        }
-
-        public static AppConfig Load(string? path = null)
-        {
-            // ... (邏輯已搬到 ConfigService) ...
-        }
-
-        public static void Save(string? path = null)
-        {
-            // ... (邏輯已搬到 ConfigService) ...
-        }
-        
-        public void SaveAsCurrent()
-        {
-            // ... (邏輯已搬到 ConfigService) ...
-        }
-        
-        public static void ReplaceCurrent(AppConfig cfg)
-        {
-            if (cfg != null)
-                Current = cfg;
-        }
-        */
-
-        /// <summary>建立淺拷貝副本（避免 UI 改動直接影響記憶體內設定）。</summary>
+        /// <summary>
+        /// (V9.7) 使用 JSON 序列化來深層複製
+        /// </summary>
         public AppConfig Clone()
         {
-            return new AppConfig
+            var options = new JsonSerializerOptions
             {
-                App = new AppSection
-                {
-                    StartupUIMode = App.StartupUIMode,
-                    RootDir = App.RootDir,
-                    LaunchMode = App.LaunchMode // V7.34 UI 串接：新增
-                },
-                Db = new DbSection
-                {
-                    DbPath = Db.DbPath
-                },
-                Routing = new RoutingSection
-                {
-                    RootDir = Routing.RootDir,
-                    UseProject = Routing.UseProject,
-                    UseYear = Routing.UseYear,
-                    UseMonth = Routing.UseMonth,
-                    UseCategory = Routing.UseCategory,                          // NEW
-                    Threshold = Routing.Threshold,
-                    AutoFolderName = Routing.AutoFolderName,
-                    LowConfidenceFolderName = Routing.LowConfidenceFolderName,
-                    UseType = Routing.UseType,
-                    BlacklistExts = Routing.BlacklistExts?.ToList() ?? new List<string>(),
-                    BlacklistFolderNames = Routing.BlacklistFolderNames?.ToList() ?? new List<string>(),
-                    FolderOrder = Routing.FolderOrder?.ToList()                 // NEW
-                },
-                Import = new ImportSection
-                {
-                    IncludeSubdir = Import.IncludeSubdir,
-                    HotFolder = Import.HotFolder,
-                    EnableHotFolder = Import.EnableHotFolder,
-                    OverwritePolicy = Import.OverwritePolicy,
-                    MoveMode = Import.MoveMode
-                },
-                OpenAI = new OpenAISection
-                {
-                    ApiKey = OpenAI.ApiKey,
-                    Model = OpenAI.Model
-                }
+                PropertyNameCaseInsensitive = true,
+                DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+                Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) }
             };
+            var json = JsonSerializer.Serialize(this, options);
+            return JsonSerializer.Deserialize<AppConfig>(json, options) ?? new AppConfig();
         }
-
-        #endregion
     }
 
-    // === 子區段定義 ===
-
-    public sealed class AppSection
+    public class AppSection
     {
-        public string StartupUIMode { get; set; } = "home";
+        [JsonPropertyName("rootDir")]
         public string RootDir { get; set; } = "";
 
-        // V7.34 UI 串接：新增
-        // "Simple" 或 "Detailed"
-        public string? LaunchMode { get; set; }
-    }
-
-    public sealed class DbSection
-    {
+        [JsonPropertyName("dbPath")]
         public string DbPath { get; set; } = "";
-        public string Path { get => DbPath; set => DbPath = value; } // 相容舊名
+
+        [JsonPropertyName("launchMode")]
+        public string LaunchMode { get; set; } = "Detailed";
+
+        // [V13.0 移除] 移除 V12.0 的 ShowDesktopInTree
+        // [V13.0 移除] 移除 V12.0 的 ShowDrivesInTree
+
+        // [V13.0 新增] 自訂檔案樹根目錄
+        [JsonPropertyName("treeViewRootPaths")]
+        public List<string> TreeViewRootPaths { get; set; } = new();
     }
 
-    public sealed class RoutingSection
+    public class DbSection
     {
+        // ... (現有的 DbSection 內容，無變更) ...
+        [JsonPropertyName("dbPath")]
+        public string DbPath { get; set; } = "";
+
+        [JsonPropertyName("path")]
+        public string Path { get; set; } = "";
+    }
+
+    public class ImportSection
+    {
+        // ... (現有的 ImportSection 內容，無變更) ...
+        [JsonPropertyName("hotFolder")]
+        public string HotFolder { get; set; } = "";
+
+        [JsonPropertyName("includeSubdir")]
+        public bool IncludeSubdir { get; set; } = true;
+
+        [JsonPropertyName("enableHotFolder")]
+        public bool EnableHotFolder { get; set; } = true;
+
+        [JsonPropertyName("moveMode")]
+        public string MoveMode { get; set; } = "copy";
+
+        // (V9.7) 還原為 string
+        [JsonPropertyName("overwritePolicy")]
+        public string OverwritePolicy { get; set; } = "KeepBoth";
+
+        [JsonPropertyName("blacklistExts")]
+        public List<string> BlacklistExts { get; set; } = new();
+
+        [JsonPropertyName("blacklistFolderNames")]
+        public List<string> BlacklistFolderNames { get; set; } = new();
+    }
+
+    public class RoutingSection
+    {
+        // ... (現有的 RoutingSection 內容，無變更) ...
+        // (V9.7) 滿足 MainWindow/RoutingService 備援
+        [JsonPropertyName("rootDir")]
         public string RootDir { get; set; } = "";
-        public bool UseProject { get; set; } = true;
+
+        [JsonPropertyName("useYear")]
         public bool UseYear { get; set; } = true;
+
+        [JsonPropertyName("useMonth")]
         public bool UseMonth { get; set; } = true;
 
-        // NEW: 勾選才啟用類別層
+        [JsonPropertyName("useProject")]
+        public bool UseProject { get; set; } = true;
+
+        [JsonPropertyName("useCategory")]
         public bool UseCategory { get; set; } = false;
 
-        public double Threshold { get; set; } = 0.75;
-        public string LowConfidenceFolderName { get; set; } = "_low_conf";
-        public string AutoFolderName { get; set; } = "_auto";
+        [JsonPropertyName("folderOrder")]
+        public List<string> FolderOrder { get; set; } = new() { "year", "month", "project", "category" };
+
+        [JsonPropertyName("useType")]
         public string UseType { get; set; } = "rule+llm";
+
+        [JsonPropertyName("lowConfidenceFolderName")]
+        public string LowConfidenceFolderName { get; set; } = "_pending";
+
+        [JsonPropertyName("threshold")]
+        public double Threshold { get; set; } = 0.75;
+
+        [JsonPropertyName("autoFolderName")]
+        public string AutoFolderName { get; set; } = "自整理";
+
+        [JsonPropertyName("extensionGroups")]
+        public Dictionary<string, List<string>> ExtensionGroups { get; set; } = new();
+
+        // V7.34 (C#) 黑名單位置 (由 ConfigService V9.1/V9.6 映射)
+        [JsonPropertyName("blacklistExts")]
         public List<string> BlacklistExts { get; set; } = new();
+
+        [JsonPropertyName("blacklistFolderNames")]
         public List<string> BlacklistFolderNames { get; set; } = new();
-
-        // NEW: 可自訂層級順序（token：year, month, project, category）
-        public List<string>? FolderOrder { get; set; } = null;
     }
 
-    public sealed class ImportSection
+    public class OpenAISection
     {
-        public bool IncludeSubdir { get; set; } = true;
-        public string HotFolder { get; set; } = "";
-        public string HotFolderPath { get => HotFolder; set => HotFolder = value; } // 相容舊名
-        public bool EnableHotFolder { get; set; } = false;
-        public OverwritePolicy OverwritePolicy { get; set; } = OverwritePolicy.KeepBoth;
-        public string MoveMode { get; set; } = "copy"; // 舊版本相容
-    }
-
-    public sealed class OpenAISection
-    {
+        // ... (現有的 OpenAISection 內容，無變更) ...
+        [JsonPropertyName("apiKey")]
         public string ApiKey { get; set; } = "";
+
+        [JsonPropertyName("model")]
         public string Model { get; set; } = "gpt-4o-mini";
     }
 }

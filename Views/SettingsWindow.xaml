@@ -47,11 +47,11 @@
                         <TextBox   x:Name="TbDbPath" Grid.Row="6" Grid.Column="1" Margin="8,0"/>
                         <Button    Grid.Row="6" Grid.Column="2" Content="選擇檔案…" Click="BtnBrowseDb_Click"/>
                         <TextBlock Grid.Row="7" Grid.Column="1" Grid.ColumnSpan="2" Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
-                       Text="系統使用的本機輕量級資料庫（.db/.sqlite）；若留空會自動建立於預設路徑。"/>
+                       Text="系統使用的本機輕量級資料庫（.db/.sqlite）；若留空會自動建立於預設路径。"/>
                     </Grid>
                 </GroupBox>
 
-                <!-- V7.34 UI 串接：新增「啟動設定」區塊 -->
+                <!-- 啟動設定 -->
                 <GroupBox Header="啟動設定" Margin="0,12,0,0">
                     <Grid Margin="10">
                         <Grid.ColumnDefinitions>
@@ -70,8 +70,40 @@
                         </StackPanel>
                         <TextBlock Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" Margin="8,4,0,0" Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
                        Text="選擇 App 啟動時要進入的介面。"/>
+
+                        <!-- [V13.0 移除] 移除 V12.0 的檔案樹勾選框 -->
                     </Grid>
                 </GroupBox>
+
+                <!-- [V13.0 新增] 檔案樹自訂根目錄 -->
+                <GroupBox Header="檔案樹自訂根目錄 (方案 C)" Margin="0,12,0,0">
+                    <Grid Margin="10">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="180"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="110"/>
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <TextBlock Grid.Row="0" Grid.Column="0" VerticalAlignment="Top" Text="自訂根目錄 (一行一個路徑)"/>
+                        <TextBox   x:Name="TbTreeViewRoots" Grid.Row="0" Grid.Column="1" Margin="8,0,0,0"
+                                   Height="120" AcceptsReturn="True" VerticalScrollBarVisibility="Auto"
+                                   TextWrapping="NoWrap"/>
+
+                        <Button    x:Name="BtnAddRootPath" Grid.Row="0" Grid.Column="2" Content="瀏覽並加入…" 
+                                   VerticalAlignment="Top" Click="BtnAddRootPath_Click"/>
+
+                        <TextBlock Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
+                                   Text="您在上方「Root 目錄」設定的路徑會自動包含在內。" Margin="8,4,0,0"/>
+                        <TextBlock Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="2" Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
+                                   Text="範例：C:\Users\YourName\Projects" Margin="8,4,0,0"/>
+                    </Grid>
+                </GroupBox>
+
 
                 <!-- 匯入與監控 -->
                 <GroupBox Header="匯入與監控 (Import &amp; Monitoring)" Margin="0,12,0,0">
@@ -117,7 +149,7 @@
 
                         <TextBlock Grid.Row="9" Grid.Column="0" VerticalAlignment="Center" Text="覆寫策略 (OverwritePolicy)"/>
                         <ComboBox  x:Name="CbOverwrite" Grid.Row="9" Grid.Column="1" Margin="8,0,0,0"
-                       SelectedValuePath="Tag" IsEditable="False" SelectedValue="Rename">
+                       SelectedValuePath="Tag" IsEditable="False" SelectedValue="KeepBoth">
                             <ComboBoxItem Tag="KeepBoth" Content="KeepBoth / 保留兩份"/>
                             <ComboBoxItem Tag="Rename"   Content="Rename / 自動重新命名"/>
                             <ComboBoxItem Tag="Replace"  Content="Replace / 直接覆蓋"/>

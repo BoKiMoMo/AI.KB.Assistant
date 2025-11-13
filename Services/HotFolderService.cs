@@ -1,424 +1,267 @@
-﻿using AI.KB.Assistant.Models;
-using AI.KB.Assistant.Views; // 為了存取 MainWindow
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Windows;
+using AI.KB.Assistant.Models;
 
 namespace AI.KB.Assistant.Services
 {
     /// <summary>
-    /// V7.33.4 修正 (崩潰修正)：
-    /// 1. 修正 OnTimerElapsed 中的 SynchronizationLockException 錯誤。
-    ///    將 Monitor (object) 鎖 替換為 SemaphoreSlim(1, 1)。
-    ///    SemaphoreSlim 天生支援 async/await，允許 await 跨線程後正確釋放鎖。
-    ///    這將解決「一次加入多筆檔案」時的 App 崩潰問題。
+    /// V19.0 (V18.1 回滾 P2)
+    /// 1. (V18.1) 保留 'TopDirectoryOnly' (V17.1 P1 修正) [Line 116]。
+    /// 2. [V19.0 修正 CS0104] (V18.1) 'System.IO.Path' (CS0104 修正) [Line 181]。
+    /// 3. [V19.0 回滾 P2] 移除 V18.0 (V17.1 P2 需求) [cite: `Services/HotFolderService.cs (V18.0)` Line 149] 的 'EnumerateDirectories' (掃描資料夾) 邏輯。
+    /// 4. [V19.0 回滾 P2] (V18.0) 'IntakeItemsAsync' [cite: `Services/HotFolderService.cs (V18.0)` Line 206] 
+    ///    回滾為 (V17.0) 'IntakeFilesAsync' [Line 204]。
+    /// 5. [V19.0 修正 CS1061] [Line 185] 移除了對 V19.0 'Item.IsFolder' [cite: `Models/Item.cs (V19.0)` Line 108] (已刪除) 的引用。
     /// </summary>
-    public class HotFolderService : IDisposable
+    public sealed class HotFolderService : IDisposable
     {
         private readonly IntakeService _intake;
-        private readonly RoutingService _router;
+        private readonly DbService _db;
+        private Timer? _timer;
+        private bool _isScanning = false;
+        private readonly object _lock = new object();
 
-        private FileSystemWatcher? _watcher;
-        private AppConfig _cfg = ConfigService.Cfg; // 快取目前設定
-        private readonly object _lock = new object(); // 用於 FSW 初始化
+        // (V17.0)
+        public event Action? FilesChanged;
 
-        // V7.33.4 修正：使用 SemaphoreSlim 替代 object _scanLock
-        private readonly SemaphoreSlim _scanSemaphore = new SemaphoreSlim(1, 1);
+        // (V16.0)
+        private List<string> _scanPaths = new List<string>();
+        // (V18.0) 
+        private HashSet<string> _blacklistExts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        private HashSet<string> _blacklistFolders = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        private Timer? _debounceTimer;
-
-        // V7.34 新增：手動觸發簡易模式同步
-        /// <summary>
-        /// V7.34 新增：手動觸發一次鏡像同步 (供簡易模式使用)
-        /// </summary>
-        public async Task TriggerManualSync()
-        {
-            // 1. 取得鎖 (與 OnTimerElapsed 相同)
-            // 這裡使用 WaitAsync() 而不是 WaitAsync(0)，
-            // 確保如果計時器正在掃描，我们会等待它完成後再執行。
-            Log("手動觸發：正在等待掃描鎖...");
-            await _scanSemaphore.WaitAsync();
-            Log("手動觸發：已取得掃描鎖。");
-
-            try
-            {
-                // 2. 執行核心同步邏輯
-                await ScanAndSyncHotFolderAsync();
-            }
-            catch (Exception ex)
-            {
-                Log($" -> 手動鏡像同步失敗 (TriggerManualSync)。錯誤: {ex.Message}");
-            }
-            finally
-            {
-                // 3. 確保釋放鎖
-                _scanSemaphore.Release();
-                Log("手動觸發：已釋放掃描鎖。");
-            }
-        }
-
-
-        public HotFolderService(IntakeService intake, RoutingService router)
+        public HotFolderService(IntakeService intake, DbService db)
         {
             _intake = intake;
-            _router = router;
+            _db = db;
+
+            ConfigService.ConfigChanged += OnConfigChanged;
+            LoadConfig(ConfigService.Cfg);
         }
 
         public void StartMonitoring()
         {
-            _debounceTimer = new Timer(OnTimerElapsed, null, Timeout.Infinite, Timeout.Infinite);
-
-            ConfigService.ConfigChanged += OnConfigChanged;
-            InitializeWatcher(ConfigService.Cfg);
-            Log("HotFolderService 已啟動 (V7.33.4 Mirroring-Sync)。"); // V7.33.4
-        }
-
-        public void StopMonitoring()
-        {
-            lock (_lock)
+            if (_timer == null)
             {
-                if (_watcher != null)
-                {
-                    _watcher.EnableRaisingEvents = false;
-                    _watcher.Created -= OnFileChanged;
-                    _watcher.Deleted -= OnFileChanged;
-                    _watcher.Renamed -= OnFileChanged;
-                    _watcher.Dispose();
-                    _watcher = null;
-                    Log("HotFolder 監控已停止。");
-                }
-
-                _debounceTimer?.Change(Timeout.Infinite, Timeout.Infinite);
-                _debounceTimer?.Dispose();
-                _debounceTimer = null;
+                _timer = new Timer(async (_) => await ScanAsync(), null, 2000, 2000);
             }
         }
 
-        private void OnConfigChanged(object? sender, AppConfig cfg)
+        public async Task TriggerManualSync()
         {
-            Log("偵測到設定變更，正在重新初始化 HotFolder 監控器...");
-            InitializeWatcher(cfg);
+            await ScanAsync();
         }
 
-        private void InitializeWatcher(AppConfig cfg)
+
+        private void OnConfigChanged(AppConfig config)
+        {
+            LoadConfig(config);
+        }
+
+        private void LoadConfig(AppConfig cfg)
         {
             lock (_lock)
             {
-                _cfg = cfg;
-                StopMonitoring();
-
-                _debounceTimer = new Timer(OnTimerElapsed, null, Timeout.Infinite, Timeout.Infinite);
-
-                if (cfg.Import?.EnableHotFolder != true)
+                // (V16.0) V13.0 (方案 C) [cite: `Models/AppConfig.cs (V13.0)`]
+                var paths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                if (!string.IsNullOrWhiteSpace(cfg.App?.RootDir))
                 {
-                    Log("HotFolder 監控未啟用 (EnableHotFolder: false)。");
-                    return;
+                    paths.Add(cfg.App.RootDir.Trim());
                 }
-
-                var hotPath = cfg.Import.HotFolder;
-                if (string.IsNullOrWhiteSpace(hotPath))
+                if (!string.IsNullOrWhiteSpace(cfg.Import.HotFolder))
                 {
-                    Log("HotFolder 監控失敗：路徑未設定 (HotFolder: '')。");
-                    return;
+                    paths.Add(cfg.Import.HotFolder.Trim());
                 }
-
-                if (!Directory.Exists(hotPath))
+                if (cfg.App?.TreeViewRootPaths != null)
                 {
-                    try { Directory.CreateDirectory(hotPath); Log($"HotFolder 目錄不存在，已自動建立：{hotPath}"); }
-                    catch (Exception ex) { Log($"HotFolder 監控失敗：無法建立目錄 {hotPath}。錯誤: {ex.Message}"); return; }
-                }
-
-                try
-                {
-                    _watcher = new FileSystemWatcher(hotPath)
+                    foreach (var p in cfg.App.TreeViewRootPaths)
                     {
-                        NotifyFilter = NotifyFilters.FileName | NotifyFilters.CreationTime | NotifyFilters.LastWrite,
-                        IncludeSubdirectories = cfg.Import?.IncludeSubdir == true
-                    };
-
-                    _watcher.Created += OnFileChanged;
-                    _watcher.Deleted += OnFileChanged;
-                    _watcher.Renamed += OnFileChanged;
-
-                    _watcher.EnableRaisingEvents = true;
-                    Log($"HotFolder 監控已啟動，路徑：{hotPath}");
-
-                    Log("執行啟動時的首次掃描...");
-                    _debounceTimer.Change(500, Timeout.Infinite); // 0.5 秒後執行
+                        if (!string.IsNullOrWhiteSpace(p)) paths.Add(p.Trim());
+                    }
                 }
-                catch (Exception ex)
-                {
-                    Log($"HotFolder 監控啟動失敗：{ex.Message}");
-                }
+                _scanPaths = paths.ToList();
+
+                // (V18.0) 
+
+                _blacklistExts = new HashSet<string>(
+                    cfg.Import.BlacklistExts?.Select(s => s.TrimStart('.')) ?? Enumerable.Empty<string>(),
+                    StringComparer.OrdinalIgnoreCase
+                );
+                _blacklistFolders = new HashSet<string>(
+                    cfg.Import.BlacklistFolderNames ?? Enumerable.Empty<string>(),
+                    StringComparer.OrdinalIgnoreCase
+                );
             }
         }
 
-        private void OnFileChanged(object sender, FileSystemEventArgs e)
+        public async Task ScanAsync()
         {
-            Log($"[DIAG:WATCHER] Raw Event Fired ({e.ChangeType}): {e.FullPath}");
-            if (string.IsNullOrWhiteSpace(e.FullPath)) return;
-            _debounceTimer?.Change(dueTime: 2000, period: Timeout.Infinite);
-        }
+            // (V16.0)
+            List<string> currentScanPaths;
+            HashSet<string> currentBlacklistExts;
+            HashSet<string> currentBlacklistFolders;
 
-        // V7.33.4 修正：
-        // OnTimerElapsed (async void) 現在使用 SemaphoreSlim.WaitAsync(0)
-        // 確保 async/await 流程中的線程安全
-        private async void OnTimerElapsed(object? state)
-        {
-            // 1. 嘗試非阻塞地獲取信號燈 (Timeout: 0)
-            if (!await _scanSemaphore.WaitAsync(0))
+            lock (_lock)
             {
-                Log("[DIAG] 掃描被跳過 (上次掃描仍在進行中)。");
-                return; // 獲取失敗，上次任務仍在執行
+                currentScanPaths = _scanPaths.ToList();
+                // (V18.0)
+                currentBlacklistExts = _blacklistExts;
+                currentBlacklistFolders = _blacklistFolders;
             }
+
+            if (currentScanPaths.Count == 0)
+            {
+                return;
+            }
+
+            if (_isScanning) return;
+            lock (_lock) { _isScanning = true; }
+
+            bool dataChanged = false;
 
             try
             {
-                // 2. 在 Lock 內部執行並等待 Async 任務
-                await ScanAndSyncHotFolderAsync();
+                // [V18.1 修正 P1] 強制 'TopDirectoryOnly' (非遞迴)
+                var searchOption = SearchOption.TopDirectoryOnly;
+
+                // [V19.0 回滾 P2] 
+                var allFilesOnDisk = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+                foreach (var scanPath in currentScanPaths)
+                {
+                    if (string.IsNullOrWhiteSpace(scanPath) || !Directory.Exists(scanPath))
+                    {
+                        continue;
+                    }
+
+                    // 1. 取得檔案 (V17.0)
+                    foreach (var f in Directory.EnumerateFiles(scanPath, "*.*", searchOption))
+                    {
+                        var fi = new FileInfo(f);
+                        if (currentBlacklistExts.Contains(fi.Extension.TrimStart('.'))) continue;
+
+                        bool inBlacklistFolder = false;
+                        var dir = fi.Directory;
+                        // (V17.0)
+                        while (dir != null && dir.FullName.Length > scanPath.Length)
+                        {
+                            if (currentBlacklistFolders.Contains(dir.Name))
+                            {
+                                inBlacklistFolder = true;
+                                break;
+                            }
+                            dir = dir.Parent;
+                        }
+                        if (inBlacklistFolder) continue;
+
+                        allFilesOnDisk[fi.FullName] = fi.FullName; // [V19.0]
+                    }
+
+                    // 2. [V19.0 回滾 P2] 移除 V18.0 [cite: `Services/HotFolderService.cs (V18.0)` Line 149] 的 'EnumerateDirectories'
+                }
+
+
+                // 3. 取得資料庫中已存在的所有檔案 (V16.0)
+                var allItemsInDb = await _db.QueryAllAsync();
+
+                // [V19.0 修正 CS0104] (V18.1)
+                var managedPathRoots = new HashSet<string>(currentScanPaths.Select(System.IO.Path.GetFullPath), StringComparer.OrdinalIgnoreCase);
+
+                var dbFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                var dbItemsInManagedFolders = new List<Item>();
+
+                foreach (var item in allItemsInDb)
+                {
+                    // [V19.0 修正 CS1061] 
+                    // 移除 V18.1 [cite: `Services/HotFolderService.cs (V18.1)` Line 185] '|| item.IsFolder'
+                    if (string.IsNullOrWhiteSpace(item.Path)) continue;
+
+                    bool isManaged = false;
+                    try
+                    {
+                        // [V19.0 修正 CS0104] (V18.1)
+                        var fullItemPath = System.IO.Path.GetFullPath(item.Path);
+                        if (managedPathRoots.Any(root => fullItemPath.StartsWith(root, StringComparison.OrdinalIgnoreCase)))
+                        {
+                            isManaged = true;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"[HotFolderService Error] Invalid item path: {item.Path}. {ex.Message}");
+                    }
+
+                    if (isManaged)
+                    {
+                        dbFiles.Add(item.Path);
+                        dbItemsInManagedFolders.Add(item);
+                    }
+                }
+
+
+                // 4. [Intake] 找出 (磁碟 O, DB X) 的新檔案
+                // [V19.0 回滾 P2] 
+                var newFiles = new List<string>();
+                foreach (var diskItem in allFilesOnDisk)
+                {
+                    if (!dbFiles.Contains(diskItem.Key))
+                    {
+                        newFiles.Add(diskItem.Value);
+                    }
+                }
+
+                if (newFiles.Count > 0)
+                {
+                    // [V19.0 回滾 P2] 
+                    await _intake.IntakeFilesAsync(newFiles);
+                    dataChanged = true;
+                }
+
+                // 5. [Delete] 找出 (磁碟 X, DB O) 且非 "committed" 的舊項目
+
+                // (V16.0)
+
+                var missingIds = new List<string>();
+                foreach (var item in dbItemsInManagedFolders)
+                {
+                    if (string.IsNullOrWhiteSpace(item.Id) || item.Status == "committed") continue;
+
+                    if (!allFilesOnDisk.ContainsKey(item.Path))
+                    {
+                        missingIds.Add(item.Id);
+                    }
+                }
+
+                if (missingIds.Count > 0)
+                {
+                    await _intake.DeleteItemsAsync(missingIds);
+                    dataChanged = true;
+                }
             }
             catch (Exception ex)
             {
-                // 捕獲來自 ScanAndSyncHotFolderAsync 的未處理異常
-                Log($" -> 處理 HotFolder 鏡像同步失敗 (OnTimerElapsed)。錯誤: {ex.Message}");
+                Console.WriteLine($"[HotFolderService Error] {ex.Message}");
+                App.LogCrash("HotFolderService.ScanAsync", ex);
             }
             finally
             {
-                // 3. 確保釋放信號燈
-                _scanSemaphore.Release();
+                lock (_lock) { _isScanning = false; }
+            }
+
+            if (dataChanged)
+            {
+                FilesChanged?.Invoke();
             }
         }
 
-        /// <summary>
-        /// (V7.33.3) 包含 V7.32 鏡像同步 (Mirroring Sync) 邏輯的 Async Task
-        /// (此函數內部邏輯在 V7.33.4 中保持不變)
-        /// </summary>
-        private async Task ScanAndSyncHotFolderAsync()
-        {
-            // --- 取得鎖後才執行的邏輯 ---
-            string hotPath;
-            SearchOption searchOption;
-            HashSet<string> blacklistExts;
-
-            lock (_lock) // 讀取 _cfg (這個鎖 _lock 和 _scanLock 不同，是安全的)
-            {
-                // V7.34 偵錯：修正 null 引用
-                if (_cfg?.Import == null || _cfg?.Routing == null)
-                {
-                    Log("[Sync] 鏡像同步失敗：_cfg (Import/Routing) 為 null。");
-                    return;
-                }
-
-                // V7.34 偵錯：修正 FSW 監控模式下的 null 引用
-                if (_watcher == null || !_watcher.EnableRaisingEvents)
-                {
-                    // 在手動觸發模式 (LauncherWindow) 下，_watcher 可能是 null，
-                    // 我們需要從 _cfg 重新取得路徑
-                    hotPath = _cfg.Import.HotFolder;
-                    if (string.IsNullOrWhiteSpace(hotPath))
-                    {
-                        Log("[Sync] 鏡像同步失敗：HotFolder 路徑未設定。");
-                        return;
-                    }
-                    Log("[Sync] 監控器未執行，使用手動觸發模式路徑。");
-                }
-                else
-                {
-                    // 正常監控模式
-                    hotPath = _watcher.Path;
-                }
-
-                searchOption = _cfg.Import.IncludeSubdir == true ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
-                blacklistExts = _cfg.Routing.BlacklistExts?.ToHashSet(StringComparer.OrdinalIgnoreCase) ?? new HashSet<string>();
-            }
-
-            Log("計時器觸發/手動觸發：開始鏡像同步 (Mirror-Sync) HotFolder...");
-            Log($"[Sync] 掃描路徑: {hotPath}");
-            Log($"[Sync] 掃描模式: {searchOption}");
-            bool needsRefresh = false;
-
-            // 1. 取得磁碟上的所有檔案 (Disk Files)
-            var diskFiles = await Task.Run(() => Directory.GetFiles(hotPath, "*.*", searchOption));
-            var diskFileSet = new HashSet<string>(diskFiles, StringComparer.OrdinalIgnoreCase);
-            Log($"[Sync] 磁碟掃描：偵測到 {diskFileSet.Count} 個實體檔案。");
-
-            // 2. 取得資料庫中的所有項目 (DB Items)
-            var allDbItems = await Task.Run(() => _intake.QueryAllAsync());
-
-            // 3. 將 DB 項目分類：收件夾 (intaked) vs. 已提交 (committed)
-            var inboxDbItems = new List<Item>();
-            var committedDbPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var item in allDbItems)
-            {
-                if (item.Status == "committed")
-                {
-                    committedDbPaths.Add(item.Path);
-                }
-                else
-                {
-                    inboxDbItems.Add(item);
-                }
-            }
-            var inboxDbPathSet = new HashSet<string>(inboxDbItems.Select(i => i.Path), StringComparer.OrdinalIgnoreCase);
-            Log($"[Sync] 資料庫掃描： {inboxDbItems.Count} 筆 '收件夾' 項目， {committedDbPaths.Count} 筆 '已提交' 項目。");
-
-            // --- S_R (Sync/Reconciliation) ---
-
-            // 4. [ADD] 找出磁碟上有，但 DB 沒有的檔案
-            var filesToAdd = new List<string>();
-            foreach (var diskPath in diskFileSet)
-            {
-                if (!inboxDbPathSet.Contains(diskPath) && !committedDbPaths.Contains(diskPath))
-                {
-                    var ext = Path.GetExtension(diskPath).TrimStart('.').ToLowerInvariant();
-                    if (blacklistExts.Contains(ext)) continue;
-                    if (IsFileLocked(diskPath))
-                    {
-                        Log($" -> [Sync-Add] 檔案 {Path.GetFileName(diskPath)} 仍被鎖定，跳過。");
-                        continue;
-                    }
-                    filesToAdd.Add(diskPath);
-                }
-            }
-
-            // 5. [DELETE] 找出 DB (intaked) 有，但磁碟上沒有的檔案
-            var itemsToDelete = inboxDbItems.Where(item => !diskFileSet.Contains(item.Path)).ToList();
-            var idsToDelete = itemsToDelete.Select(i => i.Id!).ToList();
-
-            Log($"[Sync] 比較：待新增 {filesToAdd.Count} 筆，待刪除 {itemsToDelete.Count} 筆。");
-
-            // 6. 執行資料庫操作 (ADD)
-            if (filesToAdd.Count > 0)
-            {
-                var newItems = new List<Item>();
-                var now = DateTime.UtcNow;
-                foreach (var path in filesToAdd)
-                {
-                    var fi = new FileInfo(path);
-                    newItems.Add(new Item
-                    {
-                        Path = fi.FullName,
-                        ProposedPath = string.Empty,
-                        CreatedAt = now,
-                        UpdatedAt = now,
-                        Tags = new List<string>(),
-                        Status = "intaked",
-                    });
-                }
-                await Task.Run(() => _intake.InsertItemsAsync(newItems));
-                Log($" -> [Sync-Add] {newItems.Count} 個項目已批次寫入資料庫。");
-
-                foreach (var item in newItems)
-                {
-                    item.ProposedPath = _router.PreviewDestPath(item.Path);
-                }
-                await Task.Run(() => _intake.UpdateItemsAsync(newItems));
-                Log($" -> [Sync-Add] {newItems.Count} 個項目的 ProposedPath 已更新。");
-                needsRefresh = true;
-            }
-
-            // 7. 執行資料庫操作 (DELETE)
-            if (itemsToDelete.Count > 0)
-            {
-                await Task.Run(() => _intake.DeleteItemsAsync(idsToDelete));
-                Log($" -> [Sync-Delete] {itemsToDelete.Count} 個 '收件夾' 項目已從資料庫移除。");
-                needsRefresh = true;
-            }
-
-            // 8. 刷新 UI (僅在有變更時執行一次)
-            if (needsRefresh)
-            {
-                await RefreshMainWindowAsync();
-                Log($"[Sync] 鏡像同步完成，UI 已刷新。");
-            }
-            else
-            {
-                Log($"[Sync] 鏡像同步完成，無需變更。");
-            }
-        }
-
-
-        // V7.31: 從 V7.4 複製 IsFileLocked 輔助函數
-        private bool IsFileLocked(string filePath)
-        {
-            try
-            {
-                using (FileStream stream = File.Open(filePath, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
-                {
-                    stream.Close();
-                }
-            }
-            catch (IOException)
-            {
-                return true;
-            }
-            catch (UnauthorizedAccessException)
-            {
-                return true;
-            }
-            return false;
-        }
-
-        // === UI 互動輔助 (V7.4 保持不變) ===
-        // V7.34 偵錯修正：Log 方法
-        private void Log(string message)
-        {
-            try
-            {
-                Application.Current?.Dispatcher?.Invoke(() =>
-                {
-                    var msg = $"[HotFolder] {message}";
-
-                    // 嘗試寫入 MainWindow (詳細模式)
-                    if (Application.Current.MainWindow is Views.MainWindow mw)
-                    {
-                        mw.Log(msg);
-                    }
-                    // 嘗試寫入 LauncherWindow (簡易模式)
-                    else if (Application.Current.MainWindow is Views.LauncherWindow lw)
-                    {
-                        lw.Log(msg);
-                    }
-                });
-            }
-            catch (TaskCanceledException) { }
-        }
-
-        private async Task RefreshMainWindowAsync()
-        {
-            try
-            {
-                if (Application.Current?.Dispatcher == null) return;
-
-                await Application.Current.Dispatcher.InvokeAsync(async () =>
-                {
-                    // 刷新只適用於 MainWindow
-                    if (Application.Current.MainWindow is Views.MainWindow mw)
-                    {
-                        await mw.RefreshFromDbAsync();
-                    }
-                });
-            }
-            catch (TaskCanceledException) { }
-        }
-
-        //Check the conversation history to identify the root cause of the issue and provide a comprehensive solution and follow up.
-        // === 保留舊版方法 (V7.2) ===
-        // V7.4 修正：轉呼叫 _intake
-        public Task<int> StageOnlyAsync(IEnumerable<Item> items, int stage) => _intake.StageOnlyAsync(items, stage);
-        public Task<int> StageOnlyAsync(Item item, int stage) => _intake.StageOnlyAsync(new List<Item> { item }, stage);
-
-        // V7.4 新增：實現 IDisposable
         public void Dispose()
         {
+            _timer?.Dispose();
             ConfigService.ConfigChanged -= OnConfigChanged;
-            StopMonitoring();
-            _scanSemaphore?.Dispose(); // V7.33.4 新增
-            _debounceTimer?.Dispose(); // V7.33.4 修正
         }
     }
 }

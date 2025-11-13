@@ -8,10 +8,11 @@ using AI.KB.Assistant.Models;
 namespace AI.KB.Assistant.Services
 {
     /// <summary>
-    /// V7.32 更新：
-    /// 1. 加入 DeleteItemsAsync，以支援 HotFolderService 的鏡像 (Mirroring) 邏輯。
-    /// 2. 保持 IntakeFile/FilesAsync 不變，供「手動加入」按鈕的 V7.20 邏輯使用 (雖然 V7.32 已停用)。
-    /// V7.35 修正：移除所有 DbService 不再接受的 CancellationToken 參數。
+    /// V19.0 (V18.0 回滾 P2)
+    /// 1. (V11.0) 確保 'using System.Threading' 存在。
+    /// 2. [V19.0 回滾 P2] 移除 V18.0 [cite: `Services/IntakeService.cs (V18.0)` Line 42] 'IntakeFileAsync' [Line 39] 的 'isFolder' 參數。
+    /// 3. [V19.0 回滾 P2] V18.0 [cite: `Services/IntakeService.cs (V18.0)` Line 63] 'IntakeItemsAsync' 
+    ///    回滾為 V17.0 [cite: `Services/HotFolderService.cs (V17.1)` Line 175] 'IntakeFilesAsync' [Line 63] (只接收 'IEnumerable<string>')。
     /// </summary>
     public sealed class IntakeService
     {
@@ -20,64 +21,64 @@ namespace AI.KB.Assistant.Services
         public IntakeService(DbService db) { _db = db; }
 
         /// <summary>確保資料層初始化（SQLite 建表或建立 JSONL）。</summary>
-        public Task InitializeAsync(CancellationToken ct = default) => _db.InitializeAsync(); // CS1501 修正
+        public Task InitializeAsync(CancellationToken ct = default) => _db.InitializeAsync();
 
-        /// <summary>把檔案路徑轉成 Item，寫入 DB。</summary>
+        /// <summary>
+        /// [V19.0 回滾 P2] 
+        /// 把檔案路徑轉成 Item，寫入 DB。
+        /// </summary>
         public async Task<Item?> IntakeFileAsync(string srcFullPath, CancellationToken ct = default)
         {
+            // (V11.0)
             if (string.IsNullOrWhiteSpace(srcFullPath) || !File.Exists(srcFullPath))
                 return null;
 
             var fi = new FileInfo(srcFullPath);
             var item = new Item
             {
-                // Id 由 Item 預設 GUID 產生
+                // (V11.0)
                 Path = fi.FullName,
                 ProposedPath = string.Empty,
-                CreatedAt = DateTime.UtcNow, // NOTE: 先用 UTC；之後可記錄實檔時間
+                CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow,
                 Tags = new List<string>(),
                 Status = "intaked",
                 Project = null,
-                Note = null
+                Note = null,
+                // [V19.0 回滾 P2] V18.0 [cite: `Services/IntakeService.cs (V18.0)` Line 56] 的 IsFolder [cite: `Models/Item.cs (V18.0)` Line 105] 已移除
             };
 
-            // CS1501 修正：DbService.InsertAsync 不接受 CancellationToken
+            // (V11.0)
             await _db.InsertAsync(item).ConfigureAwait(false);
             return item;
         }
 
-        /// <summary>批次匯入（傳入多個路徑）。</summary>
+        /// <summary>
+        /// [V19.0 回滾 P2] 批次匯入 (V18.0 [cite: `Services/IntakeService.cs (V18.0)` Line 63] IntakeItemsAsync)
+        /// </summary>
         public async Task<List<Item>> IntakeFilesAsync(IEnumerable<string> srcPaths, CancellationToken ct = default)
         {
             var list = new List<Item>();
             foreach (var p in srcPaths)
             {
-                // 呼叫本機的 IntakeFileAsync (它會正確處理 DB 呼叫)
+                // 呼叫 V19.0 (Line 39) IntakeFileAsync (無 isFolder)
                 var one = await IntakeFileAsync(p, ct).ConfigureAwait(false);
                 if (one != null) list.Add(one);
             }
             return list;
         }
 
-        // 與舊版對齊的直通 API（供現有呼叫不改碼）
-        public Task<List<Item>> QueryAllAsync(CancellationToken ct = default) => _db.QueryAllAsync(); // CS1501 修正
-        public Task<int> InsertItemsAsync(IEnumerable<Item> items, CancellationToken ct = default) => _db.InsertItemsAsync(items); // CS1501 修正
-        public Task<int> UpdateItemsAsync(IEnumerable<Item> items, CancellationToken ct = default) => _db.UpdateItemsAsync(items); // CS1501 修正
+        // (V11.0)
+        public Task<List<Item>> QueryAllAsync(CancellationToken ct = default) => _db.QueryAllAsync();
+        public Task<int> InsertItemsAsync(IEnumerable<Item> items, CancellationToken ct = default) => _db.InsertItemsAsync(items);
+        public Task<int> UpdateItemsAsync(IEnumerable<Item> items, CancellationToken ct = default) => _db.UpdateItemsAsync(items);
 
-        // V7.32 新增：允許 HotFolderService 刪除項目
-        /// <summary>
-        /// (V7.32) 批次刪除項目 (依 ID)
-        /// (V7.35 修正：改為呼叫 DbService.DeleteItemsAsync 高效能 API)
-        /// </summary>
+        // (V11.0)
         public Task<int> DeleteItemsAsync(IEnumerable<string> ids, CancellationToken ct = default)
         {
-            // CS1501 修正：
-            // 1. 舊的迴圈呼叫 _db.DeleteByIdAsync(id, ct) 參數錯誤。
-            // 2. V7.35 提供了高效的 _db.DeleteItemsAsync(ids)，我們應改用它。
             return _db.DeleteItemsAsync(ids);
         }
 
-        public Task<int> StageOnlyAsync(IEnumerable<Item> items, int stage, CancellationToken ct = default) => _db.StageOnlyAsync(items, stage); // CS1501 修正
+        public Task<int> StageOnlyAsync(IEnumerable<Item> items, int stage, CancellationToken ct = default) => _db.StageOnlyAsync(items, stage);
     }
 }

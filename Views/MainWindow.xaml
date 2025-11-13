@@ -2,18 +2,22 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="clr-namespace:AI.KB.Assistant.Views"
-        Title="AI.KB Assistant (V7.5)"
-        Height="900" Width="1600"
+        Title="AI.KB Assistant (V19.0)"
         WindowStartupLocation="CenterScreen"
+        WindowState="Maximized" 
+        
         Background="{DynamicResource App.BackgroundBrush}"
         Foreground="{DynamicResource App.TextBrush}">
 
     <Window.Resources>
-        <!-- 工具列按鈕樣式 (V7.4 修正：TargetType 改為 Control) -->
+        <!-- 
+            (V17.1) 修正 MC3000
+        -->
+
+        <!-- (V7.4) -->
         <Style x:Key="ToolbarBtn" TargetType="Control">
             <Setter Property="Padding" Value="8,4"/>
             <Setter Property="Margin" Value="4,2"/>
-            <!-- (V7.5.1) 調整 Margin 讓換行更美觀 -->
             <Setter Property="Background" Value="{DynamicResource App.PanelBrush}"/>
             <Setter Property="BorderBrush" Value="{DynamicResource App.BorderBrush}"/>
             <Setter Property="Foreground" Value="{DynamicResource App.TextBrush}"/>
@@ -21,8 +25,7 @@
             <Setter Property="VerticalContentAlignment" Value="Center"/>
         </Style>
 
-        <!-- 統一的欄位標題樣式 (P2 修正) -->
-        <!-- V7.5.11 修正：新增固定高度 30 來解決跳動問題 -->
+        <!-- (V7.5) -->
         <Style x:Key="HeaderClickable" TargetType="GridViewColumnHeader">
             <Setter Property="Foreground" Value="{DynamicResource App.TextBrush}" />
             <Setter Property="Background" Value="{DynamicResource App.PanelBrush}" />
@@ -32,28 +35,36 @@
             <EventSetter Event="Click" Handler="ListHeader_Click"/>
         </Style>
 
-        <!-- 麵包屑 -->
+        <!-- (V11.1) 麵包屑 -->
         <DataTemplate x:Key="BreadcrumbItem">
             <StackPanel Orientation="Horizontal">
-                <TextBlock Text="{Binding Name}" />
+                <TextBlock Text="{Binding Name}" 
+                           Cursor="Hand"
+                           MouseLeftButtonDown="BreadcrumbItem_Click">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Foreground" Value="{DynamicResource App.HighlightBrush}"/>
+                            <Style.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter Property="TextDecorations" Value="Underline"/>
+                                </Trigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
                 <TextBlock Text="  ›  " Margin="4,0,4,0" 
                            Foreground="{DynamicResource App.TextMutedBrush}" />
             </StackPanel>
         </DataTemplate>
 
-        <!-- 
-        V7.5 搜尋框樣式 (含 Placeholder 功能) 
-        V7.5.11 修正：在 PlaceholderText 中加入 TextWrapping="NoWrap"
-        -->
+        <!-- (V7.5) 搜尋框 -->
         <Style x:Key="SearchBoxStyle" TargetType="TextBox">
             <Setter Property="Background" Value="{DynamicResource App.BackgroundBrush}"/>
             <Setter Property="BorderBrush" Value="{DynamicResource App.BorderBrush}"/>
             <Setter Property="Foreground" Value="{DynamicResource App.TextBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="Padding" Value="8,4"/>
-            <!-- V7.5.2 修正：與 ToolbarBtn 一致 -->
             <Setter Property="FontSize" Value="13"/>
-            <!-- V7.5.2 修正：與 ToolbarBtn 一致 -->
             <Setter Property="VerticalContentAlignment" Value="Center"/>
             <Setter Property="Template">
                 <Setter.Value>
@@ -64,7 +75,6 @@
                                 BorderThickness="{TemplateBinding BorderThickness}"
                                 CornerRadius="3" SnapsToDevicePixels="True">
                             <Grid>
-                                <!-- 1. 浮水印：IsHitTestVisible="False" 允許滑鼠穿透 -->
                                 <TextBlock x:Name="PlaceholderText"
                                            Text="{TemplateBinding ToolTip}"
                                            Foreground="{DynamicResource App.TextMutedBrush}"
@@ -74,8 +84,6 @@
                                            IsHitTestVisible="False" 
                                            Visibility="Collapsed"
                                            TextWrapping="NoWrap"/>
-                                <!-- V7.5.11 修正 -->
-                                <!-- 2. 打字區域：Background="Transparent" 讓浮水印透出 -->
                                 <ScrollViewer x:Name="PART_ContentHost"
                                               Focusable="false"
                                               HorizontalScrollBarVisibility="Hidden"
@@ -86,11 +94,9 @@
                             </Grid>
                         </Border>
                         <ControlTemplate.Triggers>
-                            <!-- 當文字為空時，顯示 Placeholder -->
                             <Trigger Property="Text" Value="">
                                 <Setter TargetName="PlaceholderText" Property="Visibility" Value="Visible"/>
                             </Trigger>
-                            <!-- 當取得焦點且文字為空時，隱藏 Placeholder (避免蓋住游標) -->
                             <MultiTrigger>
                                 <MultiTrigger.Conditions>
                                     <Condition Property="IsFocused" Value="True"/>
@@ -98,11 +104,9 @@
                                 </MultiTrigger.Conditions>
                                 <Setter TargetName="PlaceholderText" Property="Visibility" Value="Collapsed"/>
                             </MultiTrigger>
-                            <!-- 當滑鼠懸停時，改變邊框顏色 -->
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter TargetName="border" Property="BorderBrush" Value="{DynamicResource App.HighlightBrush}"/>
                             </Trigger>
-                            <!-- 當取得焦點時，改變邊框顏色 -->
                             <Trigger Property="IsFocused" Value="True">
                                 <Setter TargetName="border" Property="BorderBrush" Value="{DynamicResource App.HighlightBrush}"/>
                             </Trigger>
@@ -112,11 +116,13 @@
             </Setter>
         </Style>
 
+        <!-- [V19.0 回滾 P2] 移除 V18.0 [cite: `Views/MainWindow.xaml (V18.0)` Line 114] 的 BooleanToVisibilityConverter -->
+
     </Window.Resources>
 
     <DockPanel>
 
-        <!-- 上方工具列 (V7.5.1 改為 WrapPanel) -->
+        <!-- (V16.1) 上方工具列 -->
         <Border DockPanel.Dock="Top" Padding="4,4,8,4" 
                 Background="{DynamicResource App.PanelBrush}"
                 BorderBrush="{DynamicResource App.BorderBrush}" BorderThickness="0,0,0,1">
@@ -125,16 +131,15 @@
                 <Button Style="{StaticResource ToolbarBtn}" Content="檢視分類" Click="BtnStartClassify_Click"/>
                 <Button Style="{StaticResource ToolbarBtn}" Content="確認搬檔" Click="BtnCommit_Click"/>
                 <Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" Margin="4,2"/>
-                <Button Style="{StaticResource ToolbarBtn}" Content="⟳ 重新整理" Click="BtnRefresh_Click"/>
 
-                <!-- V7.35 新功能：新增清理收件夾選單 (選項 B+C) -->
+                <!-- (V16.1) 移除 "重新整理" -->
+
+                <!-- (V7.35) 清理收件夾 -->
                 <Menu Margin="4,2" VerticalAlignment="Center">
                     <MenuItem Header="🧹 清理收件夾..." Style="{StaticResource ToolbarBtn}">
-                        <!-- 選項 B (主) -->
                         <MenuItem Header="🗑️ 清除 [已分類] 的實體檔案 (B)" 
                                   ToolTip="[選項B] 刪除 HotFolder 中已搬移 (Committed) 的實體檔案 (用於「複製」模式)"
                                   Click="BtnClearCommitted_Click"/>
-                        <!-- 選項 C (輔) -->
                         <MenuItem Header="🔄 重置 [未處理] 的資料庫狀態 (C)" 
                                   ToolTip="[選項C] 清除資料庫中所有未處理 (Intaked/Error) 的紀錄，以便下次重新掃描"
                                   Click="BtnResetInbox_Click"/>
@@ -144,20 +149,19 @@
                 <Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" Margin="4,2"/>
                 <Button Style="{StaticResource ToolbarBtn}" Content="🗂 收件夾" Click="BtnOpenHot_Click"/>
                 <Button Style="{StaticResource ToolbarBtn}" Content="📁 根目錄" Click="BtnOpenRoot_Click"/>
-                <!-- V7.5.7 修正：合併為一個按鈕 -->
                 <Button Style="{StaticResource ToolbarBtn}" Content="📂 待整理" Click="BtnOpenPendingFolder_Click"/>
                 <Button Style="{StaticResource ToolbarBtn}" Content="🗄 資料庫" Click="BtnOpenDb_Click"/>
                 <Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" Margin="4,2"/>
                 <Button Style="{StaticResource ToolbarBtn}" Content="檔案結構" Click="BtnEdgeLeft_Click"/>
                 <Button Style="{StaticResource ToolbarBtn}" Content="詳細資料" Click="BtnEdgeRight_Click"/>
                 <Button Style="{StaticResource ToolbarBtn}" Content="設定" Click="BtnOpenSettings_Click"/>
-                <!-- V7.34 新功能：返回簡易版 -->
+                <!-- (V7.34) -->
                 <Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" Margin="4,2"/>
                 <Button Style="{StaticResource ToolbarBtn}" Content="↩️ 返回簡易版" Click="BtnGoToSimpleMode_Click"/>
             </WrapPanel>
         </Border>
 
-        <!-- 麵包屑 -->
+        <!-- 麵包屑 (V11.1) -->
         <Border DockPanel.Dock="Top" Padding="10,6"
                 Background="{DynamicResource App.PanelBrush}"
                 BorderBrush="{DynamicResource App.BorderBrush}" BorderThickness="0,0,0,1">
@@ -176,37 +180,27 @@
         <!-- 主體 -->
         <Grid>
             <Grid.ColumnDefinitions>
-                <!-- V7.5.11 修正 Bug 1: 移除 MinWidth -->
                 <ColumnDefinition x:Name="LeftPaneColumn" Width="300"/>
                 <ColumnDefinition Width="6"/>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="6"/>
-                <!-- V7.5.11 修正 Bug 1: 移除 MinWidth -->
                 <ColumnDefinition x:Name="RightPaneColumn" Width="360"/>
             </Grid.ColumnDefinitions>
 
-            <!-- 左側：檔案樹 (V7.4 介面) -->
+            <!-- 左側：檔案樹 (V13.0) -->
             <DockPanel Grid.Column="0">
                 <Border DockPanel.Dock="Top" Padding="8"
                         BorderBrush="{DynamicResource App.BorderBrush}" BorderThickness="0,0,0,1">
                     <StackPanel>
-                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,0,8">
-                            <TextBlock Text="檔案樹" FontWeight="Bold" Margin="0,0,12,0" VerticalAlignment="Center"/>
-                            <CheckBox x:Name="ChkShowDesktop" Content="顯示桌面" IsChecked="True" Margin="6,0"
-                                      Checked="TreeToggles_Changed" Unchecked="TreeToggles_Changed"
-                                      VerticalAlignment="Center"/>
-                            <CheckBox x:Name="ChkShowDrives" Content="顯示系統磁碟" IsChecked="True" Margin="6,0"
-                                      Checked="TreeToggles_Changed" Unchecked="TreeToggles_Changed"
-                                      VerticalAlignment="Center"/>
-                        </StackPanel>
-                        <!-- V7.4 搜尋框 -->
+                        <!-- (V13.0) 移除 "顯示桌面/磁碟" -->
+
+                        <!-- (V7.4) 搜尋框 -->
                         <TextBox x:Name="TvFilterBox" Style="{StaticResource SearchBoxStyle}"
                                  ToolTip="搜尋資料夾..."
                                  TextChanged="TvFilterBox_TextChanged"/>
                     </StackPanel>
                 </Border>
 
-                <!-- V7.34 A-Perf MC3072 修正：移除不合法的 Expanded 屬性 -->
                 <TreeView x:Name="TvFolders" Margin="6,6,0,0" 
                           SelectedItemChanged="TvFolders_SelectedItemChanged">
                     <TreeView.ContextMenu>
@@ -222,10 +216,7 @@
 
             <GridSplitter Grid.Column="1" Width="6" Background="{DynamicResource App.BorderBrush}" HorizontalAlignment="Stretch"/>
 
-            <!-- 
-            V7.5.11 修正 Bug 2: 
-            將最外層容器從 DockPanel 改為 Grid，才能讓 ListView 的水平捲軸正常運作
-            -->
+            <!-- (V7.5) 主體 Grid -->
             <Grid Grid.Column="2">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
@@ -240,7 +231,6 @@
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
                         <!-- 分頁標頭 -->
-                        <!-- V7.5.11 修正：搜尋列高度固定為 45px -->
                         <RowDefinition Height="45"/>
                         <!-- 搜尋/鎖定列 -->
                     </Grid.RowDefinitions>
@@ -255,7 +245,7 @@
                         <TabItem Header="等待分類" Tag="pending"/>
                     </TabControl>
 
-                    <!-- 2. V7.4 搜尋/鎖定列 (V7.5.11 修正：移除 MinHeight) -->
+                    <!-- 2. V7.4 搜尋/鎖定列 -->
                     <Border Grid.Row="1" Padding="8"
                             Background="{DynamicResource App.PanelBrush}"
                             BorderBrush="{DynamicResource App.BorderBrush}" BorderThickness="0,0,0,1">
@@ -267,17 +257,16 @@
                                 <!-- 1: Project Filter -->
                                 <ColumnDefinition Width="Auto"/>
                                 <!-- 2: Lock Button -->
-                                <!-- V7.34 新功能：隱藏已分類 -->
                                 <ColumnDefinition Width="Auto"/>
                                 <!-- 3: Hide Committed CheckBox -->
                                 <ColumnDefinition Width="Auto"/>
                                 <!-- 4: TxtCounter -->
                             </Grid.ColumnDefinitions>
 
-                            <!-- V7.5.11 修正：加入 TextWrapping="NoWrap" -->
+                            <!-- (V16.1) -->
                             <TextBox x:Name="TxtSearchKeywords" Grid.Column="0" Margin="0,0,8,0"
                                      Style="{StaticResource SearchBoxStyle}"
-                                     ToolTip="搜尋檔名、標籤、附註 (V7.5 支援語意)..."
+                                     ToolTip="搜尋檔名、標籤、附註..."
                                      TextChanged="TxtSearchKeywords_TextChanged"
                                      TextWrapping="NoWrap"/>
 
@@ -285,14 +274,13 @@
                                       ToolTip="篩選專案"
                                       SelectionChanged="CmbSearchProject_SelectionChanged"
                                       Style="{StaticResource ToolbarBtn}"/>
-                            <!-- V7.5.2 修正：套用統一樣式 -->
 
                             <ToggleButton x:Name="BtnLockProject" Grid.Column="2" 
                                           Style="{StaticResource ToolbarBtn}"
                                           Content="🔒 鎖定專案"
                                           Click="BtnLockProject_Click"/>
 
-                            <!-- V7.34 新功能：隱藏已分類 -->
+                            <!-- (V7.34) -->
                             <CheckBox x:Name="ChkHideCommitted" Grid.Column="3"
                                       Content="隱藏已分類" VerticalAlignment="Center"
                                       Margin="12,0,0,0"
@@ -308,8 +296,6 @@
                 </Grid>
 
                 <!-- 3. 主清單 -->
-                <!-- V7.5.12 修正：使用附加屬性 ScrollViewer.HorizontalScrollBarVisibility -->
-                <!-- V7.33.4 修正：移除 VerticalAlignment="Top" 解決 ScrollBar 位置錯誤 Bug -->
                 <ListView x:Name="MainList" Grid.Row="1"
                           SelectionMode="Extended"
                           SelectionChanged="MainList_SelectionChanged"
@@ -319,9 +305,25 @@
                     <ListView.View>
                         <GridView x:Name="MainGridView" AllowsColumnReorder="True">
 
+                            <!-- [V19.0 修正 P3] 
+                                 V18.0 (Line 360) [cite: `Views/MainWindow.xaml (V18.0)` Line 360] 的 'DisplayMemberBinding' 
+                                 V19.0 (Line 361) [cite: `Views/MainWindow.xaml (V19.0)` Line 361] 改為 'CellTemplate' 以顯示 V19.0 (P3) 圖示
+                            -->
                             <GridViewColumn Header="檔名" 
                                             HeaderContainerStyle="{StaticResource HeaderClickable}"
-                                            Width="240" DisplayMemberBinding="{Binding FileName}"/>
+                                            Width="240">
+                                <GridViewColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Orientation="Horizontal">
+                                            <!-- [V19.0 新增 P3] (V18.1 P3 需求) 顯示 V19.0 'UiRow.FileIcon' [cite: `Models/UiRow.cs (V19.0)` Line 103] -->
+                                            <Image Source="{Binding FileIcon}" Width="16" Height="16" Margin="0,0,5,0"
+                                                   VerticalAlignment="Center"/>
+                                            <!-- [V19.0 回滾 P2] 移除 V18.0 [cite: `Views/MainWindow.xaml (V18.0)` Line 364] 的 📁 圖示 -->
+                                            <TextBlock Text="{Binding FileName}" VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </GridViewColumn.CellTemplate>
+                            </GridViewColumn>
 
                             <GridViewColumn Header="副檔名" 
                                             HeaderContainerStyle="{StaticResource HeaderClickable}"
@@ -350,12 +352,10 @@
                                             HeaderContainerStyle="{StaticResource HeaderClickable}"
                                             Width="180" DisplayMemberBinding="{Binding Project}"/>
 
-                            <!-- V7.33.2 修正：加回 "標籤" 欄位 -->
                             <GridViewColumn Header="標籤" 
                                             HeaderContainerStyle="{StaticResource HeaderClickable}"
                                             Width="180" DisplayMemberBinding="{Binding Tags}"/>
 
-                            <!-- V7.33 修正：標題改為 "路徑"，並由 BtnStartClassify_Click (V7.33) 控制綁定 -->
                             <GridViewColumn Header="路徑" x:Name="ColSourcePath"
                                             HeaderContainerStyle="{StaticResource HeaderClickable}"
                                             Width="320" DisplayMemberBinding="{Binding SourcePath}"/>
@@ -369,7 +369,7 @@
                         </GridView>
                     </ListView.View>
 
-                    <!-- 中清單右鍵選單 (V7.5.8 修正) -->
+                    <!-- (V7.5) 右鍵選單 -->
                     <ListView.ContextMenu>
                         <ContextMenu>
                             <MenuItem Header="開啟檔案" Click="CmOpenFile_Click"/>
@@ -391,10 +391,9 @@
                     </ListView.ContextMenu>
                 </ListView>
 
-                <!-- 4. Log 面板 -->
-                <Expander Grid.Row="2" Header="日誌 (Log)" IsExpanded="True"
+                <!-- 4. Log 面板 (V17.0) -->
+                <Expander Grid.Row="2" Header="日誌 (Log)" IsExpanded="False"
                           BorderBrush="{DynamicResource App.BorderBrush}" BorderThickness="0,1,0,0">
-                    <!-- V7.5.8 修正：固定 LogBox 高度為 150 -->
                     <TextBox x:Name="LogBox" IsReadOnly="True" 
                              Height="150"
                              Background="{DynamicResource App.LogBrush}"
@@ -406,7 +405,7 @@
 
             <GridSplitter Grid.Column="3" Width="6" Background="{DynamicResource App.BorderBrush}" HorizontalAlignment="Stretch"/>
 
-            <!-- 右側資訊欄 (V7.5 介面) -->
+            <!-- 右側資訊欄 (V7.5) -->
             <ScrollViewer Grid.Column="4" VerticalScrollBarVisibility="Auto">
                 <StackPanel Margin="10">
 
@@ -472,7 +471,7 @@
 
                             <TextBlock Text="標籤 (以 , 或 ; 分隔)" Margin="0,12,0,4"/>
 
-                            <!-- V7.34 新功能：快速標籤按鈕 -->
+                            <!-- (V7.34) -->
                             <WrapPanel Margin="0,0,0,8">
                                 <Button Content="★ 最愛" Margin="0,0,6,6" Click="RtQuickTag_Favorite_Click"/>
                                 <Button Content="▶ 進行中" Margin="0,0,6,6" Click="RtQuickTag_InProgress_Click"/>
@@ -502,8 +501,8 @@
                         </Grid>
                     </Expander>
 
-                    <!-- 5. AI 輔助 (V7.5) -->
-                    <Expander Header="AI 輔助 (V7.5)" Margin="0,12,0,0" IsExpanded="True">
+                    <!-- 5. AI 輔助 (V10.2) -->
+                    <Expander Header="AI 輔助 (V10.2)" Margin="0,12,0,0" IsExpanded="True">
                         <StackPanel Margin="0,8,0,0">
                             <TextBlock Text="(此功能會呼叫 LLM API)" 
                                        FontStyle="Italic"
@@ -511,6 +510,8 @@
                             <Button Content="產生建議標籤" Margin="0,8,0,0" Click="BtnGenTags_Click"/>
                             <Button Content="產生摘要" Margin="0,8,0,0" Click="BtnSummarize_Click"/>
                             <Button Content="分析信心度" Margin="0,8,0,0" Click="BtnAnalyzeConfidence_Click"/>
+                            <!-- (V10.2) -->
+                            <Button Content="產生建議專案" Margin="0,8,0,0" Click="BtnGenProject_Click"/>
                         </StackPanel>
                     </Expander>
 
@@ -518,4 +519,4 @@
             </ScrollViewer>
         </Grid>
     </DockPanel>
-</Window> 
+</Window>

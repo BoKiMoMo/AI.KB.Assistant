@@ -6,7 +6,13 @@ using AI.KB.Assistant.Models;
 
 namespace AI.KB.Assistant.Services
 {
-    /// <summary>路徑計算 +（可選）實際搬檔。</summary>
+    /// <summary>
+    /// V17.0 (V16.1 修正版)
+    /// 1. (V16.1) 'MapExtensionToCategoryConfig' [Line 166] 動態讀取 'ExtensionGroups' [cite: `ConfigService.cs` Line 133]。
+    /// 2. [V17.0 修正 BUG #3.2] 'BuildRelativePath' [Line 94] 中，'item.Project' (若為 null) 
+    ///    的備援 (fallback) 邏輯從 V16.1 [cite: `Services/RoutingService.cs (V16.1)` Line 110] 的 'GuessProjectFromPath' [cite: `Services/RoutingService.cs (V16.1)` Line 201] 
+    ///    改為 "Month" [Line 121]。
+    /// </summary>
     public class RoutingService
     {
         private AppConfig _cfg = new();
@@ -20,16 +26,14 @@ namespace AI.KB.Assistant.Services
             if (string.IsNullOrWhiteSpace(srcFullPath)) return srcFullPath;
             var fileName = Path.GetFileName(srcFullPath);
 
-            // V7.5 Bug 修正：
-            // 1. 設定頁面 (SettingsWindow) 儲存的是 App.RootDir。
-            // 2. 邏輯應改為：優先使用 App.RootDir，若其為空，才回退(fallback)到 Routing.RootDir。
+            // (V13.0)
             var root = (_cfg.App?.RootDir ?? _cfg.Routing?.RootDir ?? "").Trim();
             if (string.IsNullOrWhiteSpace(root)) return srcFullPath;
 
             var item = new Item
             {
                 Path = srcFullPath,
-                Project = lockedProject ?? GuessProjectFromPath(srcFullPath),
+                Project = lockedProject, // [V17.0] 允許 lockedProject (null) 傳入 BuildRelativePath
                 Category = category,
                 Timestamp = ts
             };
@@ -73,7 +77,7 @@ namespace AI.KB.Assistant.Services
         {
             try
             {
-                // V7.5 Bug 修正：(同 PreviewDestPath)
+                // (V13.0)
                 var root = (_cfg.App?.RootDir ?? _cfg.Routing?.RootDir ?? "").Trim();
                 if (string.IsNullOrWhiteSpace(root) || !File.Exists(item.Path)) return null;
 
@@ -107,7 +111,7 @@ namespace AI.KB.Assistant.Services
         }
 
         // ========== NEW: 組相對路徑（依設定層級順序） ==========
-        public static string BuildRelativePath(Item item, AppConfig cfg)
+        public string BuildRelativePath(Item item, AppConfig cfg)
         {
             var r = cfg.Routing ?? new RoutingSection();
 
@@ -121,6 +125,21 @@ namespace AI.KB.Assistant.Services
                 }
                 catch { }
                 return DateTime.Now;
+            }
+
+            // (V16.1)
+            if (string.IsNullOrWhiteSpace(item.Category))
+            {
+                var ext = Path.GetExtension(item.Path);
+                item.Category = MapExtensionToCategoryConfig(ext, cfg);
+            }
+
+            // [V17.0 修正 BUG #3.2] (V15.2 BUG #5)
+            // 如果 item.Project 為 null (例如 V10.2 [cite: `Services/LlmService.cs (V10.2)`] 'SuggestProjectAsync' [cite: `Services/LlmService.cs (V10.2)` Line 133] (本地規則) 回傳 string.Empty)，
+            // 則使用 "Month" (月份) 作為 V16.1 [cite: `Services/RoutingService.cs (V16.1)`] 的預設值。
+            if (string.IsNullOrWhiteSpace(item.Project))
+            {
+                item.Project = ResolveTime().ToString("MM");
             }
 
             var order = (r.FolderOrder == null || r.FolderOrder.Count == 0)
@@ -141,6 +160,7 @@ namespace AI.KB.Assistant.Services
                     case "project":
                         if (r.UseProject)
                         {
+                            // [V17.0 修正] 'item.Project' [Line 121] 現在已被填入 (例如 "05")
                             var project = string.IsNullOrWhiteSpace(item.Project) ? "_project" : San(item.Project!);
                             segs.Add(project);
                         }
@@ -148,6 +168,7 @@ namespace AI.KB.Assistant.Services
                     case "category":
                         if (r.UseCategory)
                         {
+                            // (V16.1) 'item.Category' [Line 110] 現在已被填入
                             var cat = string.IsNullOrWhiteSpace(item.Category)
                                 ? (r.LowConfidenceFolderName ?? "_pending")
                                 : San(item.Category!);
@@ -166,30 +187,43 @@ namespace AI.KB.Assistant.Services
             return list;
         }
 
-        // 類別映射（提供副檔名→類別排序）
-        public string MapExtensionToCategory(string ext)
+        /// <summary>
+        /// [V16.1 修正 BUG #4]
+        /// 類別映射 (動態讀取 config.json [cite: `ConfigService.cs` Line 133])
+        /// </summary>
+        public string MapExtensionToCategoryConfig(string ext, AppConfig cfg)
         {
             if (string.IsNullOrWhiteSpace(ext)) return "other";
             ext = ext.Trim().ToLowerInvariant();
-            if (!ext.StartsWith(".")) ext = "." + ext;
+            if (ext.StartsWith(".")) ext = ext[1..]; // 移除 '.'
 
-            return ext switch
+            if (cfg?.Routing?.ExtensionGroups == null) return "other";
+
+            // 遍歷 config.json [cite: `ConfigService.cs` Line 133] 中的字典
+            foreach (var group in cfg.Routing.ExtensionGroups)
             {
-                ".pdf" or ".doc" or ".docx" or ".odt" or ".rtf" or ".txt" or ".md" => "document",
-                ".xls" or ".xlsx" or ".csv" => "sheet",
-                ".ppt" or ".pptx" => "slide",
-                ".png" or ".jpg" or ".jpeg" or ".gif" or ".bmp" or ".tiff" or ".webp" => "image",
-                ".mp3" or ".wav" or ".m4a" or ".flac" => "audio",
-                ".mp4" or ".mov" or ".avi" or ".mkv" or ".webm" => "video",
-                ".zip" or ".rar" or ".7z" => "archive",
-                ".cs" or ".js" or ".ts" or ".json" or ".xml" or ".yml" or ".yaml" or ".py" or ".cpp" or ".h" => "code",
-                _ => "other"
-            };
+                var categoryName = group.Key;
+                var extensionsInGroup = group.Value;
+
+                if (extensionsInGroup != null && extensionsInGroup.Contains(ext, StringComparer.OrdinalIgnoreCase))
+                {
+                    return categoryName;
+                }
+            }
+
+            if (cfg.Routing.ExtensionGroups.ContainsKey("Others"))
+            {
+                return "Others";
+            }
+
+            return "other"; // 最終備援
         }
+
 
         // ===== Helpers =====
         private string ResolveCollision(string destFullPath)
         {
+            // (V13.0)
             var policy = _cfg.Import?.OverwritePolicy;
             var dir = Path.GetDirectoryName(destFullPath)!;
             var name = Path.GetFileNameWithoutExtension(destFullPath);
@@ -197,7 +231,8 @@ namespace AI.KB.Assistant.Services
 
             if (!File.Exists(destFullPath)) return destFullPath;
 
-            switch (policy?.ToString() ?? "Rename")
+            // (V13.0) OverwritePolicy 是 string
+            switch (policy ?? "Rename")
             {
                 case "Overwrite":
                 case "Replace": // 相容舊版
@@ -216,7 +251,10 @@ namespace AI.KB.Assistant.Services
             }
         }
 
-        private static string GuessProjectFromPath(string path)
+        /// <summary>
+        /// (V10.2) 設為 public static
+        /// </summary>
+        public static string GuessProjectFromPath(string path)
         {
             var dir = Path.GetDirectoryName(path) ?? "";
             return string.IsNullOrWhiteSpace(dir) ? "未分類" : new DirectoryInfo(dir).Name;

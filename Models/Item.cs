@@ -1,12 +1,17 @@
-﻿using System;
+﻿using AI.KB.Assistant.Services;
+using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Security.Policy;
+using System.Windows.Shapes;
 
 namespace AI.KB.Assistant.Models
 {
     /// <summary>
-    /// 匯入/分類/搬檔流程中的檔案項目。
-    /// 與 RoutingService 對齊：新增 Category / Timestamp 兩個屬性。
+    /// V19.0 (V18.0 回滾)
+    /// 1. (V7.x) 與 RoutingService 對齊：Category / Timestamp
+    /// 2. [V19.0 回滾 P2] 移除 V18.0 [cite: `Models/Item.cs (V18.0)` Line 105] (V17.1 P2 需求) 的 'IsFolder' 屬性。
+    ///    V19.0 [cite: `Services/HotFolderService.cs (V19.0)`] 將不再掃描資料夾。
     /// </summary>
     public class Item
     {
@@ -81,5 +86,8 @@ namespace AI.KB.Assistant.Models
 
         /// <summary>備註或系統註解。</summary>
         public string? Note { get; set; }
+        
+        // [V19.0 回滾 P2] 移除 V18.0 [cite: `Models/Item.cs (V18.0)` Line 105] 的 IsFolder 屬性
+        // public bool IsFolder { get; set; } = false;
     }
 }

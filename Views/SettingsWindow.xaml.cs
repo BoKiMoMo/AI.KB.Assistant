@@ -1,19 +1,25 @@
-﻿using System;
+﻿using AI.KB.Assistant.Models;
+using AI.KB.Assistant.Services;
+using Microsoft.Win32;
+using Newtonsoft.Json.Linq;
+using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
-using Microsoft.Win32;
 using WinForms = System.Windows.Forms;
-
-using AI.KB.Assistant.Models;
-using AI.KB.Assistant.Services;
 
 namespace AI.KB.Assistant.Views
 {
+    /// <summary>
+    /// V13.0 (方案 C)
+    /// 1. (V11.0) 修正 sld/th 和 OverwritePolicy (string)
+    /// 2. [V13.0] 移除 CbShowDesktop/Drives 邏輯
+    /// 3. [V13.0] 新增 TbTreeViewRoots (自訂路徑清單) 的載入與儲存
+    /// </summary>
     public partial class SettingsWindow : Window
     {
-        // === 新增：層級英↔中對照與合法 token 集合 ===
         private static readonly Dictionary<string, string> TokenToDisplay = new(StringComparer.OrdinalIgnoreCase)
         {
             { "year",     "year / 年份" },
@@ -24,9 +30,15 @@ namespace AI.KB.Assistant.Views
         private static readonly HashSet<string> ValidTokens =
             new(new[] { "year", "month", "project", "category" }, StringComparer.OrdinalIgnoreCase);
 
+        private AppConfig _tempConfig;
+
         public SettingsWindow()
         {
             InitializeComponent();
+
+            // (V9.7)
+            _tempConfig = ConfigService.Cfg.Clone();
+
             Loaded += SettingsWindow_Loaded;
         }
 
@@ -34,11 +46,8 @@ namespace AI.KB.Assistant.Views
         {
             try
             {
-                if (ConfigService.Cfg == null)
-                    ConfigService.Load();
-
-                RenderFromConfig();
-                EnsureTopPathsNotBlank();
+                RenderFromConfig(_tempConfig);
+                EnsureTopPathsNotBlank(_tempConfig);
             }
             catch (Exception ex)
             {
@@ -47,17 +56,13 @@ namespace AI.KB.Assistant.Views
         }
 
         // ========================= Config -> UI =========================
-        private void RenderFromConfig()
+        private void RenderFromConfig(AppConfig cfg)
         {
-            var cfg = ConfigService.Cfg ?? new AppConfig();
+            SetTextByNames(cfg.App.RootDir, "TbRootDir");
+            SetTextByNames(cfg.Import.HotFolder, "TbHotFolder");
+            SetTextByNames(cfg.Db.DbPath, "TbDbPath");
 
-            // 路徑
-            SetTextByNames(cfg.App?.RootDir, "TbRootDir");
-            SetTextByNames(cfg.Import?.HotFolder, "TbHotFolder");
-            SetTextByNames(cfg.Db?.DbPath, "TbDbPath");
-
-            // V7.34 UI 串接：載入啟動模式
-            string mode = cfg.App?.LaunchMode ?? "Detailed";
+            string mode = cfg.App.LaunchMode;
             if (FindName("RadioModeSimple") is RadioButton r_simp && FindName("RadioModeDetailed") is RadioButton r_det)
             {
                 if (mode == "Simple")
@@ -66,168 +71,162 @@ namespace AI.KB.Assistant.Views
                     r_det.IsChecked = true;
             }
 
-            // 匯入/監控
-            SetBool("CbIncludeSubdir", cfg.Import?.IncludeSubdir == true);
-            SetBool("CbEnableHotFolder", cfg.Import?.EnableHotFolder == true);
+            // [V13.0 移除] 移除 V12.0 的 SetBool
+            // SetBool("CbShowDesktopInTree", cfg.App.ShowDesktopInTree);
+            // SetBool("CbShowDrivesInTree", cfg.App.ShowDrivesInTree);
 
-            SetComboByRaw("CbMoveMode", cfg.Import?.MoveMode, "copy");                       // copy/move/link
-            SetComboByRaw("CbOverwrite", cfg.Import?.OverwritePolicy.ToString(), "KeepBoth"); // KeepBoth/Rename/Replace
+            // [V13.0 新增] 載入自訂路徑清單
+            SetTextByNames(string.Join(Environment.NewLine, cfg.App.TreeViewRootPaths ?? new List<string>()), "TbTreeViewRoots");
 
-            // 黑名單
-            SetTextByNames(JoinList(cfg.Routing?.BlacklistExts), "TbBlacklistExts");
-            SetTextByNames(JoinList(cfg.Routing?.BlacklistFolderNames), "TbBlacklistFolders");
 
-            // 路徑規則
-            SetBool("CbUseYear", cfg.Routing?.UseYear == true);
-            SetBool("CbUseMonth", cfg.Routing?.UseMonth == true);
-            SetBool("CbUseProject", cfg.Routing?.UseProject == true);
-            SetBool("CbUseCategory", cfg.Routing?.UseCategory == true); // 保留
+            SetBool("CbIncludeSubdir", cfg.Import.IncludeSubdir);
+            SetBool("CbEnableHotFolder", cfg.Import.EnableHotFolder);
 
-            SetComboByRaw("CbUseType", cfg.Routing?.UseType, "rule+llm");
+            SetComboByRaw("CbMoveMode", cfg.Import.MoveMode, "copy");
 
-            // 層級順序（若為空用預設） → 轉成「英+中」顯示
-            var order = (cfg.Routing?.FolderOrder == null || cfg.Routing.FolderOrder.Count == 0)
-                ? RoutingService.DefaultOrder(cfg.Routing?.UseCategory == true)
-                : cfg.Routing!.FolderOrder!.ToList();
+            // (V9.7) 使用 string
+            SetComboByRaw("CbOverwrite", cfg.Import.OverwritePolicy, "KeepBoth");
 
-            // 新增：確保 4 個 token 都存在並以「英+中」顯示
+            // (V9.7)
+            SetTextByNames(JoinList(cfg.Routing.BlacklistExts), "TbBlacklistExts");
+            SetTextByNames(JoinList(cfg.Routing.BlacklistFolderNames), "TbBlacklistFolders");
+
+            SetBool("CbUseYear", cfg.Routing.UseYear);
+            SetBool("CbUseMonth", cfg.Routing.UseMonth);
+            SetBool("CbUseProject", cfg.Routing.UseProject);
+            SetBool("CbUseCategory", cfg.Routing.UseCategory);
+
+            SetComboByRaw("CbUseType", cfg.Routing.UseType, "rule+llm");
+
+            var order = (cfg.Routing.FolderOrder == null || cfg.Routing.FolderOrder.Count == 0)
+                ? RoutingService.DefaultOrder(cfg.Routing.UseCategory)
+                : cfg.Routing.FolderOrder.ToList();
+
             foreach (var t in ValidTokens)
                 if (!order.Contains(t, StringComparer.OrdinalIgnoreCase)) order.Add(t);
 
             if (FindName("LbFolderOrder") is ListBox lb)
             {
-                lb.ItemsSource = order.Select(ToDisplay).ToList();  // 顯示英+中
+                lb.ItemsSource = order.Select(ToDisplay).ToList();
                 if (lb.Items.Count > 0) lb.SelectedIndex = 0;
             }
 
-            // 信心不足資料夾 & 閾值
-            SetTextByNames(cfg.Routing?.LowConfidenceFolderName, "TbLowConfidence");
+            SetTextByNames(cfg.Routing.LowConfidenceFolderName, "TbLowConfidence");
 
-            var th = cfg.Routing?.Threshold ?? 0.0;
-            if (FindName("SlThreshold") is Slider sld) sld.Value = Math.Clamp(th, 0, 1);
-            SetTextByNames((FindName("SlThreshold") is Slider s ? s.Value : th).ToString("F2"), "TbThreshold");
+            // [V9.9 修正 sld/th]
+            Slider? sld = FindName("SlThreshold") as Slider;
+            TextBox? tbTh = FindName("TbThreshold") as TextBox;
+            var th = cfg.Routing.Threshold;
 
-            // AI 模組
-            SetPasswordByNames(cfg.OpenAI?.ApiKey, "TbApiKey");
-            SetTextByNames(cfg.OpenAI?.Model, "TbModel");
+            if (sld != null) sld.Value = Math.Clamp(th, 0, 1);
+            if (tbTh != null)
+            {
+                tbTh.Text = th.ToString("F2");
+                if (sld != null)
+                {
+                    sld.ValueChanged += (s, e) => tbTh.Text = e.NewValue.ToString("F2");
+                }
+            }
+
+            SetPasswordByNames(cfg.OpenAI.ApiKey, "TbApiKey");
+            SetTextByNames(cfg.OpenAI.Model, "TbModel");
         }
 
-        /// <summary>UI 三大路徑欄位若為空，補上目前設定值。</summary>
-        private void EnsureTopPathsNotBlank()
+        private void EnsureTopPathsNotBlank(AppConfig cfg)
         {
-            var cfg = ConfigService.Cfg ?? new AppConfig();
             if (string.IsNullOrWhiteSpace(GetTextByNames("TbRootDir")))
-                SetTextByNames(cfg.App?.RootDir, "TbRootDir");
+                SetTextByNames(cfg.App.RootDir, "TbRootDir");
             if (string.IsNullOrWhiteSpace(GetTextByNames("TbHotFolder")))
-                SetTextByNames(cfg.Import?.HotFolder, "TbHotFolder");
+                SetTextByNames(cfg.Import.HotFolder, "TbHotFolder");
             if (string.IsNullOrWhiteSpace(GetTextByNames("TbDbPath")))
-                SetTextByNames(cfg.Db?.DbPath, "TbDbPath");
+                SetTextByNames(cfg.Db.DbPath, "TbDbPath");
         }
 
         // ========================= UI -> Config =========================
         private void HarvestToConfig(AppConfig cfg)
         {
-            if (cfg == null) return;
-
-            // 以頂層型別初始化
-            cfg.App ??= new AppSection();
-            cfg.Import ??= new ImportSection();
-            cfg.Db ??= new DbSection();
-            cfg.Routing ??= new RoutingSection();
-            cfg.OpenAI ??= new OpenAISection();
-
-            // 基本路徑
             cfg.App.RootDir = GetTextByNames("TbRootDir");
             cfg.Import.HotFolder = GetTextByNames("TbHotFolder");
             cfg.Db.DbPath = GetTextByNames("TbDbPath");
 
-            // V7.34 UI 串接：儲存啟動模式
-            if (GetBoolByNames("RadioModeSimple")) // (Helper 函式 GetBoolByNames 也適用於 RadioButton)
+            if (GetBoolByNames("RadioModeSimple"))
                 cfg.App.LaunchMode = "Simple";
             else
                 cfg.App.LaunchMode = "Detailed";
 
-            // 匯入設定
+            // [V13.0 移除] 移除 V12.0 的 GetBool
+            // cfg.App.ShowDesktopInTree = GetBoolByNames("CbShowDesktopInTree");
+            // cfg.App.ShowDrivesInTree = GetBoolByNames("CbShowDrivesInTree");
+
+            // [V13.0 新增] 儲存自訂路徑清單
+            cfg.App.TreeViewRootPaths = SplitPaths(GetTextByNames("TbTreeViewRoots"));
+
+
             cfg.Import.IncludeSubdir = GetBoolByNames("CbIncludeSubdir");
             cfg.Import.EnableHotFolder = GetBoolByNames("CbEnableHotFolder");
             cfg.Import.MoveMode = GetComboRaw("CbMoveMode", "copy");
 
-            // 覆寫策略（容錯對應 enum 名稱）
-            var overwrite = GetComboRaw("CbOverwrite", "KeepBoth").Trim();
-            if (!Enum.TryParse(overwrite, true, out OverwritePolicy policy))
-            {
-                var wantReplace = new[] { "Replace", "Overwrite" };
-                var wantRename = new[] { "Rename", "AutoRename", "RenameNew" };
-                var wantKeep = new[] { "KeepBoth", "Keep" };
+            // (V9.7) 使用 string
+            cfg.Import.OverwritePolicy = GetComboRaw("CbOverwrite", "KeepBoth").Trim();
 
-                if (wantReplace.Contains(overwrite, StringComparer.OrdinalIgnoreCase))
-                    policy = ResolveEnumByPreferredNames<OverwritePolicy>(wantReplace, DefaultEnumValue<OverwritePolicy>(wantKeep));
-                else if (wantRename.Contains(overwrite, StringComparer.OrdinalIgnoreCase))
-                    policy = ResolveEnumByPreferredNames<OverwritePolicy>(wantRename, DefaultEnumValue<OverwritePolicy>(wantKeep));
-                else
-                    policy = ResolveEnumByPreferredNames<OverwritePolicy>(wantKeep, DefaultEnumValue<OverwritePolicy>(wantKeep));
-            }
-            cfg.Import.OverwritePolicy = policy;
-
-            // 黑名單
+            // (V9.7)
             cfg.Routing.BlacklistExts = SplitList(GetTextByNames("TbBlacklistExts"));
             cfg.Routing.BlacklistFolderNames = SplitList(GetTextByNames("TbBlacklistFolders"));
+            cfg.Import.BlacklistExts = cfg.Routing.BlacklistExts;
+            cfg.Import.BlacklistFolderNames = cfg.Routing.BlacklistFolderNames;
 
-            // 路徑規則
+
             cfg.Routing.UseYear = GetBoolByNames("CbUseYear");
             cfg.Routing.UseMonth = GetBoolByNames("CbUseMonth");
             cfg.Routing.UseProject = GetBoolByNames("CbUseProject");
-            cfg.Routing.UseCategory = GetBoolByNames("CbUseCategory"); // 保留
+            cfg.Routing.UseCategory = GetBoolByNames("CbUseCategory");
             cfg.Routing.UseType = GetComboRaw("CbUseType", "rule+llm");
 
-            // FolderOrder：把「英+中」還原成英文 token，且僅收合法 token
             if (FindName("LbFolderOrder") is ListBox lb)
             {
                 var list = lb.Items.Cast<object>()
-                    .Select(x => FromDisplay(x?.ToString() ?? ""))     // NEW：還原 token
-                    .Where(t => ValidTokens.Contains(t))               // NEW：僅收合法
+                    .Select(x => FromDisplay(x?.ToString() ?? ""))
+                    .Where(t => ValidTokens.Contains(t))
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .ToList();
 
-                // 若 UI 沒選，仍確保四個 token 都存在（順序以目前為主）
                 foreach (var t in ValidTokens)
                     if (!list.Contains(t, StringComparer.OrdinalIgnoreCase)) list.Add(t);
 
                 cfg.Routing.FolderOrder = list;
             }
 
-            // 信心不足資料夾 & 閾值
             cfg.Routing.LowConfidenceFolderName = GetTextByNames("TbLowConfidence");
 
+            // [V9.9 修正 sld/th]
+            Slider? sld = FindName("SlThreshold") as Slider;
             var thStr = GetTextByNames("TbThreshold");
-            if (string.IsNullOrWhiteSpace(thStr) && FindName("SlThreshold") is Slider sld)
+            if (string.IsNullOrWhiteSpace(thStr) && sld != null)
                 thStr = sld.Value.ToString("F2");
-            if (double.TryParse(thStr, out var th))
-                cfg.Routing.Threshold = Math.Clamp(th, 0, 1);
 
-            // AI 模組
+            if (double.TryParse(thStr, NumberStyles.Any, CultureInfo.InvariantCulture, out var parsedTh))
+                cfg.Routing.Threshold = Math.Clamp(parsedTh, 0, 1);
+            else if (sld != null)
+                cfg.Routing.Threshold = sld.Value;
+
+
             cfg.OpenAI.ApiKey = GetPasswordByNames("TbApiKey");
             cfg.OpenAI.Model = GetTextByNames("TbModel");
         }
 
         // ========================= Buttons =========================
+
         private void BtnSave_Click(object sender, RoutedEventArgs e)
         {
             try
             {
-                var cfg = ConfigService.Cfg ?? new AppConfig();
-                HarvestToConfig(cfg);
+                HarvestToConfig(_tempConfig);
 
-                if (!ConfigService.Save())
+                if (!ConfigService.Save(_tempConfig))
                 {
                     MessageBox.Show($"無法寫入設定檔：{ConfigService.ConfigPath}", "儲存失敗", MessageBoxButton.OK, MessageBoxImage.Error);
                     return;
                 }
-
-                // 成功後重新載入一次，確保畫面同步顯示
-                ConfigService.Load();
-                RenderFromConfig();
-                EnsureTopPathsNotBlank();
 
                 DialogResult = true;
                 Close();
@@ -243,8 +242,10 @@ namespace AI.KB.Assistant.Views
             try
             {
                 ConfigService.Load();
-                RenderFromConfig();
-                EnsureTopPathsNotBlank();
+                // (V9.7)
+                _tempConfig = ConfigService.Cfg.Clone();
+                RenderFromConfig(_tempConfig);
+                EnsureTopPathsNotBlank(_tempConfig);
             }
             catch (Exception ex)
             {
@@ -264,7 +265,8 @@ namespace AI.KB.Assistant.Views
             {
                 Description = "選擇 Root 目錄",
                 UseDescriptionForTitle = true,
-                ShowNewFolderButton = true
+                ShowNewFolderButton = true,
+                SelectedPath = GetTextByNames("TbRootDir")
             };
             if (dlg.ShowDialog() == WinForms.DialogResult.OK)
                 SetTextByNames(dlg.SelectedPath, "TbRootDir");
@@ -276,13 +278,12 @@ namespace AI.KB.Assistant.Views
             {
                 Description = "選擇收件夾 (HotFolder)",
                 UseDescriptionForTitle = true,
-                ShowNewFolderButton = true
+                ShowNewFolderButton = true,
+                SelectedPath = GetTextByNames("TbHotFolder")
             };
             if (dlg.ShowDialog() == WinForms.DialogResult.OK)
                 SetTextByNames(dlg.SelectedPath, "TbHotFolder");
         }
-
-
 
         private void BtnBrowseDb_Click(object sender, RoutedEventArgs e)
         {
@@ -292,13 +293,44 @@ namespace AI.KB.Assistant.Views
                 Filter = "SQLite Database (*.db;*.sqlite)|*.db;*.sqlite|All Files (*.*)|*.*",
                 AddExtension = true,
                 DefaultExt = ".db",
-                FileName = "ai_kb.db"
+                FileName = GetTextByNames("TbDbPath")
             };
+            if (string.IsNullOrWhiteSpace(dlg.FileName))
+                dlg.FileName = "ai_kb.db";
+
             if (dlg.ShowDialog(this) == true)
                 SetTextByNames(dlg.FileName, "TbDbPath");
         }
 
-        // ======== 排序按鈕 ========
+        /// <summary>
+        /// [V13.0 新增] 瀏覽並加入自訂檔案樹根目錄
+        /// </summary>
+        private void BtnAddRootPath_Click(object sender, RoutedEventArgs e)
+        {
+            using var dlg = new WinForms.FolderBrowserDialog
+            {
+                Description = "選擇要加入檔案樹的根目錄",
+                UseDescriptionForTitle = true,
+                ShowNewFolderButton = true
+            };
+
+            if (dlg.ShowDialog() == WinForms.DialogResult.OK)
+            {
+                if (FindName("TbTreeViewRoots") is TextBox tb)
+                {
+                    var currentPaths = SplitPaths(tb.Text);
+                    var newPath = dlg.SelectedPath;
+
+                    if (!currentPaths.Contains(newPath, StringComparer.OrdinalIgnoreCase))
+                    {
+                        currentPaths.Add(newPath);
+                        tb.Text = string.Join(Environment.NewLine, currentPaths);
+                    }
+                }
+            }
+        }
+
+
         private void BtnOrderUp_Click(object sender, RoutedEventArgs e)
         {
             if (FindName("LbFolderOrder") is not ListBox lb) return;
@@ -325,8 +357,10 @@ namespace AI.KB.Assistant.Views
         private string GetTextByNames(params string[] names)
         {
             foreach (var n in names ?? Array.Empty<string>())
+            {
                 if (FindName(n) is TextBox tb)
                     return tb.Text ?? string.Empty;
+            }
             return string.Empty;
         }
 
@@ -334,8 +368,10 @@ namespace AI.KB.Assistant.Views
         {
             var v = value ?? string.Empty;
             foreach (var n in names ?? Array.Empty<string>())
+            {
                 if (FindName(n) is TextBox tb)
                     tb.Text = v;
+            }
         }
 
         private string GetPasswordByNames(params string[] names)
@@ -354,13 +390,13 @@ namespace AI.KB.Assistant.Views
                     pb.Password = v;
         }
 
+        //Shorter helper function for getting boolean values from UI elements
         private bool GetBoolByNames(params string[] names)
         {
             foreach (var n in names ?? Array.Empty<string>())
             {
                 if (FindName(n) is CheckBox cb)
                     return cb.IsChecked == true;
-                // V7.34 UI 串接：擴充 helper
                 if (FindName(n) is RadioButton rb)
                     return rb.IsChecked == true;
             }
@@ -373,7 +409,6 @@ namespace AI.KB.Assistant.Views
                 cb.IsChecked = value;
         }
 
-        /// <summary>讀取 ComboBox 的值：優先 SelectedValue（Tag），再看 SelectedItem 的 Tag/Content，最後退回 Text。</summary>
         private string GetComboRaw(string name, string fallback)
         {
             if (FindName(name) is ComboBox cb)
@@ -390,7 +425,6 @@ namespace AI.KB.Assistant.Views
             return fallback;
         }
 
-        /// <summary>設定 ComboBox 的選中值：優先用 SelectedValue（Tag），再對比 Tag/Content；最後選第一個避免空白。</summary>
         private void SetComboByRaw(string name, string? raw, string fallback)
         {
             if (FindName(name) is ComboBox cb)
@@ -419,7 +453,6 @@ namespace AI.KB.Assistant.Views
             }
         }
 
-        /// <summary>從「顯示字串」取出機器可讀 token，例如 "move / 搬移檔案" -> "move"</summary>
         private static string ExtractRawToken(string s)
         {
             if (string.IsNullOrWhiteSpace(s)) return string.Empty;
@@ -430,7 +463,6 @@ namespace AI.KB.Assistant.Views
             return s.Trim();
         }
 
-        // === 新增：顯示↔token 轉換 ===
         private static string ToDisplay(string? token)
         {
             if (string.IsNullOrWhiteSpace(token))
@@ -463,40 +495,24 @@ namespace AI.KB.Assistant.Views
                 .ToList();
         }
 
+        /// <summary>
+        /// [V13.0 新增] 輔助函式：用於分割多行文字框的路徑
+        /// </summary>
+        private static List<string> SplitPaths(string? input)
+        {
+            if (string.IsNullOrWhiteSpace(input)) return new List<string>();
+            return input
+                .Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(p => p.Trim())
+                .Where(p => !string.IsNullOrWhiteSpace(p))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
         private static string JoinList(IEnumerable<string>? list)
         {
             if (list == null) return string.Empty;
             return string.Join(", ", list.Where(x => !string.IsNullOrWhiteSpace(x)));
-        }
-
-        // ========================= Enum mapping helpers =========================
-        private static TEnum ResolveEnumByPreferredNames<TEnum>(IEnumerable<string> preferredNames, TEnum fallback)
-            where TEnum : struct, Enum
-        {
-            var names = Enum.GetNames(typeof(TEnum));
-            foreach (var p in preferredNames ?? Array.Empty<string>())
-            {
-                var hit = names.FirstOrDefault(n => string.Equals(n, p, StringComparison.OrdinalIgnoreCase));
-                if (hit != null && Enum.TryParse(hit, true, out TEnum val))
-                    return val;
-            }
-            return fallback;
-        }
-
-        private static TEnum DefaultEnumValue<TEnum>(IEnumerable<string>? prefer = null)
-            where TEnum : struct, Enum
-        {
-            var values = Enum.GetValues(typeof(TEnum)).Cast<TEnum>().ToArray();
-            if (prefer != null)
-            {
-                var names = Enum.GetNames(typeof(TEnum));
-                foreach (var p in prefer)
-                {
-                    var idx = Array.FindIndex(names, n => string.Equals(n, p, StringComparison.OrdinalIgnoreCase));
-                    if (idx >= 0) return values[idx];
-                }
-            }
-            return values.First();
         }
     }
 }

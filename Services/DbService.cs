@@ -1,21 +1,28 @@
-﻿using System;
+﻿// DbService.cs - 最終完成版 (V15.1)
+// [V15.0] 移除了「反射」載入 (Type.GetType)，改為「硬編碼」'using Microsoft.Data.Sqlite'。
+// [V15.1 修正] 修正 V15.0 (image_24204c.jpg) 中的兩個錯誤：
+// 1. [Fix 1] 修正 ExecuteNonQueryAsync (Line 606) 的 catch 區塊，使其能捕捉 'SqliteException' (Duplicate Column)。
+// 2. [Fix 2] 修正 Row 類別 (Line 655)，使其「具現化」(materialize) 資料，而不是儲存已關閉的 DataReader (Connection Closed)。
+
+using System;
 using System.Collections.Generic;
-using System.Data; // 必須引用 System.Data
+using System.Data;
 using System.Globalization;
 using System.IO;
 using System.Linq;
-using System.Reflection; // 為了 PropertyInfo
+using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
 using AI.KB.Assistant.Models;
-using AI.KB.Assistant.Views; // V7.34 修正：加入 App.LogCrash 依賴
+using AI.KB.Assistant.Views;
+using Microsoft.Data.Sqlite; // (V15.0) 硬編碼 using
 
 namespace AI.KB.Assistant.Services
 {
     /// <summary>
-    /// V7.31 修正 + V7.35 新功能
+    /// DbService (V15.1)
     /// </summary>
     public sealed partial class DbService : IDisposable
     {
@@ -24,136 +31,79 @@ namespace AI.KB.Assistant.Services
 
         public DbService()
         {
-            Console.WriteLine("[DB INIT V7.31] DbService constructor started.");
+            Console.WriteLine("[DB INIT V15.1] DbService constructor started.");
 
-            // V7.13 修正：使用反射呼叫 Init()
-            try
-            {
-                Console.WriteLine("[DB INIT V7.31] Attempting reflection init...");
-                var assemblyName = "SQLitePCLRaw.batteries_v2";
-                var batteriesAssembly = Assembly.Load(assemblyName);
-                var batteriesType = batteriesAssembly.GetType("SQLitePCLRaw.Batteries_v2");
-                if (batteriesType != null)
-                {
-                    var initMethod = batteriesType.GetMethod("Init", BindingFlags.Public | BindingFlags.Static | BindingFlags.NonPublic);
-                    if (initMethod != null)
-                    {
-                        initMethod.Invoke(null, null);
-                        Console.WriteLine("[DB INIT V7.31] Reflection Init() call successful.");
-                    }
-                    else
-                    {
-                        Console.WriteLine("[DB INIT V7.31 ERROR] Reflection: 'Init' method not found on Batteries_v2.");
-                    }
-                }
-                else
-                {
-                    Console.WriteLine("[DB INIT V7.31 ERROR] Reflection: 'SQLitePCLRaw.Batteries_v2' type not found in assembly.");
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"[DB INIT V7.31 ERROR] Reflection init failed: {ex.Message}");
-                if (ex.InnerException != null)
-                {
-                    Console.WriteLine($"[DB INIT V7.31 INNER_EX] {ex.InnerException.Message}");
-                }
-                App.LogCrash("DbService.Constructor.ReflectionInit", ex);
-            }
+            // (V14.1 註解) App.xaml.cs (V14.1) [cite: `App.xaml.cs (V14.1)`] 已呼叫 v3.x 'SQLitePCL.Batteries.Init()' [cite: `App.xaml.cs (V14.1)` Line 39]。
 
             string? pick(string? a, string? b, string fallback)
                 => !string.IsNullOrWhiteSpace(a) ? a : (!string.IsNullOrWhiteSpace(b) ? b : fallback);
 
-            // V7.34 重構修正：改用 'ConfigService.Cfg'
             var cfg = ConfigService.Cfg;
             var baseDefault = Path.Combine(AppContext.BaseDirectory, "ai_kb.db");
             var chosen = pick(cfg?.Db?.DbPath, cfg?.Db?.Path, baseDefault);
 
-            Console.WriteLine($"[DB INIT V7.31] DB Path selected: {chosen}");
+            Console.WriteLine($"[DB INIT V15.1] DB Path selected: {chosen}");
 
-            // V7.31 修正：如果 TryCreateSqlite 失敗 (返回 null)，_provider 將會是 FileDbProvider
-            // (L75) chosen 在此傳入
             _provider = TryCreateSqlite(chosen, _dbLock) ?? new FileDbProvider(chosen + ".jsonl");
-            Console.WriteLine($"[DB INIT V7.31] Provider created (Is Sqlite: {_provider is SqliteProvider}).");
+            Console.WriteLine($"[DB INIT V15.1] Provider created. IsSqlite={_provider is SqliteProvider}");
         }
 
-        // ====== 介面實作 ======
+        // public API (簡潔委派)
         public Task InitializeAsync() => _provider.InitializeAsync();
         public Task<List<Item>> QueryAllAsync() => _provider.QueryAllAsync();
         public Task<int> InsertItemsAsync(IEnumerable<Item> items) => _provider.InsertItemsAsync(items);
-        public Task<int> InsertAsync(Item item, CancellationToken _ = default)
-            => InsertItemsAsync(new[] { item });
+        public Task<int> InsertAsync(Item item, CancellationToken _ = default) => InsertItemsAsync(new[] { item });
         public Task<int> UpdateItemsAsync(IEnumerable<Item> items) => _provider.UpdateItemsAsync(items);
         public Task<int> UpsertAsync(IEnumerable<Item> items) => _provider.UpsertAsync(items);
         public Task<Item?> GetByIdAsync(string id) => _provider.GetByIdAsync(id);
         public Task<int> DeleteByIdAsync(string id) => _provider.DeleteByIdAsync(id);
-
-        // V7.35 新增 (用於 選項 B)：批次刪除
         public Task<int> DeleteItemsAsync(IEnumerable<string> ids) => _provider.DeleteItemsAsync(ids);
-
-        // V7.35 新增 (用於 選項 C)：重置收件夾
         public Task<int> DeleteNonCommittedAsync() => _provider.DeleteNonCommittedAsync();
-
         public Task<int> StageOnlyAsync(IEnumerable<Item> items, int stage) => _provider.StageOnlyAsync(items, stage);
         public Task<int> StageOnlyAsync(IEnumerable<Item> items) => StageOnlyAsync(items, 0);
         public Task<List<Item>> ListRecentAsync(int take = 200) => _provider.ListRecentAsync(take);
         public Task<List<Item>> SearchAsync(string keyword, int take = 200) => _provider.SearchAsync(keyword, take);
 
-        // (CT 多載省略...)
         public void Dispose() => (_provider as IDisposable)?.Dispose();
 
         // ========== Provider Factory ==========
-        // (L117) CS8604 修正：將 'string dbPath' 改為 'string? dbPath'
         private static IDbProvider? TryCreateSqlite(string? dbPath, object dbLock)
         {
             if (string.IsNullOrWhiteSpace(dbPath))
                 return null;
-            Console.WriteLine("[DB INIT V7.31] TryCreateSqlite started.");
+
+            Console.WriteLine("[DB INIT V15.1] TryCreateSqlite started.");
             try
             {
                 var dir = Path.GetDirectoryName(dbPath);
                 if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
                     Directory.CreateDirectory(dir);
 
-                var connType = Type.GetType(
-                    "Microsoft.Data.Sqlite.SqliteConnection, Microsoft.Data.Sqlite",
-                    throwOnError: true);
-                if (connType == null)
-                {
-                    Console.WriteLine("[DB INIT V7.31 ERROR] Microsoft.Data.Sqlite.dll not found. Falling back to JSONL.");
-                    return null;
-                }
-                Console.WriteLine("[DB INIT V7.31] SqliteConnection type loaded.");
+                // (V15.0) 硬編碼 using
 
                 Func<IDbConnection> createConnection = () =>
                 {
-                    var connStr = $"Data Source={dbPath};Cache=Shared";
-                    var conn = (IDbConnection)Activator.CreateInstance(connType!, connStr)!;
+                    var connStr = $"Data Source={dbPath};Cache=Shared;Mode=ReadWriteCreate;";
+                    // (V15.0) 硬編碼 'new SqliteConnection()'
+                    var conn = (IDbConnection)new SqliteConnection(connStr);
                     return conn;
                 };
 
-                Console.WriteLine("[DB INIT V7.31] Performing Smoke Test (Connection.Open)...");
+                // smoke test (open/close)
                 lock (dbLock)
                 {
                     using var test = createConnection();
                     test.Open();
                     test.Close();
                 }
-                Console.WriteLine("[DB INIT V7.31] Smoke Test OK. SQLite Provider activated.");
+
+                Console.WriteLine("[DB INIT V15.1] SQLite smoke test passed. Activating SqliteProvider.");
                 return new SqliteProvider(createConnection, dbPath, dbLock);
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[DB INIT V7.31 ERROR] SQLite Smoke Test Failed: {ex.Message}");
-                Exception? inner = ex;
-                int depth = 0;
-                while (inner != null && depth < 5)
-                {
-                    Console.WriteLine($"[DB INIT V7.31 INNER_EX {depth}] {inner.Message}");
-                    Console.WriteLine(inner.StackTrace);
-                    inner = inner.InnerException;
-                    depth++;
-                }
+                // (V15.0) App.xaml.cs (V14.1) [cite: `App.xaml.cs (V14.1)`] 必須呼叫 'Batteries.Init()' [cite: `App.xaml.cs (V14.1)` Line 39]，否則 'test.Open()' [Line 125] 會在此處失敗
+                Console.WriteLine($"[DB INIT V15.1] SQLite activation failed: {ex.Message}");
                 App.LogCrash("DbService.TryCreateSqlite", ex);
                 return null;
             }
@@ -169,14 +119,14 @@ namespace AI.KB.Assistant.Services
             Task<int> UpsertAsync(IEnumerable<Item> items);
             Task<Item?> GetByIdAsync(string id);
             Task<int> DeleteByIdAsync(string id);
-            Task<int> DeleteItemsAsync(IEnumerable<string> ids); // V7.35 新增
-            Task<int> DeleteNonCommittedAsync(); // V7.35 新增
+            Task<int> DeleteItemsAsync(IEnumerable<string> ids);
+            Task<int> DeleteNonCommittedAsync();
             Task<int> StageOnlyAsync(IEnumerable<Item> items, int stage);
             Task<List<Item>> ListRecentAsync(int take);
             Task<List<Item>> SearchAsync(string keyword, int take);
         }
 
-        #region FileDbProvider（JSONL，零依賴）
+        #region FileDbProvider (JSONL fallback)
         private sealed class FileDbProvider : IDbProvider
         {
             private readonly string _path;
@@ -189,7 +139,7 @@ namespace AI.KB.Assistant.Services
             public FileDbProvider(string path)
             {
                 _path = path;
-                Console.WriteLine($"[DB INIT V7.31] FALLBACK: FileDbProvider (JSONL) activated at: {_path}");
+                Console.WriteLine($"[DB] FileDbProvider activated at: {_path}");
             }
 
             public Task InitializeAsync()
@@ -277,7 +227,6 @@ namespace AI.KB.Assistant.Services
                 return Task.FromResult(n);
             }
 
-            // V7.35 新增 (選項 B)
             public Task<int> DeleteItemsAsync(IEnumerable<string> ids)
             {
                 var idSet = new HashSet<string>(ids, StringComparer.OrdinalIgnoreCase);
@@ -287,11 +236,9 @@ namespace AI.KB.Assistant.Services
                 return Task.FromResult(n);
             }
 
-            // V7.35 新增 (選項 C)
             public Task<int> DeleteNonCommittedAsync()
             {
                 var list = new List<Item>(ReadAll());
-                // 刪除所有 "committed" 以外的狀態 (null, "", "intaked", "error", "stage:X")
                 var n = list.RemoveAll(it => (it.Status ?? "intaked") != "committed");
                 WriteAll(list);
                 return Task.FromResult(n);
@@ -323,12 +270,11 @@ namespace AI.KB.Assistant.Services
         }
         #endregion
 
-        #region SqliteProvider（反射呼叫 Microsoft.Data.Sqlite）
+        #region SqliteProvider (reflection)
         private sealed class SqliteProvider : IDbProvider
         {
             private readonly Func<IDbConnection> _createConnection;
             private readonly string _dbPath;
-            private readonly string _connStr;
             private readonly object _lock;
 
             public SqliteProvider(Func<IDbConnection> createConnection, string dbPath, object lockObject)
@@ -336,7 +282,6 @@ namespace AI.KB.Assistant.Services
                 _createConnection = createConnection;
                 _lock = lockObject;
                 _dbPath = dbPath;
-                _connStr = $"Data Source={dbPath};Cache=Shared;Mode=ReadWriteCreate;";
             }
 
             public async Task InitializeAsync()
@@ -363,20 +308,21 @@ CREATE INDEX IF NOT EXISTS IX_Items_Path ON Items(Path);";
             {
                 var existing = await GetColumnsAsync("Items").ConfigureAwait(false);
                 var has = new HashSet<string>(existing.Select(c => c.Name), StringComparer.OrdinalIgnoreCase);
-                var ItemProps = typeof(Item).GetProperties();
+                var itemProps = typeof(Item).GetProperties();
                 var coreCols = new HashSet<string>(new[]
                 {
                     "Id", "Path", "ProposedPath", "CreatedAt", "UpdatedAt", "Tags", "Status", "Project", "Note",
                     "Category", "Timestamp"
                 }, StringComparer.OrdinalIgnoreCase);
 
-                foreach (var p in ItemProps)
+                foreach (var p in itemProps)
                 {
                     var name = p.Name;
                     if (!coreCols.Contains(name)) continue;
                     if (has.Contains(name)) continue;
-                    if (await ColumnExistsAsync("Items", name).ConfigureAwait(false))
-                        continue;
+
+                    // double-check via PRAGMA to avoid race conditions
+                    if (await ColumnExistsAsync("Items", name).ConfigureAwait(false)) continue;
 
                     var sql = $"ALTER TABLE Items ADD COLUMN {name} TEXT;";
                     try
@@ -385,12 +331,19 @@ CREATE INDEX IF NOT EXISTS IX_Items_Path ON Items(Path);";
                     }
                     catch (Exception ex)
                     {
+                        // [V15.1 修正] 
+                        // ExecuteNonQueryAsync (Line 606) 現在會正確地 'throw' 'SqliteException' (如果它不是 'duplicate column')。
+                        // 我們可以在這裡捕捉 'SqliteException'。
                         var msg = ex.Message?.ToLowerInvariant() ?? "";
                         if (msg.Contains("duplicate column name"))
                         {
                             Console.WriteLine($"[DB MIGRATION] Ignored duplicate column: {name}");
                         }
-                        else throw;
+                        else
+                        {
+                            Console.WriteLine($"[DB MIGRATION] Failed adding column {name}: {ex.Message}");
+                            throw;
+                        }
                     }
                 }
             }
@@ -411,8 +364,7 @@ CREATE INDEX IF NOT EXISTS IX_Items_Path ON Items(Path);";
 
             private async Task<bool> ColumnExistsAsync(string table, string column)
             {
-                var rows = await ExecuteQueryAsync(
-                    "PRAGMA table_info('" + table + "');").ConfigureAwait(false);
+                var rows = await ExecuteQueryAsync($"PRAGMA table_info('{table}');").ConfigureAwait(false);
                 foreach (var r in rows)
                 {
                     var name = r.GetString("name");
@@ -458,7 +410,6 @@ CREATE INDEX IF NOT EXISTS IX_Items_Path ON Items(Path);";
                     new Dictionary<string, object?> { ["$Id"] = id }).ConfigureAwait(false);
             }
 
-            // V7.35 新增：批次刪除 (選項 B)
             public async Task<int> DeleteItemsAsync(IEnumerable<string> ids)
             {
                 if (ids == null || !ids.Any()) return 0;
@@ -487,7 +438,6 @@ CREATE INDEX IF NOT EXISTS IX_Items_Path ON Items(Path);";
                 return totalDeleted;
             }
 
-            // V7.35 新增：重置收件夾 (選項 C)
             public async Task<int> DeleteNonCommittedAsync()
             {
                 var sql = "DELETE FROM Items WHERE Status IS NULL OR Status != 'committed';";
@@ -559,10 +509,8 @@ LIMIT $Take;",
                     Tags = tags,
                     Status = r.GetString("Status"),
                     Project = r.GetString("Project"),
-                    Note = r.GetString("Note")
-                    ,
-                    Category = r.GetString("Category")
-                    ,
+                    Note = r.GetString("Note"),
+                    Category = r.GetString("Category"),
                     Timestamp = r.GetDateTime("Timestamp")
                 };
             }
@@ -601,8 +549,11 @@ ON CONFLICT(Id) DO UPDATE SET
                 return await ExecuteNonQueryAsync(sql, p).ConfigureAwait(false);
             }
 
+            // (V15.0) 硬編碼
             private IDbConnection CreateConnection()
-                => _createConnection();
+            {
+                return _createConnection();
+            }
 
             private async Task<int> ExecuteNonQueryAsync(string sql, Dictionary<string, object?>? prms = null)
             {
@@ -610,22 +561,37 @@ ON CONFLICT(Id) DO UPDATE SET
                 {
                     lock (_lock)
                     {
-                        using var conn = CreateConnection();
+                        using var conn = (SqliteConnection)CreateConnection();
                         try
                         {
                             conn.Open();
-                            var cmd = CreateCommand(conn, sql, prms);
-                            try
+                            using var cmd = conn.CreateCommand();
+                            cmd.CommandText = sql;
+                            if (prms != null)
                             {
-                                var m = cmd.GetType().GetMethod("ExecuteNonQuery", Type.EmptyTypes)!;
-                                return (int)m.Invoke(cmd, null)!;
+                                foreach (var p in prms)
+                                {
+                                    cmd.Parameters.AddWithValue(p.Key, p.Value ?? DBNull.Value);
+                                }
                             }
-                            finally { (cmd as IDisposable)?.Dispose(); }
+
+                            return cmd.ExecuteNonQuery();
                         }
-                        catch (TargetInvocationException tie) when (tie.InnerException is Exception innerEx && innerEx.Message.ToLower().Contains("duplicate column name"))
+                        // [V15.1 修正 Fix 1] 
+                        // 1. 移除 V15.0 (Line 606) 錯誤的 'TargetInvocationException'
+                        // 2. 改為捕捉 'SqliteException' (V15.0 'image_24204c.jpg' [cite: `image_24204c.jpg`] 顯示的錯誤)
+                        catch (SqliteException ex)
                         {
-                            Console.WriteLine($"[DB MIGRATION/ExecuteNonQueryAsync] Ignored error: {innerEx.Message}");
-                            return 0;
+                            var msg = ex.Message?.ToLowerInvariant() ?? "";
+                            if (msg.Contains("duplicate column name"))
+                            {
+                                Console.WriteLine($"[DB MIGRATION] Ignored duplicate column: {ex.Message}");
+                                return 0; // 忽略錯誤
+                            }
+                            else
+                            {
+                                throw; // 拋出其他 SQLite 錯誤
+                            }
                         }
                         finally { conn.Close(); }
                     }
@@ -638,81 +604,68 @@ ON CONFLICT(Id) DO UPDATE SET
                 {
                     lock (_lock)
                     {
-                        using var conn = CreateConnection();
+                        using var conn = (SqliteConnection)CreateConnection();
                         try
                         {
                             conn.Open();
-                            var cmd = CreateCommand(conn, sql, prms);
-                            try { return ExecuteReaderRows(cmd); }
-                            finally { (cmd as IDisposable)?.Dispose(); }
+                            using var cmd = conn.CreateCommand();
+                            cmd.CommandText = sql;
+                            if (prms != null)
+                            {
+                                foreach (var p in prms)
+                                {
+                                    cmd.Parameters.AddWithValue(p.Key, p.Value ?? DBNull.Value);
+                                }
+                            }
+
+                            var list = new List<Row>();
+                            using var reader = cmd.ExecuteReader();
+                            while (reader.Read())
+                            {
+                                // [V15.1 修正 Fix 2] 
+                                // V15.0 (Line 635) 的 'new Row(reader)' 存在 "Connection Closed" 錯誤
+                                // V15.1 改為呼叫 V15.1 新的「具現化」建構函式
+                                list.Add(new Row(reader));
+                            }
+                            return list;
                         }
                         finally { conn.Close(); }
                     }
                 }).ConfigureAwait(false);
             }
 
-            private static List<Row> ExecuteReaderRows(object cmd)
+            // [V15.1 修正 Fix 2]
+            // V15.0 (Line 655) 的 Row 類別存在 "Connection Closed" 錯誤。
+            // V15.1 Row 類別改為在建構函式中「具現化」(Materialize) 資料，
+            // 將資料從 reader 複製到 Dictionary，而不是儲存 reader 本身。
+            private sealed class Row
             {
-                var list = new List<Row>();
-                var exec = cmd.GetType().GetMethod("ExecuteReader", Type.EmptyTypes)!;
-                dynamic reader = exec.Invoke(cmd, null)!;
+                private readonly Dictionary<string, object> _data;
 
-                try
+                /// <summary>
+                /// (V15.1) 建構函式：在 Reader 仍然開啟時，將所有資料讀取到字典中。
+                /// </summary>
+                public Row(SqliteDataReader reader)
                 {
-                    var mRead = reader.GetType().GetMethod("Read", Type.EmptyTypes)!;
-                    while ((bool)mRead.Invoke(reader, null)!)
-                        list.Add(new Row(reader));
-                }
-                finally
-                {
-                    try { (reader as IDisposable)?.Dispose(); } catch { }
-                }
-                return list;
-            }
-
-            private static object CreateCommand(IDbConnection conn, string sql, Dictionary<string, object?>? prms)
-            {
-                var asm = conn.GetType().Assembly;
-                var cmdType = asm.GetType("Microsoft.Data.Sqlite.SqliteCommand")!;
-                var cmd = cmdType
-                    .GetConstructor(new[] { typeof(string), conn.GetType() })!
-                    .Invoke(new object[] { sql, conn });
-
-                if (prms != null && prms.Count > 0)
-                {
-                    var parmsProp = cmdType.GetProperty(
-                        "Parameters",
-                        System.Reflection.BindingFlags.Public |
-                        System.Reflection.BindingFlags.Instance |
-                        System.Reflection.BindingFlags.DeclaredOnly
-                    )!;
-                    var parms = parmsProp.GetValue(cmd)!;
-
-                    var addWithValue = parms.GetType().GetMethod("AddWithValue", new[] { typeof(string), typeof(object) })!;
-                    foreach (var kv in prms)
+                    _data = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+                    for (int i = 0; i < reader.FieldCount; i++)
                     {
-                        addWithValue.Invoke(parms, new object[] { kv.Key, kv.Value ?? DBNull.Value });
+                        // 儲存欄位名和值 (DBNull.Value)
+                        _data[reader.GetName(i)] = reader.GetValue(i);
                     }
                 }
 
-                return cmd;
-            }
-
-            private sealed class Row
-            {
-                private readonly dynamic _r;
-                public Row(dynamic reader) { _r = reader; }
                 public string? GetString(string name) => TryGet(name, v => v?.ToString());
+
                 public DateTime? GetDateTime(string name)
                     => TryGet(name, v => v is null ? (DateTime?)null : DateTime.Parse(v.ToString()!, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind));
-
                 private T? TryGet<T>(string name, Func<object?, T?> cast)
                 {
                     try
                     {
-                        var i = (int)_r.GetOrdinal(name);
-                        if (_r.IsDBNull(i)) return default;
-                        var v = _r.GetValue(i);
+                        // (V15.1) 改為從字典讀取
+                        if (!_data.TryGetValue(name, out var v)) return default;
+                        if (v is DBNull) return default;
                         return cast(v);
                     }
                     catch { return default; }
