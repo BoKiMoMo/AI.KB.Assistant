@@ -10,12 +10,11 @@ using System.Windows.Media.Imaging;
 namespace AI.KB.Assistant.Common
 {
     /// <summary>
-    /// V19.0 (V18.1 P3 需求)
+    /// V19.0 (P3 需求) / V19.1 (CS8604 [cite:"image_e16ee1.png"] 修正)
     /// 
     /// 使用 Windows Shell P/Invoke (SHGetFileInfo) 
-    /// 從 'Item.Path' [cite: `Models/Item.cs (V19.0)` Line 30] 擷取系統檔案圖示 (Icon)，
-    /// 以便 V19.0 'UiRow' [cite: `Models/UiRow.cs (V19.0)` Line 103] 和 'MainWindow.xaml' [cite: `Views/MainWindow.xaml (V19.0)` Line 364] 
-    /// 可以在中清單顯示圖示。
+    /// 從 'Item.Path' [cite:"Models/Item.cs (line 30)"] 擷取系統檔案圖示 (Icon)，
+    /// 以便 'UiRow' [cite:"Models/UiRow.cs (V20.0 功能完整版)"] 可以在中清單顯示圖示。
     /// </summary>
     public static class IconHelper
     {
@@ -53,12 +52,13 @@ namespace AI.KB.Assistant.Common
         private const uint FILE_ATTRIBUTE_NORMAL = 0x00000080; // 一般檔案
 
         /// <summary>
-        /// (V19.0) 取得 'Item.Path' [cite: `Models/Item.cs (V19.0)` Line 30] 對應的系統圖示
+        /// (V19.0) 取得 'Item.Path' [cite:"Models/Item.cs (line 30)"] 對應的系統圖示
+        /// [V19.1 CS8604 [cite:"image_e16ee1.png"] 修正] 允許 path 為 null [cite:"Common/IconHelper.cs (line 63) (modified)"]
         /// </summary>
         public static ImageSource? GetIcon(string? path)
         {
             // V19.0 (P3) 邏輯：
-            // 如果 V19.0 'UiRow' [cite: `Models/UiRow.cs (V19.0)` Line 32] 傳入的路徑是 null，則不顯示圖示
+            // 如果 V19.0 'UiRow' [cite:"Models/UiRow.cs (V20.0 功能完整版)"] 傳入的路徑是 null，則不顯示圖示
             if (string.IsNullOrWhiteSpace(path))
             {
                 return null;
@@ -71,7 +71,7 @@ namespace AI.KB.Assistant.Common
                 uint flags = SHGFI_ICON | SHGFI_SMALLICON;
 
                 // 如果檔案/資料夾不存在，我們仍然嘗試使用 'FILE_ATTRIBUTE_NORMAL' 
-                // 搭配副檔名 (Ext) [cite: `Models/UiRow.cs (V19.0)` Line 32] 來取得預設圖示
+                // 搭配副檔名 (Ext) [cite:"Models/UiRow.cs (V20.0 功能完整版) (line 57)"] 來取得預設圖示
                 if (!File.Exists(path) && !Directory.Exists(path))
                 {
                     flags |= SHGFI_USEFILEATTRIBUTES;

@@ -8,11 +8,11 @@ using AI.KB.Assistant.Models;
 namespace AI.KB.Assistant.Services
 {
     /// <summary>
-    /// V19.0 (V18.0 回滾 P2)
-    /// 1. (V11.0) 確保 'using System.Threading' 存在。
-    /// 2. [V19.0 回滾 P2] 移除 V18.0 [cite: `Services/IntakeService.cs (V18.0)` Line 42] 'IntakeFileAsync' [Line 39] 的 'isFolder' 參數。
-    /// 3. [V19.0 回滾 P2] V18.0 [cite: `Services/IntakeService.cs (V18.0)` Line 63] 'IntakeItemsAsync' 
-    ///    回滾為 V17.0 [cite: `Services/HotFolderService.cs (V17.1)` Line 175] 'IntakeFilesAsync' [Line 63] (只接收 'IEnumerable<string>')。
+    /// V20.2 (無變更)
+    /// 1. [V20.1] 新增 'FileIntakeInfo' 模型，用於接收 'IsBlacklisted' 旗標。
+    /// 2. [V20.1] 'IntakeFileAsync' 已更新，現在會接收 'FileIntakeInfo'。
+    /// 3. [V20.1] 'IntakeFileAsync' 現在會將黑名單檔案 的 'Status' 設為 "blacklisted"。
+    /// 4. [V20.1] 'IntakeFilesAsync' 已更新，現在會接收 'IEnumerable<FileIntakeInfo>'。
     /// </summary>
     public sealed class IntakeService
     {
@@ -20,49 +20,58 @@ namespace AI.KB.Assistant.Services
 
         public IntakeService(DbService db) { _db = db; }
 
+        /// <summary>
+        /// [V20.1] 用於從 HotFolder 傳遞檔案及其黑名單狀態
+        /// </summary>
+        public class FileIntakeInfo
+        {
+            public string FullPath { get; set; } = string.Empty;
+            public bool IsBlacklisted { get; set; } = false;
+        }
+
         /// <summary>確保資料層初始化（SQLite 建表或建立 JSONL）。</summary>
         public Task InitializeAsync(CancellationToken ct = default) => _db.InitializeAsync();
 
         /// <summary>
-        /// [V19.0 回滾 P2] 
+        /// [V20.1]
         /// 把檔案路徑轉成 Item，寫入 DB。
+        /// 如果 'info.IsBlacklisted' 為 true，則將 'Status' 設為 "blacklisted"。
         /// </summary>
-        public async Task<Item?> IntakeFileAsync(string srcFullPath, CancellationToken ct = default)
+        public async Task<Item?> IntakeFileAsync(FileIntakeInfo info, CancellationToken ct = default)
         {
-            // (V11.0)
-            if (string.IsNullOrWhiteSpace(srcFullPath) || !File.Exists(srcFullPath))
+            if (info == null || string.IsNullOrWhiteSpace(info.FullPath) || !File.Exists(info.FullPath))
                 return null;
 
-            var fi = new FileInfo(srcFullPath);
+            var fi = new FileInfo(info.FullPath);
             var item = new Item
             {
-                // (V11.0)
                 Path = fi.FullName,
                 ProposedPath = string.Empty,
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow,
                 Tags = new List<string>(),
-                Status = "intaked",
+
+                // [V20.1] 黑名單優化
+                Status = info.IsBlacklisted ? "blacklisted" : "intaked",
+
                 Project = null,
                 Note = null,
-                // [V19.0 回滾 P2] V18.0 [cite: `Services/IntakeService.cs (V18.0)` Line 56] 的 IsFolder [cite: `Models/Item.cs (V18.0)` Line 105] 已移除
             };
 
-            // (V11.0)
             await _db.InsertAsync(item).ConfigureAwait(false);
             return item;
         }
 
         /// <summary>
-        /// [V19.0 回滾 P2] 批次匯入 (V18.0 [cite: `Services/IntakeService.cs (V18.0)` Line 63] IntakeItemsAsync)
+        /// [V20.1] 批次匯入
         /// </summary>
-        public async Task<List<Item>> IntakeFilesAsync(IEnumerable<string> srcPaths, CancellationToken ct = default)
+        public async Task<List<Item>> IntakeFilesAsync(IEnumerable<FileIntakeInfo> intakeInfos, CancellationToken ct = default)
         {
             var list = new List<Item>();
-            foreach (var p in srcPaths)
+            foreach (var info in intakeInfos)
             {
-                // 呼叫 V19.0 (Line 39) IntakeFileAsync (無 isFolder)
-                var one = await IntakeFileAsync(p, ct).ConfigureAwait(false);
+                // 呼叫 V20.1 (Line 39) IntakeFileAsync (含 IsBlacklisted 旗標)
+                var one = await IntakeFileAsync(info, ct).ConfigureAwait(false);
                 if (one != null) list.Add(one);
             }
             return list;

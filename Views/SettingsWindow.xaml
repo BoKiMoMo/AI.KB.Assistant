@@ -31,7 +31,7 @@
                             <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
 
-                        <TextBlock Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" Text="Root 目錄"/>
+                        <TextBlock Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" Text="分類根目錄"/>
                         <TextBox   x:Name="TbRootDir" Grid.Row="0" Grid.Column="1" Margin="8,0"/>
                         <Button    Grid.Row="0" Grid.Column="2" Content="瀏覽…" Click="BtnBrowseRoot_Click"/>
                         <TextBlock Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
@@ -76,7 +76,7 @@
                 </GroupBox>
 
                 <!-- [V13.0 新增] 檔案樹自訂根目錄 -->
-                <GroupBox Header="檔案樹自訂根目錄 (方案 C)" Margin="0,12,0,0">
+                <GroupBox Header="檔案樹自訂根目錄" Margin="0,12,0,0">
                     <Grid Margin="10">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="180"/>

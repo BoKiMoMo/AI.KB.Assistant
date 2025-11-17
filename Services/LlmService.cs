@@ -12,9 +12,10 @@ using AI.KB.Assistant.Models;
 namespace AI.KB.Assistant.Services
 {
     /// <summary>
-    /// V10.2 (V7.6 智能版)
+    /// V20.3 (API Key 檢查版)
     /// 1. [升級] AnalyzeConfidenceAsync 改為真實 LLM 呼叫 (保留本地模擬為 Fallback)
     /// 2. [新增] SuggestProjectAsync (產生專案名稱)
+    /// 3. [V20.3] 依需求：移除所有本地模擬/亂數，若 API Key 為空，則拋出 InvalidOperationException。
     /// </summary>
     public sealed class LlmService
     {
@@ -52,12 +53,10 @@ namespace AI.KB.Assistant.Services
         /// </summary>
         public async Task<double> AnalyzeConfidenceAsync(string textToAnalyze)
         {
-            // [V10.2 本地規則] 檢查 API Key
+            // [V20.3] 依需求：若無 API Key，拋出例外，停止亂數模擬
             if (string.IsNullOrWhiteSpace(_apiKey))
             {
-                // Key 為空，使用 V7.5 的本地模擬規則 (40% ~ 90%)
-                var randomScore = new Random().NextDouble() * 0.5 + 0.4;
-                return await Task.FromResult(randomScore);
+                throw new InvalidOperationException("AI 服務未設定 API Key，無法產生信心度。");
             }
 
             // Key 存在，呼叫 API
@@ -85,11 +84,10 @@ namespace AI.KB.Assistant.Services
         /// </summary>
         public async Task<string> SummarizeAsync(string textToAnalyze)
         {
-            // [V7.6 本地規則] 檢查 API Key
+            // [V20.3] 依需求：若無 API Key，拋出例外
             if (string.IsNullOrWhiteSpace(_apiKey))
             {
-                // Key 為空，使用本地規則 (回傳檔名)
-                return $"[本地摘要] {textToAnalyze}";
+                throw new InvalidOperationException("AI 服務未設定 API Key，無法產生摘要。");
             }
 
             // Key 存在，呼叫 API
@@ -107,11 +105,10 @@ namespace AI.KB.Assistant.Services
         /// </summary>
         public async Task<List<string>> SuggestTagsAsync(string textToAnalyze)
         {
-            // [V7.6 本地規則] 檢查 API Key
+            // [V20.3] 依需求：若無 API Key，拋出例外
             if (string.IsNullOrWhiteSpace(_apiKey))
             {
-                // Key 為空，使用本地規則 (回傳空列表)
-                return new List<string>();
+                throw new InvalidOperationException("AI 服務未設定 API Key，無法產生建議標籤。");
             }
 
             // Key 存在，呼叫 API
@@ -137,11 +134,10 @@ namespace AI.KB.Assistant.Services
         /// </summary>
         public async Task<string> SuggestProjectAsync(string textToAnalyze)
         {
-            // [V10.2 本地規則] 檢查 API Key
+            // [V20.3] 依需求：若無 API Key，拋出例外
             if (string.IsNullOrWhiteSpace(_apiKey))
             {
-                // Key 為空，回傳空字串，通知 MainWindow 改用本地規則 (GuessProjectFromPath)
-                return await Task.FromResult(string.Empty);
+                throw new InvalidOperationException("AI 服務未設定 API Key，無法產生建議專案。");
             }
 
             // Key 存在，呼叫 API
@@ -162,15 +158,15 @@ namespace AI.KB.Assistant.Services
         /// </summary>
         private async Task<string> GenerateTextAsync(string systemPrompt, string userQuery)
         {
-            // [V7.6 修正] 在實際呼叫時再次確認
+            // [V20.3] 在實際呼叫時再次確認 API Key
             if (string.IsNullOrWhiteSpace(_apiKey))
             {
                 // V7.6 修正：從 ConfigService 動態重試
                 UpdateConfig(ConfigService.Cfg);
                 if (string.IsNullOrWhiteSpace(_apiKey))
                 {
-                    // 雖然 SummarizeAsync 已阻擋，但 GenerateTextAsync 內部應再檢查
-                    return "[錯誤: API Key 未設定]";
+                    // [V20.3] 依需求：拋出例外
+                    throw new InvalidOperationException("AI 服務未設定 API Key。");
                 }
             }
 

@@ -38,6 +38,7 @@
             <Setter Property="Margin" Value="10"/>
             <Setter Property="Background" Value="{DynamicResource App.PanelBrush}"/>
             <Setter Property="BorderBrush" Value="{DynamicResource App.BorderBrush}"/>
+            <!-- [V20.3] 錯誤修正：將 "1V" 修正為 "1" -->
             <Setter Property="BorderThickness" Value="1"/>
         </Style>
 
@@ -53,8 +54,6 @@
             <Setter Property="FontSize" Value="14"/>
             <Setter Property="Foreground" Value="{DynamicResource App.TextMutedBrush}"/>
             <Setter Property="TextWrapping" Value="Wrap"/>
-            <!-- V7.35 修正：移除 MinHeight 以容納新按鈕 -->
-            <!-- <Setter Property="MinHeight" Value="40"/> -->
         </Style>
     </Window.Resources>
 
@@ -78,12 +77,26 @@
 
             <!-- 四顆按鈕 -->
             <UniformGrid Grid.Row="0" Columns="2" Rows="2">
-                <!-- 1. 自動分類 -->
+                <!-- 1. 自動分類 (V20.2 修改) -->
                 <Border Style="{StaticResource Card}">
                     <StackPanel>
                         <TextBlock Style="{StaticResource CardTitle}" Text="⚡ 自動分類"/>
-                        <TextBlock Style="{StaticResource CardDesc}" Text="掃描收件夾，建立清單並自動分類搬移。"/>
-                        <Button x:Name="BtnAutoClassify" Content="開始" Style="{StaticResource TonedBtn}" Click="BtnAutoClassify_Click"/>
+                        <TextBlock Style="{StaticResource CardDesc}" MinHeight="40" Text="掃描收件夾，建立清單並自動分類搬移。"/>
+
+                        <!-- [V20.2] 將一個按鈕替換為兩個 -->
+                        <UniformGrid Columns="2" Margin="0,8,0,0">
+                            <Button x:Name="BtnScanShallow" 
+                                    Content="僅分類頂層" 
+                                    Style="{StaticResource TonedBtn}" 
+                                    Margin="0,0,4,0" FontSize="16" Padding="10,8" 
+                                    Click="BtnScanShallow_Click"/>
+                            <Button x:Name="BtnScanRecursive" 
+                                    Content="分類全部(含子資料夾)" 
+                                    Style="{StaticResource TonedBtn}" 
+                                    Margin="4,0,0,0" FontSize="16" Padding="10,8" 
+                                    Click="BtnScanRecursive_Click"/>
+                        </UniformGrid>
+
                     </StackPanel>
                 </Border>
 
@@ -113,7 +126,7 @@
                 <Border Style="{StaticResource Card}">
                     <StackPanel>
                         <TextBlock Style="{StaticResource CardTitle}" Text="🖼 詳細版"/>
-                        <TextBlock Style="{StaticResource CardDesc}" Text="進入完整操作介面 (樹/清單/AI 面板)。"/>
+                        <TextBlock Style="{StaticResource CardDesc}" MinHeight="40" Text="進入完整操作介面 (樹/清單/AI 面板)。"/>
                         <Button Content="進入" Style="{StaticResource TonedBtn}" Click="BtnOpenDetailed_Click"/>
                     </StackPanel>
                 </Border>
@@ -122,14 +135,14 @@
                 <Border Style="{StaticResource Card}">
                     <StackPanel>
                         <TextBlock Style="{StaticResource CardTitle}" Text="⚙ 設定"/>
-                        <TextBlock Style="{StaticResource CardDesc}" Text="路徑 / 黑名單 / 門檻 / 啟動模式。"/>
+                        <TextBlock Style="{StaticResource CardDesc}" MinHeight="40" Text="路徑 / 黑名單 / 門檻 / 啟動模式。"/>
                         <Button Content="開啟設定" Style="{StaticResource TonedBtn}" Click="BtnOpenSettings_Click"/>
                     </StackPanel>
                 </Border>
             </UniformGrid>
 
             <!-- 可收闔日誌 -->
-            <Expander Grid.Row="1" Header="日誌 (Log)" IsExpanded="True"
+            <Expander Grid.Row="1" Header="日誌 (Log)" IsExpanded="False"
                       Margin="10,0,10,0"
                       BorderBrush="{DynamicResource App.BorderBrush}" BorderThickness="0,1,0,0">
                 <TextBox x:Name="TxtStatusLog" IsReadOnly="True" 

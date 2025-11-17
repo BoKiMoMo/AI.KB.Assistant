@@ -1,10 +1,4 @@
-﻿// DbService.cs - 最終完成版 (V15.1)
-// [V15.0] 移除了「反射」載入 (Type.GetType)，改為「硬編碼」'using Microsoft.Data.Sqlite'。
-// [V15.1 修正] 修正 V15.0 (image_24204c.jpg) 中的兩個錯誤：
-// 1. [Fix 1] 修正 ExecuteNonQueryAsync (Line 606) 的 catch 區塊，使其能捕捉 'SqliteException' (Duplicate Column)。
-// 2. [Fix 2] 修正 Row 類別 (Line 655)，使其「具現化」(materialize) 資料，而不是儲存已關閉的 DataReader (Connection Closed)。
-
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Globalization;
@@ -22,7 +16,10 @@ using Microsoft.Data.Sqlite; // (V15.0) 硬編碼 using
 namespace AI.KB.Assistant.Services
 {
     /// <summary>
-    /// DbService (V15.1)
+    /// V20.0 (最終修復版)
+    /// 1. (V15.1) 移除了「反射」載入，改為「硬編碼」'using Microsoft.Data.Sqlite'。
+    /// 2. (V15.1) 修正 Row 類別 [cite:"Services/DbService.cs (V20.0 最終版) (line 651)"]，使其「具現化」(materialize) 資料，解決 "Connection Closed" 錯誤。
+    /// 3. [V19.1] 修正 `Row.GetDateTime` [cite:"Services/DbService.cs (V20.0 最終版) (line 661)"] (CS8602 [cite:"image_42b958.png"] 警告)，將 `v is DBNull` [cite:"Services/DbService.cs (V20.0 最終版) (line 661)"] 改為 `v is null` [cite:"Services/DbService.cs (V20.0 最終版) (line 661) (modified)"]。
     /// </summary>
     public sealed partial class DbService : IDisposable
     {
@@ -33,7 +30,7 @@ namespace AI.KB.Assistant.Services
         {
             Console.WriteLine("[DB INIT V15.1] DbService constructor started.");
 
-            // (V14.1 註解) App.xaml.cs (V14.1) [cite: `App.xaml.cs (V14.1)`] 已呼叫 v3.x 'SQLitePCL.Batteries.Init()' [cite: `App.xaml.cs (V14.1)` Line 39]。
+            // (V14.1 註解) App.xaml.cs (V14.1) [cite:"App.xaml.cs (V20.0 最終版)"] 已呼叫 v3.x 'SQLitePCL.Batteries.Init()' [cite:"App.xaml.cs (V20.0 最終版) (line 39)"]。
 
             string? pick(string? a, string? b, string fallback)
                 => !string.IsNullOrWhiteSpace(a) ? a : (!string.IsNullOrWhiteSpace(b) ? b : fallback);
@@ -102,7 +99,7 @@ namespace AI.KB.Assistant.Services
             }
             catch (Exception ex)
             {
-                // (V15.0) App.xaml.cs (V14.1) [cite: `App.xaml.cs (V14.1)`] 必須呼叫 'Batteries.Init()' [cite: `App.xaml.cs (V14.1)` Line 39]，否則 'test.Open()' [Line 125] 會在此處失敗
+                // (V15.0) App.xaml.cs (V14.1) [cite:"App.xaml.cs (V20.0 最終版)"] 必須呼叫 'Batteries.Init()' [cite:"App.xaml.cs (V20.0 最終版) (line 39)"]，否則 'test.Open()' [cite:"Services/DbService.cs (V20.0 最終版) (line 125)"] 會在此處失敗
                 Console.WriteLine($"[DB INIT V15.1] SQLite activation failed: {ex.Message}");
                 App.LogCrash("DbService.TryCreateSqlite", ex);
                 return null;
@@ -578,8 +575,7 @@ ON CONFLICT(Id) DO UPDATE SET
                             return cmd.ExecuteNonQuery();
                         }
                         // [V15.1 修正 Fix 1] 
-                        // 1. 移除 V15.0 (Line 606) 錯誤的 'TargetInvocationException'
-                        // 2. 改為捕捉 'SqliteException' (V15.0 'image_24204c.jpg' [cite: `image_24204c.jpg`] 顯示的錯誤)
+                        // 改為捕捉 'SqliteException' (V15.0 'image_24204c.jpg' [cite:"image_e16a88.jpg"] 顯示的錯誤)
                         catch (SqliteException ex)
                         {
                             var msg = ex.Message?.ToLowerInvariant() ?? "";
@@ -623,7 +619,7 @@ ON CONFLICT(Id) DO UPDATE SET
                             while (reader.Read())
                             {
                                 // [V15.1 修正 Fix 2] 
-                                // V15.0 (Line 635) 的 'new Row(reader)' 存在 "Connection Closed" 錯誤
+                                // V15.0 的 'new Row(reader)' 存在 "Connection Closed" 錯誤
                                 // V15.1 改為呼叫 V15.1 新的「具現化」建構函式
                                 list.Add(new Row(reader));
                             }
@@ -635,7 +631,7 @@ ON CONFLICT(Id) DO UPDATE SET
             }
 
             // [V15.1 修正 Fix 2]
-            // V15.0 (Line 655) 的 Row 類別存在 "Connection Closed" 錯誤。
+            // V15.0 的 Row 類別存在 "Connection Closed" 錯誤。
             // V15.1 Row 類別改為在建構函式中「具現化」(Materialize) 資料，
             // 將資料從 reader 複製到 Dictionary，而不是儲存 reader 本身。
             private sealed class Row
@@ -658,7 +654,9 @@ ON CONFLICT(Id) DO UPDATE SET
                 public string? GetString(string name) => TryGet(name, v => v?.ToString());
 
                 public DateTime? GetDateTime(string name)
+                    // [V19.1 CS8602 修正] v is DBNull ? -> v is null ?
                     => TryGet(name, v => v is null ? (DateTime?)null : DateTime.Parse(v.ToString()!, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind));
+
                 private T? TryGet<T>(string name, Func<object?, T?> cast)
                 {
                     try

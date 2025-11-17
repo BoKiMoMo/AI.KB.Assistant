@@ -1,0 +1,69 @@
+﻿<Window x:Class="AI.KB.Assistant.Views.TagPickerWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="標籤選取器"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        ShowInTaskbar="False"
+        Width="450" Height="600"
+        Background="{DynamicResource App.BackgroundBrush}"
+        Foreground="{DynamicResource App.TextBrush}">
+
+    <Window.Resources>
+        <Style TargetType="Button">
+            <Setter Property="Padding" Value="10,5"/>
+            <Setter Property="Margin" Value="4"/>
+            <Setter Property="MinWidth" Value="75"/>
+            <Setter Property="Background" Value="{DynamicResource App.PanelBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource App.BorderBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource App.TextBrush}"/>
+        </Style>
+        <Style TargetType="TextBox">
+            <Setter Property="Background" Value="{DynamicResource App.BackgroundBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource App.BorderBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource App.TextBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="8,4"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
+        <Style x:Key="TagCheckBox" TargetType="CheckBox">
+            <Setter Property="Margin" Value="5,5,10,5"/>
+            <Setter Property="Padding" Value="4,2"/>
+            <Setter Property="Background" Value="{DynamicResource App.PanelBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource App.TextBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource App.BorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+        </Style>
+    </Window.Resources>
+
+    <DockPanel Margin="10">
+
+        <!-- 底部按鈕 -->
+        <Border DockPanel.Dock="Bottom" Padding="0,10,0,0" 
+                BorderBrush="{DynamicResource App.BorderBrush}" BorderThickness="0,1,0,0">
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button x:Name="BtnOk" Content="確定" IsDefault="True" Click="BtnOk_Click"/>
+                <Button x:Name="BtnCancel" Content="取消" IsCancel="True" Click="BtnCancel_Click"/>
+            </StackPanel>
+        </Border>
+
+        <!-- 頂部新增區域 -->
+        <Border DockPanel.Dock="Top" Padding="0,0,0,10" 
+                BorderBrush="{DynamicResource App.BorderBrush}" BorderThickness="0,0,0,1">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBox x:Name="TxtNewTag" Grid.Column="0" ToolTip="輸入新標籤名稱..."/>
+                <Button x:Name="BtnAddNewTag" Grid.Column="1" Content="＋ 新增標籤" Click="BtnAddNewTag_Click"/>
+            </Grid>
+        </Border>
+
+        <!-- 中間標籤列表 -->
+        <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="0,10,0,0">
+            <WrapPanel x:Name="TagPanel"/>
+        </ScrollViewer>
+
+    </DockPanel>
+</Window>

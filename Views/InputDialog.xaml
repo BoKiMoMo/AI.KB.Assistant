@@ -1,0 +1,36 @@
+﻿<Window x:Class="AI.KB.Assistant.Views.InputDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Input" Width="400" SizeToContent="Height"
+        WindowStartupLocation="CenterOwner"
+        WindowStyle="ToolWindow"
+        Background="{DynamicResource App.PanelBrush}"
+        Foreground="{DynamicResource App.TextBrush}">
+    <StackPanel Margin="15">
+
+        <!-- [V20.0] 修正 CS0103 [cite:"image_78b064.png"]：
+             確保 x:Name="PromptLabel" [cite:"Views/InputDialog.xaml (V20.0 完整版) (line 19)"] 存在 -->
+        <TextBlock x:Name="PromptLabel" 
+                   Text="Enter a value:" 
+                   Margin="0,0,0,10"
+                   TextWrapping="Wrap"/>
+
+        <!-- [V20.0] 修正 CS0103 [cite:"image_78b064.png"]：
+             確保 x:Name="InputTextBox" [cite:"Views/InputDialog.xaml (V20.0 完整版) (line 23)"] 存在 -->
+        <TextBox x:Name="InputTextBox" 
+                 Padding="5"
+                 BorderBrush="{DynamicResource App.BorderBrush}"
+                 Background="{DynamicResource App.BackgroundBrush}"
+                 Foreground="{DynamicResource App.TextBrush}"/>
+
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,15,0,0">
+            <!-- [V20.0] 修正 CS1061 [cite:"image_78b064.png"]：
+                 確保 Click="OkButton_Click" [cite:"Views/InputDialog.xaml (V20.0 完整版) (line 30)"] 存在 -->
+            <Button x:Name="BtnOk" Content="確定" IsDefault="True" MinWidth="80" Margin="0,0,10,0" Click="OkButton_Click"/>
+
+            <!-- [V20.0] 修正 CS1061 [cite:"image_78b064.png"]：
+                 確保 Click="CancelButton_Click" [cite:"Views/InputDialog.xaml (V20.0 完整版) (line 31)"] 存在 -->
+            <Button x:Name="BtnCancel" Content="取消" IsCancel="True" MinWidth="80" Click="CancelButton_Click"/>
+        </StackPanel>
+    </StackPanel>
+</Window>

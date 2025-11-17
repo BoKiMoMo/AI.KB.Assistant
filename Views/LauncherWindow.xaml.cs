@@ -10,6 +10,13 @@ using System.Diagnostics;
 
 namespace AI.KB.Assistant.Views
 {
+    /// <summary>
+    /// V20.2 (手動掃描模式版)
+    /// 1. [V19.1] 整合「啟動防呆」邏輯 (禁用「開始」按鈕)。
+    /// 2. [V20.2] 'BtnAutoClassify' 替換為 'BtnScanShallow' 和 'BtnScanRecursive'。
+    /// 3. [V20.2] 'RunAutoClassifyAsync' 現在接受 'ScanMode' 參數。
+    /// 4. [V20.2] 'RunAutoClassifyAsync' 現在呼叫 'HotFolder.ScanAsync(scanMode)'。
+    /// </summary>
     public partial class LauncherWindow : Window
     {
         // V7.34 UI 串接：取得服務
@@ -22,12 +29,30 @@ namespace AI.KB.Assistant.Views
         public LauncherWindow()
         {
             InitializeComponent();
-            PopulateFooterPaths();
+            // [V19.1 防呆修復] 檢查路徑並設定按鈕
+            bool isPathValid = PopulateFooterPaths();
+
+            // [V20.2] 更新 IsEnabled 邏輯
+            BtnScanShallow.IsEnabled = isPathValid;
+            BtnScanRecursive.IsEnabled = isPathValid;
         }
 
-        private async Task RunAutoClassifyAsync()
+        /// <summary>
+        /// [V20.2] 自動分類核心邏輯，現在接受掃描模式
+        /// </summary>
+        private async Task RunAutoClassifyAsync(SearchOption scanMode)
         {
             Log("簡易模式 (Simple Mode) 啟動...");
+
+            // [V19.1 防呆修復] 執行前再次檢查路徑
+            var cfg = ConfigService.Cfg;
+            bool isPathsValid = !string.IsNullOrWhiteSpace(cfg.App?.RootDir) && !string.IsNullOrWhiteSpace(cfg.Import?.HotFolder);
+            if (!isPathsValid)
+            {
+                Log("錯誤：無法開始自動分類。根目錄 (RootDir) 或 收件夾 (HotFolder) 尚未設定。");
+                MessageBox.Show(this, "根目錄 (RootDir) 或 收件夾 (HotFolder) 尚未設定。\n\n請點擊「設定」按鈕完成設定。", "路徑未設定", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
 
             if (Db == null || Router == null || HotFolder == null)
             {
@@ -38,8 +63,9 @@ namespace AI.KB.Assistant.Views
 
             try
             {
-                Log("步驟 1/3：正在同步收件夾 (HotFolder)...");
-                await Task.Run(() => HotFolder.TriggerManualSync());
+                Log($"步驟 1/3：正在同步收件夾 (HotFolder) - 模式: {scanMode}...");
+                // [V20.2] 呼叫參數化的 ScanAsync
+                await Task.Run(() => HotFolder.ScanAsync(scanMode));
                 Log("同步收件夾完畢。");
 
                 Log("步驟 2/3：正在讀取資料庫...");
@@ -109,12 +135,15 @@ namespace AI.KB.Assistant.Views
             System.Diagnostics.Debug.WriteLine($"[Launcher] {message}");
         }
 
-        private void PopulateFooterPaths()
+        /// <summary>
+        /// [V19.1 防呆修復] 修改方法，使其回傳路徑是否有效
+        /// </summary>
+        private bool PopulateFooterPaths()
         {
             try
             {
                 var cfg = ConfigService.Cfg;
-                if (cfg == null) return;
+                if (cfg == null) return false;
 
                 Func<string, string> Truncate = (path) =>
                 {
@@ -127,39 +156,79 @@ namespace AI.KB.Assistant.Views
                 if (TxtInbox != null) TxtInbox.Text = Truncate(cfg.Import?.HotFolder ?? "");
                 if (TxtDesktop != null) TxtDesktop.Text = Truncate(Environment.GetFolderPath(Environment.SpecialFolder.Desktop));
                 if (TxtDb != null) TxtDb.Text = Truncate(cfg.Db?.DbPath ?? "");
+
+                // [V19.1 防呆修復] 驗證路徑
+                bool isValid = !string.IsNullOrWhiteSpace(cfg.App?.RootDir) && !string.IsNullOrWhiteSpace(cfg.Import?.HotFolder);
+                if (!isValid)
+                {
+                    Log("警告：根目錄 (RootDir) 或 收件夾 (HotFolder) 尚未在「設定」中指定。");
+                }
+                return isValid;
             }
             catch (Exception ex)
             {
                 Log($"載入底部路徑失敗: {ex.Message}");
             }
+            return false;
         }
 
         // --- 按鈕點擊事件 ---
 
-        private async void BtnAutoClassify_Click(object sender, RoutedEventArgs e)
+        /// <summary>
+        /// [V20.2] 輔助方法：設定兩個掃描按鈕的忙碌狀態
+        /// </summary>
+        private async Task SetButtonsBusy(bool isBusy)
         {
-            Log("手動觸發自動分類...");
-            Button? btn = sender as Button;
-
-            if (btn != null)
+            if (isBusy)
             {
-                btn.IsEnabled = false;
-                btn.Content = "處理中...";
+                BtnScanShallow.IsEnabled = false;
+                BtnScanRecursive.IsEnabled = false;
+                BtnScanRecursive.Content = "處理中...";
             }
+            else
+            {
+                // [V20.2] 延遲 0.5 秒，避免 UI 閃爍
+                await Task.Delay(500);
+                BtnScanShallow.IsEnabled = true;
+                BtnScanRecursive.IsEnabled = true;
+                BtnScanRecursive.Content = "掃描子資料夾";
+            }
+        }
 
+        /// <summary>
+        /// [V20.2] 掃描第一層
+        /// </summary>
+        private async void BtnScanShallow_Click(object sender, RoutedEventArgs e)
+        {
+            Log("手動觸發自動分類 (僅第一層)...");
+            await SetButtonsBusy(true);
             try
             {
-                await RunAutoClassifyAsync();
+                await RunAutoClassifyAsync(SearchOption.TopDirectoryOnly);
             }
             finally
             {
-                if (btn != null)
-                {
-                    btn.IsEnabled = true;
-                    btn.Content = "開始";
-                }
+                await SetButtonsBusy(false);
             }
         }
+
+        /// <summary>
+        /// [V20.2] 掃描子資料夾 (遞迴)
+        /// </summary>
+        private async void BtnScanRecursive_Click(object sender, RoutedEventArgs e)
+        {
+            Log("手動觸發自動分類 (含子資料夾)...");
+            await SetButtonsBusy(true);
+            try
+            {
+                await RunAutoClassifyAsync(SearchOption.AllDirectories);
+            }
+            finally
+            {
+                await SetButtonsBusy(false);
+            }
+        }
+
 
         private void BtnOpenInbox_Click(object sender, RoutedEventArgs e)
         {
@@ -200,7 +269,13 @@ namespace AI.KB.Assistant.Views
         {
             var w = new SettingsWindow { Owner = this, WindowStartupLocation = WindowStartupLocation.CenterOwner };
             w.ShowDialog();
-            PopulateFooterPaths();
+
+            // [V19.1 防呆修復] 儲存設定後，重新驗證路徑並更新按鈕狀態
+            bool isPathValid = PopulateFooterPaths();
+
+            // [V20.2] 更新 IsEnabled 邏輯
+            BtnScanShallow.IsEnabled = isPathValid;
+            BtnScanRecursive.IsEnabled = isPathValid;
         }
 
         // V7.35 新功能 (選項 B)：清除收件夾中已分類的實體檔案
