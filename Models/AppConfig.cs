@@ -10,6 +10,7 @@ namespace AI.KB.Assistant.Models
     // 1. (V9.7) 使用 string OverwritePolicy 和 JSON Clone()
     // 2. [V13.0] 移除 ShowDesktopInTree/ShowDrivesInTree
     // 3. [V13.0] 新增 TreeViewRootPaths (自訂路徑清單)
+    // 4. [V20.4] 優化 3：新增 Prompts 區塊
 
     public class AppConfig
     {
@@ -27,6 +28,10 @@ namespace AI.KB.Assistant.Models
 
         [JsonPropertyName("openAI")]
         public OpenAISection OpenAI { get; set; } = new();
+
+        // [V20.4] 優化 3：新增 AI 提示詞設定
+        [JsonPropertyName("prompts")]
+        public PromptConfig Prompts { get; set; } = new();
 
         /// <summary>
         /// (V9.7) 使用 JSON 序列化來深層複製
@@ -97,6 +102,11 @@ namespace AI.KB.Assistant.Models
 
         [JsonPropertyName("blacklistFolderNames")]
         public List<string> BlacklistFolderNames { get; set; } = new();
+
+        // [V20.4] 優化 (來自 HotFolderService 的 V20.2 邏輯)
+        // 雖然我們移除了 CS1061 錯誤，但設定檔中應保留此欄位供未來使用
+        [JsonPropertyName("recursiveScan")]
+        public bool RecursiveScan { get; set; } = true;
     }
 
     public class RoutingSection
@@ -152,5 +162,23 @@ namespace AI.KB.Assistant.Models
 
         [JsonPropertyName("model")]
         public string Model { get; set; } = "gpt-4o-mini";
+    }
+
+    /// <summary>
+    /// [V20.4] 優化 3：AI 提示詞 (Prompts) 設定模型
+    /// </summary>
+    public class PromptConfig
+    {
+        [JsonPropertyName("analyzeConfidence")]
+        public string AnalyzeConfidence { get; set; } = "";
+
+        [JsonPropertyName("summarize")]
+        public string Summarize { get; set; } = "";
+
+        [JsonPropertyName("suggestTags")]
+        public string SuggestTags { get; set; } = "";
+
+        [JsonPropertyName("suggestProject")]
+        public string SuggestProject { get; set; } = "";
     }
 }

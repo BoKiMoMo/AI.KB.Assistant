@@ -1,0 +1,268 @@
+{
+	"app": {
+		"dbPath": "data.db",
+		"rootDir": "",
+		"projectLock": "",
+		"theme": "Light",
+		"launchMode": "Detailed",
+		"treeViewRootPaths": []
+	},
+	"openAI": {
+		"apiKey": "",
+		"model": "gpt-4o-mini"
+	},
+	"import": {
+		"autoOnDrop": true,
+		"includeSubdirectories": true,
+		"hotFolderPath": "",
+		"enableHotFolder": false,
+		"blacklistFolderNames": [
+			".vs",
+			"bin",
+			"obj",
+			"packages",
+			"_DoNotMove",
+			"_blacklist"
+		],
+		"blacklistExts": [
+			"tmp",
+			"bak",
+			"dmg",
+			"iso"
+		],
+		"moveMode": "copy",
+		"overwritePolicy": "Rename"
+	},
+	"routing": {
+		"useYear": true,
+		"useMonth": true,
+		"useProject": true,
+		"useCategory": false,
+		"folderOrder": [
+			"year",
+			"month",
+			"project",
+			"category"
+		],
+		"useType": "rule+llm",
+		"lowConfidenceFolderName": "_pending",
+		"threshold": 0.75,
+		"autoFolderName": "自整理",
+		"extensionGroups": {
+			"圖片影像": [
+				"png",
+				"jpg",
+				"jpeg",
+				"gif",
+				"bmp",
+				"tiff",
+				"heic",
+				"webp",
+				"avif",
+				"raw",
+				"cr2",
+				"nef",
+				"dng"
+			],
+			"向量繪圖": [
+				"ai",
+				"eps",
+				"svg"
+			],
+			"設計檔案": [
+				"psd",
+				"psb",
+				"xd",
+				"fig",
+				"sketch",
+				"ind",
+				"indd",
+				"idml",
+				"afphoto",
+				"afdesign"
+			],
+			"3D模型": [
+				"obj",
+				"fbx",
+				"blend",
+				"stl",
+				"dae",
+				"3ds",
+				"max",
+				"c4d",
+				"glb",
+				"gltf"
+			],
+			"字型檔案": [
+				"ttf",
+				"otf",
+				"woff",
+				"woff2",
+				"eot",
+				"font"
+			],
+			"影片檔案": [
+				"mp4",
+				"mov",
+				"avi",
+				"mkv",
+				"webm",
+				"m4v",
+				"wmv",
+				"flv",
+				"mpg",
+				"mpeg",
+				"3gp",
+				"prores"
+			],
+			"音訊檔案": [
+				"mp3",
+				"wav",
+				"aac",
+				"m4a",
+				"flac",
+				"ogg",
+				"wma",
+				"aiff",
+				"opus"
+			],
+			"字幕檔案": [
+				"srt",
+				"ass",
+				"vtt",
+				"sub"
+			],
+			"文書文件": [
+				"pdf",
+				"doc",
+				"docx",
+				"xls",
+				"xlsx",
+				"ppt",
+				"pptx",
+				"odt",
+				"ods",
+				"odp",
+				"rtf"
+			],
+			"筆記": [
+				"md",
+				"markdown",
+				"txt",
+				"log",
+				"old",
+				"unknown"
+			],
+			"數據資料": [
+				"csv",
+				"json",
+				"xml",
+				"yaml",
+				"yml",
+				"parquet",
+				"feather",
+				"npy",
+				"h5",
+				"sav",
+				"mat",
+				"db",
+				"sqlite",
+				"sql",
+				"xmind"
+			],
+			"程式原始碼": [
+				"cs",
+				"py",
+				"js",
+				"ts",
+				"jsx",
+				"tsx",
+				"vue",
+				"java",
+				"kt",
+				"go",
+				"rs",
+				"cpp",
+				"c",
+				"h",
+				"swift",
+				"php",
+				"rb",
+				"dart",
+				"r",
+				"lua",
+				"pl",
+				"sh",
+				"ps1",
+				"bat",
+				"cmd",
+				"html",
+				"css",
+				"scss"
+			],
+			"專案檔案": [
+				"prproj",
+				"aep",
+				"aepx",
+				"mogrt",
+				"drp",
+				"drproj",
+				"veg",
+				"imovieproj",
+				"resolve"
+			],
+			"建置檔案": [
+				"dockerfile",
+				"makefile",
+				"gradle",
+				"cmake",
+				"sln",
+				"csproj",
+				"vcxproj",
+				"xcodeproj",
+				"pbxproj"
+			],
+			"套件設定": [
+				"npmrc",
+				"package.json",
+				"package-lock.json",
+				"yarn.lock",
+				"pnpm-lock.yaml",
+				"requirements.txt",
+				"pipfile",
+				"poetry.lock",
+				"gemfile",
+				"go.mod",
+				"go.sum"
+			],
+			"設定檔案": [
+				"env",
+				"config",
+				"cfg",
+				"ini",
+				"toml",
+				"jsonc",
+				"plist"
+			],
+			"壓縮封存": [
+				"zip",
+				"rar",
+				"7z",
+				"tar",
+				"gz",
+				"bz2"
+			],
+			"執行檔案": [
+				"exe",
+				"dll",
+				"app",
+				"pkg",
+				"deb",
+				"rpm",
+				"bin",
+				"run"
+			],
+			"其他": []
+		}
+	}
+}

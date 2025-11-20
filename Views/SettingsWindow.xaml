@@ -1,7 +1,9 @@
 ﻿<Window x:Class="AI.KB.Assistant.Views.SettingsWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="設定 - AI.KB Assistant" Width="1000" Height="740"
+        Title="設定 - AIKA"
+        Icon="/石頭的LOGO_1.png"
+        Width="1000" Height="740"
         WindowStartupLocation="CenterOwner" ResizeMode="CanResize">
     <Grid>
         <Grid.RowDefinitions>
@@ -70,12 +72,10 @@
                         </StackPanel>
                         <TextBlock Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" Margin="8,4,0,0" Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
                        Text="選擇 App 啟動時要進入的介面。"/>
-
-                        <!-- [V13.0 移除] 移除 V12.0 的檔案樹勾選框 -->
                     </Grid>
                 </GroupBox>
 
-                <!-- [V13.0 新增] 檔案樹自訂根目錄 -->
+                <!-- 檔案樹自訂根目錄 -->
                 <GroupBox Header="檔案樹自訂根目錄" Margin="0,12,0,0">
                     <Grid Margin="10">
                         <Grid.ColumnDefinitions>

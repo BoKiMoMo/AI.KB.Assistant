@@ -11,10 +11,11 @@ using static AI.KB.Assistant.Services.IntakeService;
 namespace AI.KB.Assistant.Services
 {
     /// <summary>
-    /// V20.2 (手動掃描模式版)
-    /// 1. [V20.1] 'ScanAsync' 傳遞 'FileIntakeInfo' (包含 'isBlacklisted' 旗標)。
-    /// 2. [V20.2] 'ScanAsync' 現在接受 'overrideMode' 參數，允許 UI 決定掃描深度。
-    /// 3. [V20.2] 背景計時器 'Timer' 預設使用 'null' (即 AllDirectories)，維持遞迴掃描。
+    /// V20.6 (掃描範圍修正版)
+    /// 1. [V20.3] 'ScanAsync' 接受 'overrideMode' 參數。
+    /// 2. [V20.6] 'ScanAsync' 新增 'scanOnlyHotFolder' 參數。
+    /// 3. [V20.6] 'ScanAsync' (手動) 現在只會掃描 HotFolder。
+    /// 4. [V20.6] 'Timer' (背景) 仍會掃描所有路徑 (scanOnlyHotFolder: false)。
     /// </summary>
     public sealed class HotFolderService : IDisposable
     {
@@ -27,6 +28,7 @@ namespace AI.KB.Assistant.Services
         public event Action? FilesChanged;
 
         private List<string> _scanPaths = new List<string>();
+        private string _hotFolderPath = string.Empty; // [V20.6] 快取 HotFolder 路徑
         private HashSet<string> _blacklistExts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private HashSet<string> _blacklistFolders = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
@@ -43,19 +45,18 @@ namespace AI.KB.Assistant.Services
         {
             if (_timer == null)
             {
-                // [V20.2] 呼叫 ScanAsync() 時不帶參數 (null)，使其使用預設的遞迴模式
-                _timer = new Timer(async (_) => await ScanAsync(), null, 2000, 2000);
+                // [V20.6] 背景 Timer 應掃描所有路徑 (scanOnlyHotFolder: false)
+                _timer = new Timer(async (_) => await ScanAsync(null, false), null, 2000, 2000);
             }
         }
 
         /// <summary>
         /// (V20.0 舊版) 觸發手動同步。
-        /// [V20.2] 此方法現已過時，UI 應改為直接呼叫 ScanAsync(mode)。
-        /// 為了相容性，保留此方法並使其預設為遞迴掃描。
+        /// [V20.6] UI 應改為直接呼叫 ScanAsync(mode, true)。
         /// </summary>
         public async Task TriggerManualSync()
         {
-            await ScanAsync(SearchOption.AllDirectories);
+            await ScanAsync(SearchOption.AllDirectories, true);
         }
 
 
@@ -77,7 +78,9 @@ namespace AI.KB.Assistant.Services
 
                 if (!string.IsNullOrWhiteSpace(cfg.Import.HotFolder))
                 {
-                    paths.Add(cfg.Import.HotFolder.Trim());
+                    var hotPath = cfg.Import.HotFolder.Trim();
+                    paths.Add(hotPath);
+                    _hotFolderPath = hotPath; // [V20.6] 快取
                 }
                 if (cfg.App?.TreeViewRootPaths != null)
                 {
@@ -100,23 +103,38 @@ namespace AI.KB.Assistant.Services
         }
 
         /// <summary>
-        /// [V20.2] 執行掃描
+        /// [V20.6] 執行掃描
         /// </summary>
         /// <param name="overrideMode">如果提供 (來自 UI)，則使用此掃描模式。如果為 null (來自 Timer)，則使用預設值。</param>
-        public async Task ScanAsync(SearchOption? overrideMode = null)
+        /// <param name="scanOnlyHotFolder">如果為 true，則忽略 _scanPaths，只掃描 _hotFolderPath。</param>
+        public async Task ScanAsync(SearchOption? overrideMode = null, bool scanOnlyHotFolder = false)
         {
-            List<string> currentScanPaths;
+            List<string> pathsToScan;
             HashSet<string> currentBlacklistExts;
             HashSet<string> currentBlacklistFolders;
+            List<string> managedRoots; // [V20.6] 用於 DB 清理的根路徑
 
             lock (_lock)
             {
-                currentScanPaths = _scanPaths.ToList();
+                // [V20.6] 決定掃描範圍
+                if (scanOnlyHotFolder)
+                {
+                    pathsToScan = new List<string> { _hotFolderPath };
+                    // DB 清理時，也只管理 HotFolder
+                    managedRoots = new List<string> { System.IO.Path.GetFullPath(_hotFolderPath) };
+                }
+                else
+                {
+                    pathsToScan = _scanPaths.ToList();
+                    // DB 清理時，管理所有路徑
+                    managedRoots = _scanPaths.Select(System.IO.Path.GetFullPath).ToList();
+                }
+
                 currentBlacklistExts = _blacklistExts;
                 currentBlacklistFolders = _blacklistFolders;
             }
 
-            if (currentScanPaths.Count == 0)
+            if (pathsToScan.Count == 0 || pathsToScan.All(string.IsNullOrWhiteSpace))
             {
                 return;
             }
@@ -128,15 +146,11 @@ namespace AI.KB.Assistant.Services
 
             try
             {
-                // [V20.2] 
-                // 如果 overrideMode 有值 (來自 UI)，則使用它。
-                // 如果為 null (來自 Timer)，則預設使用 AllDirectories (解開資料夾)。
                 var searchOption = overrideMode ?? SearchOption.AllDirectories;
 
-                // [V20.1] 字典現在儲存 (路徑, 是否為黑名單)
                 var allFilesOnDisk = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
 
-                foreach (var scanPath in currentScanPaths)
+                foreach (var scanPath in pathsToScan)
                 {
                     if (string.IsNullOrWhiteSpace(scanPath) || !Directory.Exists(scanPath))
                     {
@@ -147,9 +161,8 @@ namespace AI.KB.Assistant.Services
                     foreach (var f in Directory.EnumerateFiles(scanPath, "*.*", searchOption))
                     {
                         var fi = new FileInfo(f);
-
-                        // [V20.1] 檢查是否在黑名單中
                         bool isBlacklisted = false;
+
                         if (currentBlacklistExts.Contains(fi.Extension.TrimStart('.')))
                         {
                             isBlacklisted = true;
@@ -166,8 +179,6 @@ namespace AI.KB.Assistant.Services
                             dir = dir.Parent;
                         }
 
-                        // [V20.1] 不再 'continue' (跳過)，
-                        // 而是將 (路徑, isBlacklisted) 存入字典
                         allFilesOnDisk[fi.FullName] = isBlacklisted;
                     }
                 }
@@ -176,7 +187,8 @@ namespace AI.KB.Assistant.Services
                 // 3. 取得資料庫中已存在的所有檔案
                 var allItemsInDb = await _db.QueryAllAsync();
 
-                var managedPathRoots = new HashSet<string>(currentScanPaths.Select(System.IO.Path.GetFullPath), StringComparer.OrdinalIgnoreCase);
+                // [V20.6] 使用 managedRoots
+                var managedPathRoots = new HashSet<string>(managedRoots, StringComparer.OrdinalIgnoreCase);
 
                 var dbFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 var dbItemsInManagedFolders = new List<Item>();
@@ -208,7 +220,6 @@ namespace AI.KB.Assistant.Services
 
 
                 // 4. [Intake] 找出 (磁碟 O, DB X) 的新檔案
-                // [V20.1] 建立新的傳遞模型
                 var newFiles = new List<FileIntakeInfo>();
                 foreach (var (path, isBlacklisted) in allFilesOnDisk)
                 {
@@ -220,7 +231,6 @@ namespace AI.KB.Assistant.Services
 
                 if (newFiles.Count > 0)
                 {
-                    // [V20.1] 呼叫 IntakeService (V20.1) 的新方法
                     await _intake.IntakeFilesAsync(newFiles);
                     dataChanged = true;
                 }
@@ -229,7 +239,6 @@ namespace AI.KB.Assistant.Services
                 var missingIds = new List<string>();
                 foreach (var item in dbItemsInManagedFolders)
                 {
-                    // [V20.1] 也不刪除 "blacklisted" 的紀錄
                     if (string.IsNullOrWhiteSpace(item.Id) ||
                         item.Status == "committed" ||
                         item.Status == "blacklisted")

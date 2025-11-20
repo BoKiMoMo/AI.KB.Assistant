@@ -9,12 +9,9 @@ using AI.KB.Assistant.Common;
 namespace AI.KB.Assistant.Services
 {
     /// <summary>
-    /// V20.0 (最終修復版)
-    /// 1. (V19.1) 整合「首次啟動」[cite:"Services/ConfigService.cs (V20.0 最終版) (line 34)"] 邏輯 (IsNewUserConfig [cite:"Services/ConfigService.cs (V20.0 最終版) (line 34)"]、空白路徑 [cite:"Services/ConfigService.cs (V20.0 最終版) (lines 156, 159)"]、簡易 UI [cite:"Services/ConfigService.cs (V20.0 最終版) (line 162)"])。
-    /// 2. (V20.0) `CreateDefault` [cite:"Services/ConfigService.cs (V20.0 最終版) (line 153)"] 已包含「中文類別」[cite:"Services/ConfigService.cs (V20.0 最終版) (lines 165-212)"] 和「VS 專案黑名單」[cite:"Services/ConfigService.cs (V20.0 最終版) (line 214)"]。
-    /// 3. [V20.0 快取修復] 修正 `Save()` [cite:"Services/ConfigService.cs (V20.0 最終版) (line 90)"]，使其在儲存後更新靜態快取 `Cfg` [cite:"Services/ConfigService.cs (V20.0 最終版) (line 101) (modified)"]。
-    /// 4. [V20.0 黑名單修復] 修正 `CreateDefault()` [cite:"Services/ConfigService.cs (V20.0 最終版) (line 153)"]，將 `MapV76ToV734` [cite:"Services/ConfigService.cs (V20.0 最終版) (line 228) (modified)"] 改為 `MapV734ToV76` [cite:"Services/ConfigService.cs (V20.0 最終版) (line 228) (modified)"]。
-    /// 5. [V20.0 黑名單修復] 修正 `Load()` [cite:"Services/ConfigService.cs (V20.0 最終版) (line 55)"]，將 `MapV76ToV734` [cite:"Services/ConfigService.cs (V20.0 最終版) (line 86) (modified)"] 移至 `if (File.Exists)` [cite:"Services/ConfigService.cs (V20.0 最終版) (line 60)"] 區塊中。
+    /// V20.4 (優化版)
+    /// 1. [V20.0] 修正 V19/V20 的所有啟動與黑名單錯誤。
+    /// 2. [V20.4] 優化 3：`CreateDefault` 現在會填入預設的 AI 提示詞 (Prompts)。
     /// </summary>
     public static class ConfigService
     {
@@ -24,8 +21,8 @@ namespace AI.KB.Assistant.Services
 
         /// <summary>
         /// [V19.1 首次啟動修復] 
-        /// 旗標：指示 `CreateDefault()` [cite:"Services/ConfigService.cs (V20.0 最終版) (line 153)"] 是否剛被呼叫。
-        /// `App.xaml.cs` [cite:"App.xaml.cs (V20.0 最終版)"] 將使用此旗標來決定是否顯示「歡迎」訊息。
+        /// 旗標：指示 `CreateDefault()` 是否剛被呼叫。
+        /// `App.xaml.cs` 將使用此旗標來決定是否顯示「歡迎」訊息。
         /// </summary>
         public static bool IsNewUserConfig { get; private set; } = false;
 
@@ -87,8 +84,17 @@ namespace AI.KB.Assistant.Services
                 Save(cfg); // 儲存預設值
             }
 
+            // [V20.4] 檢查：如果舊設定檔沒有 Prompts，補上預設值
+            if (cfg.Prompts == null || string.IsNullOrWhiteSpace(cfg.Prompts.AnalyzeConfidence))
+            {
+                cfg.Prompts = GetDefaultPrompts();
+                // 注意：這裡不設定 IsNewUserConfig，但我們儲存以確保檔案是最新的
+                Save(cfg);
+            }
+
+
             // [V20.0 黑名單修復] 
-            // 移除第 86 行 [cite:"Services/ConfigService.cs (V20.0 最終版) (line 86)"] 的 MapV76ToV734(cfg) 呼叫
+            // 移除第 86 行的 MapV76ToV734(cfg) 呼叫
             // MapV76ToV734(cfg);
 
             Cfg = cfg;
@@ -111,11 +117,11 @@ namespace AI.KB.Assistant.Services
 
                 // [V20.0 快取修復] 
                 // 儲存後，必須手動更新靜態快取 (Cfg) 並觸發事件
-                // 以解決「設定頁面儲存後再開啟內容為空」[cite:"設定頁面，設定路徑儲存後再開啟內容為空。"] 的 BUG
+                // 以解決「設定頁面儲存後再開啟內容為空」 的 BUG
                 Cfg = cfg;
                 ConfigChanged?.Invoke(Cfg);
 
-                // [V19.1 啟動修復] 移除 Load();，避免 IsNewUserConfig [cite:"Services/ConfigService.cs (V20.0 最終版) (line 34)"] 被重置
+                // [V19.1 啟動修復] 移除 Load();，避免 IsNewUserConfig 被重置
                 // Load(); 
                 return true;
             }
@@ -184,6 +190,33 @@ namespace AI.KB.Assistant.Services
         }
 
         /// <summary>
+        /// [V20.4] 優化 3：取得預設的 AI 提示詞
+        /// </summary>
+        private static PromptConfig GetDefaultPrompts()
+        {
+            return new PromptConfig
+            {
+                AnalyzeConfidence = "您是一個文件分類信心度分析師。" +
+                                    "請分析使用者提供的檔名。" +
+                                    "您**必須**只回傳一個介於 0.0 到 1.0 之間的數字 (JSON 格式的數字)，" +
+                                    "代表您有多大的信心能正確分類此檔案。範例：0.85",
+
+                Summarize = "您是一個專業的檔案摘要器。" +
+                            "請根據使用者提供的文字 (通常是檔名或路徑)，用繁體中文產生一句話的簡潔摘要。",
+
+                SuggestTags = "您是一個檔案標籤專家。" +
+                              "請根據使用者提供的文字 (通常是檔名)，" +
+                              "產生 3 到 5 個最相關的繁體中文標籤。" +
+                              "請只回傳標籤本身，並用逗號 (,) 分隔。範例: '報告,財務,2025,Q3'",
+
+                SuggestProject = "您是一個專業的檔案分類師。" +
+                                 "請根據使用者提供的檔名或路徑，建議一個最適合的「專案名稱」。" +
+                                 "**必須**只回傳專案名稱本身 (建議使用 英文/數字/底線)，不要包含任何解釋。" +
+                                 "範例：'2025_Q3_Marketing' 或 'Project_Alpha'"
+            };
+        }
+
+        /// <summary>
         /// [V20.0 最終修復版] 建立預設設定檔
         /// </summary>
         private static AppConfig CreateDefault()
@@ -191,16 +224,16 @@ namespace AI.KB.Assistant.Services
             var cfg = new AppConfig();
 
             // [V19.1 首次啟動修復] 
-            // 預設路徑必須為空 [cite:"Services/ConfigService.cs (V20.0 最終版) (lines 156, 159)"]，以觸發 `App.xaml.cs` [cite:"App.xaml.cs (V20.0 最終版)"] 的防呆
+            // 預設路徑必須為空，以觸發 `App.xaml.cs` 的防呆
             cfg.App.RootDir = "";
             cfg.App.DbPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "AI.KB.Assistant", "ai_kb.db");
             cfg.Import.HotFolder = "";
 
             // [V19.1 首次啟動修復] 
-            // 預設啟動模式為 "Simple" [cite:"Services/ConfigService.cs (V20.0 最終版) (line 162)"]
+            // 預設啟動模式為 "Simple"
             cfg.App.LaunchMode = "Simple";
 
-            // [V20.0] 完備的中文類別 [cite:"Services/ConfigService.cs (V20.0 最終版) (lines 165-212)"]
+            // [V20.0] 完備的中文類別
             cfg.Routing.ExtensionGroups = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase)
             {
                 // 視覺
@@ -238,7 +271,7 @@ namespace AI.KB.Assistant.Services
             cfg.Routing.FolderOrder = new List<string> { "year", "month", "project", "category" };
 
             // [V20.0 C-2 黑名單 BUG 修復]
-            // 首次啟動時，自動加入 VS 專案黑名單 [cite:"Services/ConfigService.cs (V20.0 最終版) (line 214)"]
+            // 首次啟動時，自動加入 VS 專案黑名單
             cfg.Routing.BlacklistFolderNames = new List<string>
             {
                 ".vs",
@@ -251,9 +284,12 @@ namespace AI.KB.Assistant.Services
 
             cfg.Routing.BlacklistExts = new List<string> { "tmp", "bak", "dmg", "iso" };
 
+            // [V20.4] 優化 3：填入預設提示詞
+            cfg.Prompts = GetDefaultPrompts();
+
             // [V20.0 黑名單修復] 
-            // 呼叫 `MapV734ToV76` [cite:"Services/ConfigService.cs (V20.0 最終版) (line 143)"] (寫入)，
-            // 而不是 `MapV76ToV734` [cite:"Services/ConfigService.cs (V20.0 最終版) (line 127)"] (讀取)
+            // 呼叫 `MapV734ToV76` (寫入)，
+            // 而不是 `MapV76ToV734` (讀取)
             MapV734ToV76(cfg);
 
             return cfg;

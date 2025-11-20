@@ -2,15 +2,19 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="clr-namespace:AI.KB.Assistant.Views"
-        Title="AI.KB Assistant (V20.3)"
+        
+        xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
+        
+        Title="AIKA"
+        Icon="/石頭的LOGO_1.png"
         WindowStartupLocation="CenterScreen"
         WindowState="Maximized" 
         
         Background="{DynamicResource App.BackgroundBrush}"
         Foreground="{DynamicResource App.TextBrush}">
 
-    <!-- ... (省略未變更的 Resources) ... -->
     <Window.Resources>
+        <!-- 共用樣式 -->
         <Style x:Key="ToolbarBtn" TargetType="Control">
             <Setter Property="Padding" Value="8,4"/>
             <Setter Property="Margin" Value="4,2"/>
@@ -108,23 +112,28 @@
                 </Setter.Value>
             </Setter>
         </Style>
-
     </Window.Resources>
 
     <DockPanel>
-
+        <!-- 工具列 -->
         <Border DockPanel.Dock="Top" Padding="4,4,8,4" 
                 Background="{DynamicResource App.PanelBrush}"
                 BorderBrush="{DynamicResource App.BorderBrush}" BorderThickness="0,0,0,1">
             <WrapPanel>
-                <Button Style="{StaticResource ToolbarBtn}" Content="＋ 加入檔案" Click="BtnAddFiles_Click"/>
+                <Button x:Name="BtnAddFiles" Style="{StaticResource ToolbarBtn}" Content="＋ 加入檔案" Click="BtnAddFiles_Click"/>
 
-                <!-- [V20.3] '檢視分類' 按鈕已替換為 '掃描與檢視' 選單 -->
-                <Menu Margin="4,2" VerticalAlignment="Center">
-                    <MenuItem Header="🔄檢視分類" Style="{StaticResource ToolbarBtn}">
-                        <MenuItem Header="僅分類頂層" 
+                <!-- 一鍵自動化 -->
+                <Button x:Name="BtnOneClickAutoCommit" Style="{StaticResource ToolbarBtn}" 
+                        Content="✨ 自動分類 (全收件匣)" 
+                        ToolTip="執行：掃描收件匣 -> 刷新清單 -> 自動確認搬檔"
+                        Click="BtnOneClickAutoCommit_Click"/>
+
+                <!-- 掃描選單 -->
+                <Menu x:Name="MenuScan" Margin="4,2" VerticalAlignment="Center">
+                    <MenuItem Header="🔄 掃描與檢視..." Style="{StaticResource ToolbarBtn}">
+                        <MenuItem x:Name="MenuScanShallow" Header="[掃描] 僅收件匣第一層" 
                                   Click="MenuScanShallow_Click"/>
-                        <MenuItem Header="分類全部(含子資料夾)" 
+                        <MenuItem x:Name="MenuScanRecursive" Header="[掃描] 收件匣 (含子資料夾)" 
                                   Click="MenuScanRecursive_Click"/>
                         <Separator/>
                         <MenuItem Header="[檢視] 切換路徑 (預計/來源)" 
@@ -132,10 +141,14 @@
                     </MenuItem>
                 </Menu>
 
-                <Button Style="{StaticResource ToolbarBtn}" Content="確認搬檔" Click="BtnCommit_Click"/>
+                <!-- 手動確認 -->
+                <Button x:Name="BtnCommit" Style="{StaticResource ToolbarBtn}" 
+                        Content="手動確認搬檔" 
+                        ToolTip="手動提交清單中選取的或所有可處理的項目"
+                        Click="BtnCommit_Click"/>
                 <Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" Margin="4,2"/>
 
-                <Menu Margin="4,2" VerticalAlignment="Center">
+                <Menu x:Name="MenuClean" Margin="4,2" VerticalAlignment="Center">
                     <MenuItem Header="🧹 清理收件夾..." Style="{StaticResource ToolbarBtn}">
                         <MenuItem Header="🗑️ 清除 [已分類] 的實體檔案 (B)" 
                                   ToolTip="[選項B] 刪除 HotFolder 中已搬移 (Committed) 的實體檔案 (用於「複製」模式)"
@@ -146,21 +159,22 @@
                     </MenuItem>
                 </Menu>
 
+                <!-- 導航 -->
                 <Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" Margin="4,2"/>
                 <Button Style="{StaticResource ToolbarBtn}" Content="🗂 收件夾" Click="BtnOpenHot_Click"/>
                 <Button Style="{StaticResource ToolbarBtn}" Content="📁 根目錄" Click="BtnOpenRoot_Click"/>
                 <Button Style="{StaticResource ToolbarBtn}" Content="📂 待整理" Click="BtnOpenPendingFolder_Click"/>
                 <Button Style="{StaticResource ToolbarBtn}" Content="🗄 資料庫" Click="BtnOpenDb_Click"/>
                 <Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" Margin="4,2"/>
-                <Button Style="{StaticResource ToolbarBtn}" Content="檔案結構" Click="BtnEdgeLeft_Click"/>
-                <Button Style="{StaticResource ToolbarBtn}" Content="詳細資料" Click="BtnEdgeRight_Click"/>
+                <Button Style="{StaticResource ToolbarBtn}" Content="＜檔案結構" Click="BtnEdgeLeft_Click"/>
+                <Button Style="{StaticResource ToolbarBtn}" Content="詳細資料＞" Click="BtnEdgeRight_Click"/>
                 <Button Style="{StaticResource ToolbarBtn}" Content="設定" Click="BtnOpenSettings_Click"/>
                 <Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" Margin="4,2"/>
                 <Button Style="{StaticResource ToolbarBtn}" Content="↩️ 返回簡易版" Click="BtnGoToSimpleMode_Click"/>
             </WrapPanel>
         </Border>
 
-        <!-- ... (省略未變更的 麵包屑 Breadcrumb) ... -->
+        <!-- 麵包屑 Breadcrumb -->
         <Border DockPanel.Dock="Top" Padding="10,6"
                 Background="{DynamicResource App.PanelBrush}"
                 BorderBrush="{DynamicResource App.BorderBrush}" BorderThickness="0,0,0,1">
@@ -185,7 +199,7 @@
                 <ColumnDefinition x:Name="RightPaneColumn" Width="360"/>
             </Grid.ColumnDefinitions>
 
-            <!-- ... (省略未變更的左側 TreeView) ... -->
+            <!-- 左側 TreeView -->
             <DockPanel Grid.Column="0">
                 <Border DockPanel.Dock="Top" Padding="8"
                         BorderBrush="{DynamicResource App.BorderBrush}" BorderThickness="0,0,0,1">
@@ -211,7 +225,10 @@
                           SelectedItemChanged="TvFolders_SelectedItemChanged">
                     <TreeView.ContextMenu>
                         <ContextMenu>
-                            <MenuItem Header="整份資料夾加入收件匣" Click="Tree_MoveFolderToInbox_Click"/>
+                            <MenuItem Header="指定並鎖定為專案" Click="Tree_LockProject_Click"/>
+                            <MenuItem Header="移除指定專案" Click="Tree_UnlockProject_Click"/>
+                            <Separator/>
+                            <MenuItem x:Name="MenuTreeMoveToInbox" Header="整份資料夾加入收件匣" Click="Tree_MoveFolderToInbox_Click"/>
                             <Separator/>
                             <MenuItem Header="新增資料夾..." Click="Tree_NewFolder_Click"/>
                             <MenuItem Header="重新命名..." Click="Tree_Rename_Click"/>
@@ -226,14 +243,14 @@
 
             <GridSplitter Grid.Column="1" Width="6" Background="{DynamicResource App.BorderBrush}" HorizontalAlignment="Stretch"/>
 
+            <!-- 中間列表 -->
             <Grid Grid.Column="2">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
-                    <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
 
-                <!-- ... (省略未變更的中間頂部 Filter Bar) ... -->
+                <!-- Filter Bar -->
                 <Grid Grid.Row="0">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
@@ -267,7 +284,6 @@
                                      TextChanged="TxtSearchKeywords_TextChanged"
                                      TextWrapping="NoWrap"/>
 
-                            <!-- [V20.2] IsEditable="False" (改為標準下拉選單) -->
                             <ComboBox x:Name="CmbSearchProject" Grid.Column="1" Width="180" Margin="0,0,8,0"
                                       ToolTip="篩選專案"
                                       IsEditable="False"
@@ -293,119 +309,135 @@
                     </Border>
                 </Grid>
 
-                <ListView x:Name="MainList" Grid.Row="1"
-                          SelectionMode="Extended"
-                          SelectionChanged="MainList_SelectionChanged"
-                          MouseDoubleClick="List_DoubleClick"
-                          ScrollViewer.HorizontalScrollBarVisibility="Auto">
+                <!-- ListView -->
+                <Grid Grid.Row="1">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
 
-                    <!-- ... (省略未變更的 ListView.View) ... -->
-                    <ListView.View>
-                        <GridView x:Name="MainGridView" AllowsColumnReorder="True">
+                        <ListView x:Name="MainList" Grid.Row="0"
+                                  SelectionMode="Extended"
+                                  SelectionChanged="MainList_SelectionChanged"
+                                  MouseDoubleClick="List_DoubleClick"
+                                  ScrollViewer.HorizontalScrollBarVisibility="Auto">
 
-                            <GridViewColumn Header="檔名" 
-                                            HeaderContainerStyle="{StaticResource HeaderClickable}"
-                                            Width="240">
-                                <GridViewColumn.CellTemplate>
-                                    <DataTemplate>
-                                        <StackPanel Orientation="Horizontal">
-                                            <Image Source="{Binding FileIcon}" Width="16" Height="16" Margin="0,0,5,0"
-                                                   VerticalAlignment="Center"/>
-                                            <TextBlock Text="{Binding FileName}" VerticalAlignment="Center"/>
-                                        </StackPanel>
-                                    </DataTemplate>
-                                </GridViewColumn.CellTemplate>
-                            </GridViewColumn>
+                            <ListView.View>
+                                <GridView x:Name="MainGridView" AllowsColumnReorder="True">
 
-                            <GridViewColumn Header="副檔名" 
-                                            HeaderContainerStyle="{StaticResource HeaderClickable}"
-                                            Width="90" DisplayMemberBinding="{Binding Ext}"/>
+                                    <GridViewColumn Header="檔名" 
+                                                    HeaderContainerStyle="{StaticResource HeaderClickable}"
+                                                    Width="200">
+                                        <GridViewColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <StackPanel Orientation="Horizontal">
+                                                    <Image Source="{Binding FileIcon}" Width="16" Height="16" Margin="0,0,5,0"
+                                                           VerticalAlignment="Center"/>
+                                                    <TextBlock Text="{Binding FileName}" VerticalAlignment="Center"/>
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </GridViewColumn.CellTemplate>
+                                    </GridViewColumn>
 
-                            <GridViewColumn Header="類別" 
-                                            HeaderContainerStyle="{StaticResource HeaderClickable}"
-                                            Width="120" DisplayMemberBinding="{Binding Category}"/>
+                                    <GridViewColumn Header="副檔名" 
+                                                    HeaderContainerStyle="{StaticResource HeaderClickable}"
+                                                    Width="60" DisplayMemberBinding="{Binding Ext}"/>
 
-                            <GridViewColumn Header="狀態" 
-                                            HeaderContainerStyle="{StaticResource HeaderClickable}"
-                                            Width="120">
-                                <GridViewColumn.CellTemplate>
-                                    <DataTemplate>
-                                        <StackPanel Orientation="Horizontal">
-                                            <Ellipse Width="8" Height="8" Margin="0,0,6,0">
-                                                <Ellipse.Fill>
-                                                    <MultiBinding Converter="{x:Static local:MainWindow.StatusToBrushConverterInstance}">
-                                                        <Binding Path="Status"/>
-                                                    </MultiBinding>
-                                                </Ellipse.Fill>
-                                            </Ellipse>
-                                            <TextBlock Text="{Binding Status, Converter={x:Static local:MainWindow.StatusToLabelConverterInstance}}"/>
-                                        </StackPanel>
-                                    </DataTemplate>
-                                </GridViewColumn.CellTemplate>
-                            </GridViewColumn>
+                                    <GridViewColumn Header="類別" 
+                                                    HeaderContainerStyle="{StaticResource HeaderClickable}"
+                                                    Width="80" DisplayMemberBinding="{Binding Category}"/>
 
-                            <GridViewColumn Header="專案" 
-                                            HeaderContainerStyle="{StaticResource HeaderClickable}"
-                                            Width="180" DisplayMemberBinding="{Binding Project}"/>
+                                    <GridViewColumn Header="狀態" 
+                                                    HeaderContainerStyle="{StaticResource HeaderClickable}"
+                                                    Width="80">
+                                        <GridViewColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <StackPanel Orientation="Horizontal">
+                                                    <Ellipse Width="8" Height="8" Margin="0,0,6,0">
+                                                        <Ellipse.Fill>
+                                                            <MultiBinding Converter="{x:Static local:MainWindow.StatusToBrushConverterInstance}">
+                                                                <Binding Path="Status"/>
+                                                            </MultiBinding>
+                                                        </Ellipse.Fill>
+                                                    </Ellipse>
+                                                    <TextBlock Text="{Binding Status, Converter={x:Static local:MainWindow.StatusToLabelConverterInstance}}"/>
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </GridViewColumn.CellTemplate>
+                                    </GridViewColumn>
 
-                            <GridViewColumn Header="標籤" 
-                                            HeaderContainerStyle="{StaticResource HeaderClickable}"
-                                            Width="180" DisplayMemberBinding="{Binding Tags}"/>
+                                    <GridViewColumn Header="專案" 
+                                                    HeaderContainerStyle="{StaticResource HeaderClickable}"
+                                                    Width="100" DisplayMemberBinding="{Binding Project}"/>
 
-                            <GridViewColumn Header="路徑" x:Name="ColSourcePath"
-                                            HeaderContainerStyle="{StaticResource HeaderClickable}"
-                                            Width="320" DisplayMemberBinding="{Binding SourcePath}"/>
+                                    <GridViewColumn Header="標籤" 
+                                                    HeaderContainerStyle="{StaticResource HeaderClickable}"
+                                                    Width="80" DisplayMemberBinding="{Binding Tags}"/>
 
+                                    <GridViewColumn Header="路徑" x:Name="ColSourcePath"
+                                                    HeaderContainerStyle="{StaticResource HeaderClickable}"
+                                                    Width="320" DisplayMemberBinding="{Binding SourcePath}"/>
 
+                                    <GridViewColumn Header="建立時間" 
+                                                    HeaderContainerStyle="{StaticResource HeaderClickable}"
+                                                    Width="80" DisplayMemberBinding="{Binding CreatedAt}"/>
 
-                            <GridViewColumn Header="建立時間" 
-                                            HeaderContainerStyle="{StaticResource HeaderClickable}"
-                                            Width="160" DisplayMemberBinding="{Binding CreatedAt}"/>
+                                </GridView>
+                            </ListView.View>
 
-                        </GridView>
-                    </ListView.View>
+                            <ListView.ContextMenu>
+                                <ContextMenu>
+                                    <MenuItem Header="開啟檔案" Click="CmOpenFile_Click"/>
+                                    <MenuItem Header="在檔案總管顯示" Click="CmRevealInExplorer_Click"/>
+                                    <Separator/>
+                                    <MenuItem Header="複製來源路徑" Click="CmCopySourcePath_Click"/>
+                                    <MenuItem Header="複製預計目的地" Click="CmCopyDestPath_Click"/>
+                                    <Separator/>
+                                    <MenuItem Header="重新命名..." Click="Cm_Rename_Click"/>
+                                    <MenuItem Header="刪除檔案" Click="Cm_Delete_Click"/>
+                                    <Separator/>
+                                    <MenuItem Header="★ 加入/移出 我的最愛" Click="CmToggleFavorite_Click"/>
+                                    <MenuItem Header="標記為：進行中" Click="CmAddTagProgress_Click"/>
+                                    <MenuItem Header="標記為：待處理" Click="CmAddTagBacklog_Click"/>
+                                    <MenuItem Header="標記為：等待分類" Click="CmAddTagPending_Click"/>
+                                    <MenuItem Header="... 自訂標籤" Click="CmAddTags_Click"/>
+                                    <MenuItem Header="移除所有標籤" Click="CmRemoveAllTags_Click"/>
+                                    <Separator/>
+                                    <MenuItem Header="直接分類" Click="CmCommit_Click"/>
+                                    <Separator/>
+                                    <MenuItem Header="刪除資料列（僅 DB）" Click="CmDeleteRecord_Click"/>
+                                </ContextMenu>
+                            </ListView.ContextMenu>
+                        </ListView>
 
-                    <ListView.ContextMenu>
-                        <ContextMenu>
-                            <MenuItem Header="開啟檔案" Click="CmOpenFile_Click"/>
-                            <MenuItem Header="在檔案總管顯示" Click="CmRevealInExplorer_Click"/>
-                            <Separator/>
-                            <MenuItem Header="複製來源路徑" Click="CmCopySourcePath_Click"/>
-                            <MenuItem Header="複製預計目的地" Click="CmCopyDestPath_Click"/>
-                            <Separator/>
-                            <MenuItem Header="重新命名..." Click="Cm_Rename_Click"/>
-                            <MenuItem Header="刪除檔案" Click="Cm_Delete_Click"/>
-                            <Separator/>
-                            <MenuItem Header="★ 加入/移出 我的最愛" Click="CmToggleFavorite_Click"/>
-                            <MenuItem Header="標記為：進行中" Click="CmAddTagProgress_Click"/>
-                            <MenuItem Header="標記為：待處理" Click="CmAddTagBacklog_Click"/>
-                            <MenuItem Header="標記為：等待分類" Click="CmAddTagPending_Click"/>
-                            <!-- [V20.2] 新增標籤選取器 -->
-                            <MenuItem Header="... 自訂標籤" Click="CmAddTags_Click"/>
-                            <MenuItem Header="移除所有標籤" Click="CmRemoveAllTags_Click"/>
-                            <Separator/>
-                            <MenuItem Header="確認搬檔（Commit）" Click="CmCommit_Click"/>
-                            <Separator/>
-                            <MenuItem Header="刪除資料列（僅 DB）" Click="CmDeleteRecord_Click"/>
-                        </ContextMenu>
-                    </ListView.ContextMenu>
-                </ListView>
+                        <Expander Grid.Row="1" Header="日誌 (Log)" IsExpanded="False"
+                                  BorderBrush="{DynamicResource App.BorderBrush}" BorderThickness="0,1,0,0">
+                            <TextBox x:Name="LogBox" IsReadOnly="True" 
+                                     Height="150"
+                                     Background="{DynamicResource App.LogBrush}"
+                                     Foreground="{DynamicResource App.TextMutedBrush}"
+                                     FontFamily="Consolas" FontSize="12"
+                                     VerticalScrollBarVisibility="Auto"/>
+                        </Expander>
+                    </Grid>
 
-                <!-- ... (省略未變更的日誌 LogBox) ... -->
-                <Expander Grid.Row="2" Header="日誌 (Log)" IsExpanded="False"
-                          BorderBrush="{DynamicResource App.BorderBrush}" BorderThickness="0,1,0,0">
-                    <TextBox x:Name="LogBox" IsReadOnly="True" 
-                             Height="150"
-                             Background="{DynamicResource App.LogBrush}"
-                             Foreground="{DynamicResource App.TextMutedBrush}"
-                             FontFamily="Consolas" FontSize="12"
-                             VerticalScrollBarVisibility="Auto"/>
-                </Expander>
+                    <Border x:Name="LoadingOverlay" Grid.RowSpan="2"
+                            Background="#AA000000"
+                            Visibility="Collapsed">
+                        <TextBlock x:Name="LoadingText" Text="處理中..."
+                                   Foreground="White" FontSize="22"
+                                   FontWeight="Bold"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"/>
+                    </Border>
+
+                </Grid>
             </Grid>
 
             <GridSplitter Grid.Column="3" Width="6" Background="{DynamicResource App.BorderBrush}" HorizontalAlignment="Stretch"/>
 
-            <!-- ... (省略未變更的右側面板) ... -->
+            <!-- 右側面板 -->
             <ScrollViewer Grid.Column="4" VerticalScrollBarVisibility="Auto">
                 <StackPanel Margin="10">
 
@@ -438,7 +470,7 @@
                             <TextBlock Grid.Row="5" Grid.Column="0" Text="狀態"/>
                             <TextBlock Grid.Row="5" Grid.Column="1" x:Name="RtStatus"/>
 
-                            <Button Grid.Row="6" Grid.Column="1" Content="分析信心度 (AI)" Margin="8,8,0,0" HorizontalAlignment="Left" Click="BtnAnalyzeConfidence_Click"/>
+                            <Button x:Name="BtnAnalyzeConfidence" Grid.Row="6" Grid.Column="1" Content="分析信心度 (AI)" Margin="8,8,0,0" HorizontalAlignment="Left" Click="BtnAnalyzeConfidence_Click"/>
                         </Grid>
                     </Expander>
 
@@ -468,7 +500,7 @@
                                 <Button Content="套用" Margin="8,0,0,0" 
                                         Click="BtnApplySuggestedProject_Click"/>
                             </StackPanel>
-                            <Button Content="產生建議專案 (AI)" Margin="8,8,0,0" HorizontalAlignment="Left" Click="BtnGenProject_Click"/>
+                            <Button x:Name="BtnGenProject" Content="產生建議專案 (AI)" Margin="8,8,0,0" HorizontalAlignment="Left" Click="BtnGenProject_Click"/>
 
                             <TextBlock Text="標籤 (以 , 或 ; 分隔)" Margin="0,12,0,4"/>
 
@@ -484,7 +516,7 @@
                             <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
                                 <Button Content="套用標籤" HorizontalAlignment="Left"
                                         Click="RtBtnApplyTags_Click"/>
-                                <Button Content="產生建議標籤 (AI)" Margin="8,0,0,0" HorizontalAlignment="Left" Click="BtnGenTags_Click"/>
+                                <Button x:Name="BtnGenTags" Content="產生建議標籤 (AI)" Margin="8,0,0,0" HorizontalAlignment="Left" Click="BtnGenTags_Click"/>
                             </StackPanel>
                         </StackPanel>
                     </Expander>
@@ -497,11 +529,15 @@
                                      TextWrapping="Wrap"
                                      Background="Transparent" BorderThickness="0"
                                      Visibility="Collapsed"/>
+
+                            <!-- WebView2 -->
+                            <wv2:WebView2 x:Name="RtPreviewWebView" Visibility="Collapsed"/>
+
                             <TextBlock x:Name="RtPreviewNotSupported" Text="(此檔案格式不支援預覽)" 
                                        VerticalAlignment="Center" HorizontalAlignment="Center"
                                        Foreground="{DynamicResource App.TextMutedBrush}"/>
 
-                            <Button Content="產生摘要 (AI)" Margin="5" VerticalAlignment="Bottom" HorizontalAlignment="Right" Click="BtnSummarize_Click"/>
+                            <Button x:Name="BtnSummarize" Content="產生摘要 (AI)" Margin="5" VerticalAlignment="Bottom" HorizontalAlignment="Right" Click="BtnSummarize_Click"/>
                         </Grid>
                     </Expander>
 

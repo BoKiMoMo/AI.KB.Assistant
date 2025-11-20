@@ -1,7 +1,8 @@
 ﻿<Window x:Class="AI.KB.Assistant.Views.LauncherWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="AI.KB.Assistant - 啟動器"
+        Title="AIKA - 啟動器"
+        Icon="/石頭的LOGO_1.png"
         Height="680" Width="820"
         WindowStartupLocation="CenterScreen"
         Background="{DynamicResource App.BackgroundBrush}"
@@ -9,7 +10,7 @@
         ResizeMode="NoResize">
 
     <Window.Resources>
-        <!-- 共用按鈕樣式（沿用 Main 風格） -->
+        <!-- 共用按鈕樣式 -->
         <Style x:Key="TonedBtn" TargetType="Button">
             <Setter Property="Padding" Value="14,10"/>
             <Setter Property="Margin" Value="0,8,0,0"/>
@@ -20,7 +21,6 @@
             <Setter Property="HorizontalContentAlignment" Value="Center"/>
         </Style>
 
-        <!-- V7.35 新增：用於清理按鈕的小型按鈕樣式 -->
         <Style x:Key="SmallBtn" TargetType="Button">
             <Setter Property="Padding" Value="8,4"/>
             <Setter Property="Margin" Value="0,8,0,0"/>
@@ -31,25 +31,21 @@
             <Setter Property="HorizontalContentAlignment" Value="Center"/>
         </Style>
 
-        <!-- 大卡片 -->
         <Style x:Key="Card" TargetType="Border">
             <Setter Property="CornerRadius" Value="10"/>
             <Setter Property="Padding" Value="18"/>
             <Setter Property="Margin" Value="10"/>
             <Setter Property="Background" Value="{DynamicResource App.PanelBrush}"/>
             <Setter Property="BorderBrush" Value="{DynamicResource App.BorderBrush}"/>
-            <!-- [V20.3] 錯誤修正：將 "1V" 修正為 "1" -->
             <Setter Property="BorderThickness" Value="1"/>
         </Style>
 
-        <!-- 卡片標題 -->
         <Style x:Key="CardTitle" TargetType="TextBlock">
             <Setter Property="FontSize" Value="24"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="Margin" Value="0,0,0,4"/>
         </Style>
 
-        <!-- 卡片描述 -->
         <Style x:Key="CardDesc" TargetType="TextBlock">
             <Setter Property="FontSize" Value="14"/>
             <Setter Property="Foreground" Value="{DynamicResource App.TextMutedBrush}"/>
@@ -62,7 +58,7 @@
         <Border DockPanel.Dock="Top" Padding="20,16"
                 BorderBrush="{DynamicResource App.BorderBrush}" BorderThickness="0,0,0,1">
             <TextBlock FontSize="20" FontWeight="SemiBold">
-                <Run Text="AI.KB.Assistant"/>
+                <Run Text="AIKA"/>
                 <Run Text="— 簡易啟動介面" Foreground="{DynamicResource App.TextMutedBrush}" FontSize="18"/>
             </TextBlock>
         </Border>
@@ -77,13 +73,12 @@
 
             <!-- 四顆按鈕 -->
             <UniformGrid Grid.Row="0" Columns="2" Rows="2">
-                <!-- 1. 自動分類 (V20.2 修改) -->
+                <!-- 1. 自動分類 -->
                 <Border Style="{StaticResource Card}">
                     <StackPanel>
                         <TextBlock Style="{StaticResource CardTitle}" Text="⚡ 自動分類"/>
                         <TextBlock Style="{StaticResource CardDesc}" MinHeight="40" Text="掃描收件夾，建立清單並自動分類搬移。"/>
 
-                        <!-- [V20.2] 將一個按鈕替換為兩個 -->
                         <UniformGrid Columns="2" Margin="0,8,0,0">
                             <Button x:Name="BtnScanShallow" 
                                     Content="僅分類頂層" 
@@ -100,13 +95,12 @@
                     </StackPanel>
                 </Border>
 
-                <!-- 2. 收件夾 (V7.35 修正) -->
+                <!-- 2. 收件夾 -->
                 <Border Style="{StaticResource Card}">
                     <StackPanel>
                         <TextBlock Style="{StaticResource CardTitle}" Text="🗂 收件夾"/>
                         <TextBlock Style="{StaticResource CardDesc}" Text="開啟 HotFolder (收件夾) 實體資料夾，或執行清理。"/>
 
-                        <!-- V7.35 新功能：清理按鈕 -->
                         <UniformGrid Columns="2" Margin="0,8,0,0">
                             <Button x:Name="BtnResetInbox" Content="🔄 刪除未處理紀錄" Margin="0,0,4,0" 
                                     Style="{StaticResource SmallBtn}"

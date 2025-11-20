@@ -10,8 +10,17 @@
 	</PropertyGroup>
 
 	<ItemGroup>
+	  <None Remove="石頭的LOGO_1.png" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <Resource Include="石頭的LOGO_1.png" />
+	</ItemGroup>
+
+	<ItemGroup>
 		<PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
 		<PackageReference Include="Microsoft.Data.Sqlite" Version="9.0.10" />
+		<PackageReference Include="Microsoft.Web.WebView2" Version="1.0.3595.46" />
 		<PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
 		<PackageReference Include="OpenAI" Version="2.6.0" />
 		<!-- 新增：WPF 專用資料夾選擇對話框 -->
