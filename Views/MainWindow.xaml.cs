@@ -23,9 +23,9 @@ using System.Windows.Shapes;
 namespace AI.KB.Assistant.Views
 {
     /// <summary>
-    /// V20.13.27 (掃描邏輯穩定版)
-    /// 1. [Fix Scan All Empty] 在執行 ScanLogic 前，強制 ResetFilters，確保清單不會受限於 TreeView 的選取。
-    /// 2. [Refactor] 確保所有邏輯方法和事件處理器正確分離。
+    /// V20.13.30 (掃描邏輯最終穩定版)
+    /// 1. [Fix Scan All Empty] 確保在 ScanLogic 前強制清空 _selPath (解決 TreeView 選取造成的過度過濾)。
+    /// 2. 修正 ApplyListFilters 中的邏輯，確保非 Inbox Mode 且無選取路徑時，仍能顯示所有檔案。
     /// </summary>
     public partial class MainWindow : Window
     {
@@ -39,7 +39,7 @@ namespace AI.KB.Assistant.Views
         private ListSortDirection _sortDir = ListSortDirection.Descending;
         private string _searchKeyword = "", _currentTabTag = "home", _selPath = "", _projFilter = "";
         private bool _showDest = false, _hideCommitted = false, _isLoading = false;
-        private bool _isShallowView = false; // V20.13.22 New
+        private bool _isShallowView = false;
 
         // Static Properties
         public static IValueConverter StatusToLabelConverterInstance { get; } = new StatusToLabelConverter();
@@ -141,13 +141,14 @@ namespace AI.KB.Assistant.Views
             string hot = cfg?.Import?.HotFolder ?? "";
             bool hasHot = !string.IsNullOrWhiteSpace(hot);
             string fullHot = hasHot ? System.IO.Path.GetFullPath(hot).TrimEnd(System.IO.Path.DirectorySeparatorChar) : "";
+            // isInbox 判斷：僅當沒有選取 TreeView 路徑且在 Home Tab 時
             bool isInbox = string.IsNullOrEmpty(_selPath) && _currentTabTag == "home";
 
             _view.Filter = (o) =>
             {
                 if (o is not UiRow r) return false;
 
-                // 1. Inbox Mode (修正版邏輯)
+                // 1. Inbox Mode (收件夾檢視)
                 if (isInbox)
                 {
                     if (string.Equals(r.Status, "committed", StringComparison.OrdinalIgnoreCase)) return false;
@@ -190,12 +191,13 @@ namespace AI.KB.Assistant.Views
                 // 3. Project
                 if (!string.IsNullOrWhiteSpace(_projFilter) && !string.Equals(r.Project, _projFilter, StringComparison.OrdinalIgnoreCase)) return false;
 
-                // 4. Folder
-                if (!string.IsNullOrWhiteSpace(_selPath))
+                // 4. Folder (Tree Mode) - 僅在非 Inbox Mode 且 _selPath 有值時啟用
+                if (!isInbox && !string.IsNullOrWhiteSpace(_selPath))
                 {
                     if (string.IsNullOrWhiteSpace(r.SourcePath)) return false;
                     try
                     {
+                        // 這裡執行嚴格的比對，只顯示選取資料夾內的檔案，不顯示子資料夾的檔案
                         var p = System.IO.Path.GetFullPath(System.IO.Path.GetDirectoryName(r.SourcePath)!).TrimEnd(System.IO.Path.DirectorySeparatorChar);
                         if (!p.Equals(System.IO.Path.GetFullPath(_selPath).TrimEnd(System.IO.Path.DirectorySeparatorChar), StringComparison.OrdinalIgnoreCase)) return false;
                     }
@@ -275,19 +277,22 @@ namespace AI.KB.Assistant.Views
             MessageBox.Show($"提交完成: {ok} / {tot}");
         }
 
-        // [V20.13.22] 掃描邏輯更新：接收 isShallow 參數
+        // [V20.13.28] 掃描邏輯更新：確保在掃描前清除 TreeView 選取
         private async Task ScanLogic(SearchOption mode, bool isShallow)
         {
-            // 1. 設定全域檢視旗標
+            // 1. 強制重置非必要篩選器和 TreeView 選取
+            ResetFilters(keepViewMode: true);
+
+            // 2. 設定全域檢視旗標
             _isShallowView = isShallow;
 
-            // 2. 執行 ViewModel 掃描
+            // 3. 執行 ViewModel 掃描
             await _vm.ScanHotFolderAsync(mode, true);
 
-            // 3. 刷新資料
+            // 4. 刷新資料
             await RefreshFromDbAsync();
 
-            // 4. 重設過濾器並保留檢視模式
+            // 5. 重設過濾器並保留檢視模式
             ResetFilters(keepViewMode: true);
 
             MessageBox.Show("掃描完成。", "完成");
@@ -362,8 +367,8 @@ namespace AI.KB.Assistant.Views
         private async void BtnOneClickAutoCommit_Click(object sender, RoutedEventArgs e) => await RunBusyAsync("自動分類...", async () => {
             var hot = ConfigService.Cfg?.Import?.HotFolder;
             if (string.IsNullOrWhiteSpace(hot)) throw new Exception("未設定收件夾。");
-            await _vm.ScanHotFolderAsync(SearchOption.AllDirectories, true);
-            await RefreshFromDbAsync();
+            await ScanLogic(SearchOption.AllDirectories, false);
+
             string? locked = BtnLockProject.IsChecked == true ? CmbSearchProject.SelectedItem as string : null;
             var (ok, _, tot) = await _vm.CommitFilesAsync(_rows.ToArray(), locked, hot);
             if (tot == 0) MessageBox.Show("無可處理檔案。", "完成");
@@ -470,13 +475,48 @@ namespace AI.KB.Assistant.Views
         }
         private void ResetFilters(bool keepViewMode = false)
         {
+            // [V20.13.28] 清空 TreeView 選取
+            if (TvFolders != null)
+            {
+                // 將 TreeView 的選取項目清除，SelectedItem 為唯讀，需將 SelectedItem 對應的 TreeViewItem 的 IsSelected 設為 false
+                if (TvFolders.SelectedItem is TreeViewItem selectedTvi)
+                {
+                    selectedTvi.IsSelected = false;
+                }
+                else
+                {
+                    // 若 SelectedItem 不是 TreeViewItem，嘗試遞迴尋找並清除
+                    ClearTreeViewSelection(TvFolders.Items);
+                }
+            }
+
+            _selPath = "";
+            if (Breadcrumb != null) Breadcrumb.ItemsSource = null;
+
             _searchKeyword = ""; if (TxtSearchKeywords != null) TxtSearchKeywords.Text = "";
-            if (MainTabs != null) MainTabs.SelectedIndex = 0; _selPath = ""; if (Breadcrumb != null) Breadcrumb.ItemsSource = null;
+            if (MainTabs != null) MainTabs.SelectedIndex = 0;
+
             if (BtnLockProject.IsChecked != true) { _projFilter = ""; if (CmbSearchProject != null) CmbSearchProject.SelectedIndex = 0; }
             _hideCommitted = false; if (ChkHideCommitted != null) ChkHideCommitted.IsChecked = false;
+
             if (!keepViewMode) _isShallowView = false;
+
+            ApplyListFilters(); // 立即重新過濾
         }
 
+        // 新增遞迴方法以清除所有 TreeViewItem 的選取狀態
+        private void ClearTreeViewSelection(ItemCollection items)
+        {
+            foreach (var item in items)
+            {
+                if (item is TreeViewItem tvi)
+                {
+                    if (tvi.IsSelected)
+                        tvi.IsSelected = false;
+                    ClearTreeViewSelection(tvi.Items);
+                }
+            }
+        }
         // ===== Context Menu / Tags (List) =====
         private UiRow[] GetSelectedUiRows() => MainList.SelectedItems.Cast<UiRow>().ToArray();
         private void List_DoubleClick(object? sender, MouseButtonEventArgs? e) { if (GetSelectedUiRows().FirstOrDefault() is UiRow r && File.Exists(r.SourcePath)) ProcessUtils.TryStart(r.SourcePath); }
@@ -484,7 +524,6 @@ namespace AI.KB.Assistant.Views
         private void CmRevealInExplorer_Click(object sender, RoutedEventArgs e) { if (GetSelectedUiRows().FirstOrDefault() is UiRow r) ProcessUtils.OpenInExplorer(r.SourcePath); }
         private void CmCopySourcePath_Click(object sender, RoutedEventArgs e) => Clipboard.SetText(string.Join("\n", GetSelectedUiRows().Select(r => r.SourcePath)));
         private void CmCopyDestPath_Click(object sender, RoutedEventArgs e) => Clipboard.SetText(string.Join("\n", GetSelectedUiRows().Select(r => r.DestPath)));
-
         // ===== Tree View =====
         private TreeView? Tv => TvFolders;
         private void LoadFolderRoot(AppConfig? c = null)
@@ -516,6 +555,7 @@ namespace AI.KB.Assistant.Views
         }
         private void TvFolders_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
         {
+            // [V20.13.28] TvFolders_SelectedItemChanged 不應呼叫 ResetFilters，只需設置 _selPath
             if (Tv?.SelectedItem is TreeViewItem t && t.Tag is FolderNode n)
             {
                 _selPath = n.FullPath; var s = new List<FolderNode>(); var c = t; while (c != null) { if (c.Tag is FolderNode fn) s.Add(fn); c = c.Parent as TreeViewItem; }
